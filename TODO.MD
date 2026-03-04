@@ -27,10 +27,7 @@
   ☒ ✅ Configurar Rate Limiting por plano
   ☒ ✅ Implementar sistema de marca d'água
   ☒ ✅ Configurar variáveis de ambiente
-  ☐ ❌ Criar migrations do Prisma
   ☒ ✅ Implementar seeds (planos, custos, pacotes)
   ☒ ✅ Configurar Swagger/OpenAPI
-  ☐ ❌ Implementar testes unitários
-  ☐ ❌ Implementar testes e2e
   ☒ ✅ Configurar Docker
   ☒ ✅ Configurar CI/CD
