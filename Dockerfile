@@ -5,6 +5,8 @@ COPY package*.json ./
 COPY prisma ./prisma/
 RUN npm ci
 COPY . .
+ARG DATABASE_URL
+ENV DATABASE_URL=${DATABASE_URL:-postgresql://dummy:dummy@localhost:5432/dummy}
 RUN npx prisma generate
 RUN npm run build
 
