@@ -1,0 +1,364 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
+enum GenerationType {
+  TEXT_TO_IMAGE
+  IMAGE_TO_IMAGE
+  TEXT_TO_VIDEO
+  IMAGE_TO_VIDEO
+  MOTION_CONTROL
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum CreditTransactionType {
+  SUBSCRIPTION_RENEWAL
+  PURCHASE
+  GENERATION_DEBIT
+  GENERATION_REFUND
+  REFERRAL_BONUS
+  ADMIN_ADJUSTMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  CREDIT_PURCHASE
+}
+
+enum Resolution {
+  RES_1K
+  RES_2K
+  RES_4K
+  RES_720P
+  RES_1080P
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  name         String
+  avatarUrl    String?  @map("avatar_url")
+  role         UserRole @default(USER)
+
+  // OAuth
+  oauthProvider   String? @map("oauth_provider")
+  oauthProviderId String? @map("oauth_provider_id")
+
+  // Status
+  emailVerified Boolean @default(false) @map("email_verified")
+  isActive      Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subscriptions       Subscription[]
+  creditBalance       CreditBalance?
+  creditTransactions  CreditTransaction[]
+  generations         Generation[]
+  payments            Payment[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([email])
+  @@index([oauthProvider, oauthProviderId])
+  @@map("users")
+}
+
+model Plan {
+  id                       String  @id @default(cuid())
+  slug                     String  @unique
+  name                     String
+  description              String?
+  priceCents               Int     @default(0) @map("price_cents")
+  creditsPerMonth          Int     @map("credits_per_month")
+  maxConcurrentGenerations Int     @default(1) @map("max_concurrent_generations")
+  hasWatermark             Boolean @default(true) @map("has_watermark")
+  galleryRetentionDays     Int?    @map("gallery_retention_days")
+  hasApiAccess             Boolean @default(false) @map("has_api_access")
+  isActive                 Boolean @default(true) @map("is_active")
+  sortOrder                Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model CreditCost {
+  id             String         @id @default(cuid())
+  generationType GenerationType @map("generation_type")
+  resolution     Resolution
+  hasAudio       Boolean        @default(false) @map("has_audio")
+  creditsPerUnit Int            @map("credits_per_unit")
+  isPerSecond    Boolean        @default(false) @map("is_per_second")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([generationType, resolution, hasAudio])
+  @@map("credit_costs")
+}
+
+model CreditPackage {
+  id         String  @id @default(cuid())
+  name       String
+  credits    Int
+  priceCents Int     @map("price_cents")
+  isActive   Boolean @default(true) @map("is_active")
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  payments Payment[]
+
+  @@map("credit_packages")
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String             @map("user_id")
+  planId                 String             @map("plan_id")
+  status                 SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart     DateTime           @map("current_period_start")
+  currentPeriodEnd       DateTime           @map("current_period_end")
+  cancelAtPeriodEnd      Boolean            @default(false) @map("cancel_at_period_end")
+  paymentProvider        String?            @map("payment_provider")
+  externalSubscriptionId String?            @map("external_subscription_id")
+  paymentRetryCount      Int                @default(0) @map("payment_retry_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+model CreditBalance {
+  id                    String    @id @default(cuid())
+  userId                String    @unique @map("user_id")
+  planCreditsRemaining  Int       @default(0) @map("plan_credits_remaining")
+  bonusCreditsRemaining Int       @default(0) @map("bonus_credits_remaining")
+  planCreditsUsed       Int       @default(0) @map("plan_credits_used")
+  periodStart           DateTime? @map("period_start")
+  periodEnd             DateTime? @map("period_end")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("credit_balances")
+}
+
+model CreditTransaction {
+  id           String                @id @default(cuid())
+  userId       String                @map("user_id")
+  type         CreditTransactionType
+  amount       Int
+  source       String                @default("plan")
+  description  String?
+  generationId String?               @map("generation_id")
+  paymentId    String?               @map("payment_id")
+  metadata     Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  payment    Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([generationId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("credit_transactions")
+}
+
+model Generation {
+  id     String           @id @default(cuid())
+  userId String           @map("user_id")
+  type   GenerationType
+  status GenerationStatus @default(PENDING)
+
+  // Input
+  prompt            String? @db.Text
+  negativePrompt    String? @map("negative_prompt") @db.Text
+  inputImageUrl     String? @map("input_image_url")
+  referenceVideoUrl String? @map("reference_video_url")
+
+  // Parameters
+  resolution      Resolution
+  durationSeconds Int?       @map("duration_seconds")
+  hasAudio        Boolean    @default(false) @map("has_audio")
+  modelUsed       String?    @map("model_used")
+  parameters      Json?
+
+  // Output
+  outputUrl    String? @map("output_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  hasWatermark Boolean @default(false) @map("has_watermark")
+
+  // Costs
+  creditsConsumed Int @default(0) @map("credits_consumed")
+
+  // Met
+  processingStartedAt DateTime? @map("processing_started_at")
+  processingTimeMs    Int?      @map("processing_time_ms")
+  errorMessage        String?   @map("error_message")
+  errorCode           String?   @map("error_code")
+
+  // Gallery
+  isFavorited Boolean   @default(false) @map("is_favorited")
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  expiresAt   DateTime? @map("expires_at")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditTransactions CreditTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, isDeleted, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("generations")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String        @map("user_id")
+  type              PaymentType
+  amountCents       Int           @map("amount_cents")
+  currency          String        @default("BRL")
+  status            PaymentStatus @default(PENDING)
+  provider          String
+  externalPaymentId String?       @map("external_payment_id")
+  externalInvoiceId String?       @map("external_invoice_id")
+  subscriptionId    String?       @map("subscription_id")
+  creditPackageId   String?       @map("credit_package_id")
+  metadata          Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription       Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  creditPackage      CreditPackage?      @relation(fields: [creditPackageId], references: [id], onDelete: SetNull)
+  creditTransactions CreditTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([externalPaymentId])
+  @@map("payments")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+model WebhookLog {
+  id         String  @id @default(cuid())
+  provider   String
+  eventType  String  @map("event_type")
+  externalId String? @map("external_id")
+  payload    Json
+  processed  Boolean @default(false)
+  error      String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([provider, eventType])
+  @@index([externalId])
+  @@map("webhook_logs")
+}

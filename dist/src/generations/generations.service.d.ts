@@ -1,0 +1,45 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { CreditsService } from '../credits/credits.service';
+import { PlansService } from '../plans/plans.service';
+import { GenerationType, Resolution } from '@prisma/client';
+import { GenerationFiltersDto } from './dto/generation-filters.dto';
+import { GenerationResponseDto, CreateGenerationResponseDto } from './dto/generation-response.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { NanoBananaProvider } from './providers/nano-banana.provider';
+import { KlingProvider } from './providers/kling.provider';
+import { VeoProvider } from './providers/veo.provider';
+import { UploadsService } from '../uploads/uploads.service';
+export declare class GenerationsService {
+    private readonly prisma;
+    private readonly creditsService;
+    private readonly plansService;
+    private readonly uploadsService;
+    private readonly nanoBananaProvider;
+    private readonly klingProvider;
+    private readonly veoProvider;
+    private readonly logger;
+    constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, nanoBananaProvider: NanoBananaProvider, klingProvider: KlingProvider, veoProvider: VeoProvider);
+    createGeneration(userId: string, type: GenerationType, dto: {
+        prompt?: string;
+        negativePrompt?: string;
+        inputImageUrl?: string;
+        referenceVideoUrl?: string;
+        resolution: Resolution;
+        durationSeconds?: number;
+        hasAudio?: boolean;
+        aspectRatio?: string;
+        outputFormat?: string;
+        googleSearch?: boolean;
+        parameters?: Record<string, unknown>;
+    }): Promise<CreateGenerationResponseDto>;
+    private checkConcurrentLimit;
+    private getProvider;
+    private processGeneration;
+    private handleFailure;
+    findById(userId: string, generationId: string): Promise<GenerationResponseDto>;
+    findAll(userId: string, filters: GenerationFiltersDto): Promise<PaginatedResponseDto<GenerationResponseDto>>;
+    softDelete(userId: string, generationId: string): Promise<void>;
+    toggleFavorite(userId: string, generationId: string, isFavorited: boolean): Promise<void>;
+    private toResponseDto;
+    private resolveFileUrl;
+}
