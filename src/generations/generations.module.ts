@@ -8,6 +8,8 @@ import { UploadsModule } from '../uploads/uploads.module';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { KlingProvider } from './providers/kling.provider';
 import { VeoProvider } from './providers/veo.provider';
+import { GeminiMediaProvider } from './providers/gemini-media.provider';
+import { VertexGeminiProvider } from './providers/vertex-gemini.provider';
 
 @Module({
   imports: [PrismaModule, CreditsModule, PlansModule, UploadsModule],
@@ -17,6 +19,8 @@ import { VeoProvider } from './providers/veo.provider';
     NanoBananaProvider,
     KlingProvider,
     VeoProvider,
+    GeminiMediaProvider,
+    VertexGeminiProvider,
   ],
   exports: [GenerationsService],
 })

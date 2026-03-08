@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, Min, Max, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, IsArray, ArrayMinSize, ArrayMaxSize, Min, Max, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateGenerationDto } from './create-generation.dto';
@@ -21,4 +21,12 @@ export class TextToVideoDto extends CreateGenerationDto {
   @IsOptional()
   @IsBoolean()
   hasAudio?: boolean;
+
+  @ApiPropertyOptional({ description: 'URLs de imagens de referência (S3 keys), máximo 3' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMinSize(1)
+  @ArrayMaxSize(3)
+  referenceImageUrls?: string[];
 }

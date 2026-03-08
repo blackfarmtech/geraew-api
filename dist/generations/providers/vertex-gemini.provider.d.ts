@@ -1,20 +1,14 @@
 import { ConfigService } from '@nestjs/config';
 import { BaseProvider, GenerationInput, GenerationResult } from './base.provider';
 import { UploadsService } from '../../uploads/uploads.service';
-export declare class VeoProvider extends BaseProvider {
+export declare class VertexGeminiProvider extends BaseProvider {
     private readonly configService;
     private readonly uploadsService;
     private readonly logger;
-    private readonly apiKey;
     private readonly baseUrl;
-    private static readonly POLL_INTERVAL_MS;
-    private static readonly MAX_POLL_ATTEMPTS;
     constructor(configService: ConfigService, uploadsService: UploadsService);
     generate(input: GenerationInput): Promise<GenerationResult>;
-    private buildRequestBody;
-    private submitPrediction;
-    private pollOperation;
-    private gcsToPublicUrl;
+    private generateImage;
+    private resolveAspectRatio;
     private downloadImageAsBase64;
-    private sleep;
 }

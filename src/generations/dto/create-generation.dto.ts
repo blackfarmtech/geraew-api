@@ -51,6 +51,15 @@ export class CreateGenerationDto {
   @Transform(({ value }) => value === true || value === 'true')
   googleSearch?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Modelo de imagem',
+    enum: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-image-preview'],
+    default: 'gemini-3.1-pro-preview',
+  })
+  @IsOptional()
+  @IsIn(['gemini-3.1-pro-preview', 'gemini-3.1-flash-image-preview'])
+  imageModel?: string;
+
   @ApiPropertyOptional({ description: 'Extra parameters (style, seed, etc.)' })
   @IsOptional()
   parameters?: Record<string, unknown>;

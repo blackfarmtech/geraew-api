@@ -20,6 +20,8 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { KlingProvider } from './providers/kling.provider';
 import { VeoProvider } from './providers/veo.provider';
+import { GeminiMediaProvider } from './providers/gemini-media.provider';
+import { VertexGeminiProvider } from './providers/vertex-gemini.provider';
 import { BaseProvider, GenerationInput } from './providers/base.provider';
 import { UploadsService } from '../uploads/uploads.service';
 
@@ -35,6 +37,8 @@ export class GenerationsService {
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly klingProvider: KlingProvider,
     private readonly veoProvider: VeoProvider,
+    private readonly geminiMediaProvider: GeminiMediaProvider,
+    private readonly vertexGeminiProvider: VertexGeminiProvider,
   ) { }
 
   async createGeneration(
@@ -51,6 +55,9 @@ export class GenerationsService {
       aspectRatio?: string;
       outputFormat?: string;
       googleSearch?: boolean;
+      imageModel?: string;
+      referenceImageUrls?: string[];
+      lastFrameUrl?: string;
       parameters?: Record<string, unknown>;
     },
   ): Promise<CreateGenerationResponseDto> {
@@ -98,6 +105,8 @@ export class GenerationsService {
             ...(dto.aspectRatio ? { aspectRatio: dto.aspectRatio } : {}),
             ...(dto.outputFormat ? { outputFormat: dto.outputFormat } : {}),
             ...(dto.googleSearch !== undefined ? { googleSearch: dto.googleSearch } : {}),
+            ...(dto.imageModel ? { imageModel: dto.imageModel } : {}),
+            ...(dto.referenceImageUrls?.length ? { referenceImageUrls: dto.referenceImageUrls } : {}),
           } as any,
           creditsConsumed: creditsRequired,
         },
@@ -160,12 +169,12 @@ export class GenerationsService {
     switch (type) {
       case GenerationType.TEXT_TO_IMAGE:
       case GenerationType.IMAGE_TO_IMAGE:
-        return this.nanoBananaProvider;
+        return this.vertexGeminiProvider;
       case GenerationType.MOTION_CONTROL:
         return this.klingProvider;
       case GenerationType.TEXT_TO_VIDEO:
       case GenerationType.IMAGE_TO_VIDEO:
-        return this.veoProvider;
+        return this.geminiMediaProvider;
       default:
         throw new BadRequestException(`Tipo de geração não suportado: ${type}`);
     }

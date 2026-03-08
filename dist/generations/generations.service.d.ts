@@ -8,6 +8,8 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { KlingProvider } from './providers/kling.provider';
 import { VeoProvider } from './providers/veo.provider';
+import { GeminiMediaProvider } from './providers/gemini-media.provider';
+import { VertexGeminiProvider } from './providers/vertex-gemini.provider';
 import { UploadsService } from '../uploads/uploads.service';
 export declare class GenerationsService {
     private readonly prisma;
@@ -17,8 +19,10 @@ export declare class GenerationsService {
     private readonly nanoBananaProvider;
     private readonly klingProvider;
     private readonly veoProvider;
+    private readonly geminiMediaProvider;
+    private readonly vertexGeminiProvider;
     private readonly logger;
-    constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, nanoBananaProvider: NanoBananaProvider, klingProvider: KlingProvider, veoProvider: VeoProvider);
+    constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, nanoBananaProvider: NanoBananaProvider, klingProvider: KlingProvider, veoProvider: VeoProvider, geminiMediaProvider: GeminiMediaProvider, vertexGeminiProvider: VertexGeminiProvider);
     createGeneration(userId: string, type: GenerationType, dto: {
         prompt?: string;
         negativePrompt?: string;
@@ -30,6 +34,9 @@ export declare class GenerationsService {
         aspectRatio?: string;
         outputFormat?: string;
         googleSearch?: boolean;
+        imageModel?: string;
+        referenceImageUrls?: string[];
+        lastFrameUrl?: string;
         parameters?: Record<string, unknown>;
     }): Promise<CreateGenerationResponseDto>;
     private checkConcurrentLimit;

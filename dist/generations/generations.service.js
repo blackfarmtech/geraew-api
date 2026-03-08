@@ -20,6 +20,8 @@ const paginated_response_dto_1 = require("../common/dto/paginated-response.dto")
 const nano_banana_provider_1 = require("./providers/nano-banana.provider");
 const kling_provider_1 = require("./providers/kling.provider");
 const veo_provider_1 = require("./providers/veo.provider");
+const gemini_media_provider_1 = require("./providers/gemini-media.provider");
+const vertex_gemini_provider_1 = require("./providers/vertex-gemini.provider");
 const uploads_service_1 = require("../uploads/uploads.service");
 let GenerationsService = GenerationsService_1 = class GenerationsService {
     prisma;
@@ -29,8 +31,10 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     nanoBananaProvider;
     klingProvider;
     veoProvider;
+    geminiMediaProvider;
+    vertexGeminiProvider;
     logger = new common_1.Logger(GenerationsService_1.name);
-    constructor(prisma, creditsService, plansService, uploadsService, nanoBananaProvider, klingProvider, veoProvider) {
+    constructor(prisma, creditsService, plansService, uploadsService, nanoBananaProvider, klingProvider, veoProvider, geminiMediaProvider, vertexGeminiProvider) {
         this.prisma = prisma;
         this.creditsService = creditsService;
         this.plansService = plansService;
@@ -38,6 +42,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         this.nanoBananaProvider = nanoBananaProvider;
         this.klingProvider = klingProvider;
         this.veoProvider = veoProvider;
+        this.geminiMediaProvider = geminiMediaProvider;
+        this.vertexGeminiProvider = vertexGeminiProvider;
     }
     async createGeneration(userId, type, dto) {
         const hasAudio = dto.hasAudio ?? false;
@@ -68,6 +74,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                         ...(dto.aspectRatio ? { aspectRatio: dto.aspectRatio } : {}),
                         ...(dto.outputFormat ? { outputFormat: dto.outputFormat } : {}),
                         ...(dto.googleSearch !== undefined ? { googleSearch: dto.googleSearch } : {}),
+                        ...(dto.imageModel ? { imageModel: dto.imageModel } : {}),
+                        ...(dto.referenceImageUrls?.length ? { referenceImageUrls: dto.referenceImageUrls } : {}),
                     },
                     creditsConsumed: creditsRequired,
                 },
@@ -111,12 +119,12 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         switch (type) {
             case client_1.GenerationType.TEXT_TO_IMAGE:
             case client_1.GenerationType.IMAGE_TO_IMAGE:
-                return this.nanoBananaProvider;
+                return this.vertexGeminiProvider;
             case client_1.GenerationType.MOTION_CONTROL:
                 return this.klingProvider;
             case client_1.GenerationType.TEXT_TO_VIDEO:
             case client_1.GenerationType.IMAGE_TO_VIDEO:
-                return this.veoProvider;
+                return this.geminiMediaProvider;
             default:
                 throw new common_1.BadRequestException(`Tipo de geração não suportado: ${type}`);
         }
@@ -290,6 +298,8 @@ exports.GenerationsService = GenerationsService = GenerationsService_1 = __decor
         uploads_service_1.UploadsService,
         nano_banana_provider_1.NanoBananaProvider,
         kling_provider_1.KlingProvider,
-        veo_provider_1.VeoProvider])
+        veo_provider_1.VeoProvider,
+        gemini_media_provider_1.GeminiMediaProvider,
+        vertex_gemini_provider_1.VertexGeminiProvider])
 ], GenerationsService);
 //# sourceMappingURL=generations.service.js.map

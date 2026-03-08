@@ -19,6 +19,7 @@ class ImageToVideoDto extends create_generation_dto_1.CreateGenerationDto {
     inputImageUrl;
     durationSeconds;
     hasAudio;
+    lastFrameUrl;
 }
 exports.ImageToVideoDto = ImageToVideoDto;
 __decorate([
@@ -48,4 +49,10 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], ImageToVideoDto.prototype, "hasAudio", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'URL do último frame (S3 key ou URL pré-assinada)' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ImageToVideoDto.prototype, "lastFrameUrl", void 0);
 //# sourceMappingURL=image-to-video.dto.js.map

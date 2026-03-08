@@ -4,4 +4,5 @@ export declare class ImageToVideoDto extends CreateGenerationDto {
     inputImageUrl: string;
     durationSeconds: number;
     hasAudio?: boolean;
+    lastFrameUrl?: string;
 }

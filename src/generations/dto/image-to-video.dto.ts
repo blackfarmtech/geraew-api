@@ -26,4 +26,9 @@ export class ImageToVideoDto extends CreateGenerationDto {
   @IsOptional()
   @IsBoolean()
   hasAudio?: boolean;
+
+  @ApiPropertyOptional({ description: 'URL do último frame (S3 key ou URL pré-assinada)' })
+  @IsOptional()
+  @IsString()
+  lastFrameUrl?: string;
 }

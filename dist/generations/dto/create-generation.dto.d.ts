@@ -5,5 +5,6 @@ export declare class CreateGenerationDto {
     aspectRatio?: string;
     outputFormat?: string;
     googleSearch?: boolean;
+    imageModel?: string;
     parameters?: Record<string, unknown>;
 }

@@ -3,4 +3,5 @@ export declare class TextToVideoDto extends CreateGenerationDto {
     prompt: string;
     durationSeconds: number;
     hasAudio?: boolean;
+    referenceImageUrls?: string[];
 }

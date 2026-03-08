@@ -24,6 +24,7 @@ class CreateGenerationDto {
     aspectRatio;
     outputFormat;
     googleSearch;
+    imageModel;
     parameters;
 }
 exports.CreateGenerationDto = CreateGenerationDto;
@@ -68,6 +69,16 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value === true || value === 'true'),
     __metadata("design:type", Boolean)
 ], CreateGenerationDto.prototype, "googleSearch", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Modelo de imagem',
+        enum: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-image-preview'],
+        default: 'gemini-3.1-pro-preview',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['gemini-3.1-pro-preview', 'gemini-3.1-flash-image-preview']),
+    __metadata("design:type", String)
+], CreateGenerationDto.prototype, "imageModel", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Extra parameters (style, seed, etc.)' }),
     (0, class_validator_1.IsOptional)(),

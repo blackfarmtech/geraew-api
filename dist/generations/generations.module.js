@@ -17,6 +17,8 @@ const uploads_module_1 = require("../uploads/uploads.module");
 const nano_banana_provider_1 = require("./providers/nano-banana.provider");
 const kling_provider_1 = require("./providers/kling.provider");
 const veo_provider_1 = require("./providers/veo.provider");
+const gemini_media_provider_1 = require("./providers/gemini-media.provider");
+const vertex_gemini_provider_1 = require("./providers/vertex-gemini.provider");
 let GenerationsModule = class GenerationsModule {
 };
 exports.GenerationsModule = GenerationsModule;
@@ -29,6 +31,8 @@ exports.GenerationsModule = GenerationsModule = __decorate([
             nano_banana_provider_1.NanoBananaProvider,
             kling_provider_1.KlingProvider,
             veo_provider_1.VeoProvider,
+            gemini_media_provider_1.GeminiMediaProvider,
+            vertex_gemini_provider_1.VertexGeminiProvider,
         ],
         exports: [generations_service_1.GenerationsService],
     })
