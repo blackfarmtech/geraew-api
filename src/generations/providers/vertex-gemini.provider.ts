@@ -37,16 +37,15 @@ interface GeminiImageResponse {
 export class VertexGeminiProvider extends BaseProvider {
   private readonly logger = new Logger(VertexGeminiProvider.name);
   private readonly baseUrl: string;
+  private readonly apiKey: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly uploadsService: UploadsService,
   ) {
     super();
-    this.baseUrl = this.configService.get<string>(
-      'GEMINI_MEDIA_BASE_URL',
-      'http://localhost:3001',
-    );
+    this.baseUrl = this.configService.get<string>('GERAEW_PROVIDER_URL', 'http://localhost:3001');
+    this.apiKey = this.configService.get<string>('GERAEW_API_KEY', '');
   }
 
   async generate(input: GenerationInput): Promise<GenerationResult> {
@@ -95,7 +94,10 @@ export class VertexGeminiProvider extends BaseProvider {
       `${this.baseUrl}/api/image/generate-gemini`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+        },
         body: JSON.stringify(body),
       },
     );

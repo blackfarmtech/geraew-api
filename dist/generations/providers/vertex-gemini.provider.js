@@ -36,11 +36,13 @@ let VertexGeminiProvider = VertexGeminiProvider_1 = class VertexGeminiProvider e
     uploadsService;
     logger = new common_1.Logger(VertexGeminiProvider_1.name);
     baseUrl;
+    apiKey;
     constructor(configService, uploadsService) {
         super();
         this.configService = configService;
         this.uploadsService = uploadsService;
-        this.baseUrl = this.configService.get('GEMINI_MEDIA_BASE_URL', 'http://localhost:3001');
+        this.baseUrl = this.configService.get('GERAEW_PROVIDER_URL', 'http://localhost:3001');
+        this.apiKey = this.configService.get('GERAEW_API_KEY', '');
     }
     async generate(input) {
         switch (input.type) {
@@ -72,7 +74,10 @@ let VertexGeminiProvider = VertexGeminiProvider_1 = class VertexGeminiProvider e
         }
         const response = await fetch(`${this.baseUrl}/api/image/generate-gemini`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': this.apiKey,
+            },
             body: JSON.stringify(body),
         });
         if (!response.ok) {

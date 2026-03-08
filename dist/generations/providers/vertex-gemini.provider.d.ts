@@ -6,6 +6,7 @@ export declare class VertexGeminiProvider extends BaseProvider {
     private readonly uploadsService;
     private readonly logger;
     private readonly baseUrl;
+    private readonly apiKey;
     constructor(configService: ConfigService, uploadsService: UploadsService);
     generate(input: GenerationInput): Promise<GenerationResult>;
     private generateImage;
