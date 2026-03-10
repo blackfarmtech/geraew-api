@@ -10,6 +10,7 @@ exports.PaymentsModule = void 0;
 const common_1 = require("@nestjs/common");
 const payments_controller_1 = require("./payments.controller");
 const payments_service_1 = require("./payments.service");
+const stripe_service_1 = require("./stripe.service");
 const stripe_webhook_service_1 = require("./webhooks/stripe-webhook.service");
 const mercadopago_webhook_service_1 = require("./webhooks/mercadopago-webhook.service");
 const prisma_module_1 = require("../prisma/prisma.module");
@@ -21,8 +22,13 @@ exports.PaymentsModule = PaymentsModule = __decorate([
     (0, common_1.Module)({
         imports: [prisma_module_1.PrismaModule, webhook_logs_module_1.WebhookLogsModule],
         controllers: [payments_controller_1.PaymentsController],
-        providers: [payments_service_1.PaymentsService, stripe_webhook_service_1.StripeWebhookService, mercadopago_webhook_service_1.MercadoPagoWebhookService],
-        exports: [payments_service_1.PaymentsService],
+        providers: [
+            payments_service_1.PaymentsService,
+            stripe_service_1.StripeService,
+            stripe_webhook_service_1.StripeWebhookService,
+            mercadopago_webhook_service_1.MercadoPagoWebhookService,
+        ],
+        exports: [payments_service_1.PaymentsService, stripe_service_1.StripeService],
     })
 ], PaymentsModule);
 //# sourceMappingURL=payments.module.js.map

@@ -9,24 +9,78 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateGenerationResponseDto = exports.GenerationResponseDto = void 0;
+exports.CreateGenerationResponseDto = exports.GenerationResponseDto = exports.GenerationInputImageDto = exports.GenerationOutputDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const client_1 = require("@prisma/client");
+class GenerationOutputDto {
+    id;
+    url;
+    mimeType;
+    order;
+}
+exports.GenerationOutputDto = GenerationOutputDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], GenerationOutputDto.prototype, "id", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], GenerationOutputDto.prototype, "url", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    __metadata("design:type", String)
+], GenerationOutputDto.prototype, "mimeType", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Number)
+], GenerationOutputDto.prototype, "order", void 0);
+class GenerationInputImageDto {
+    id;
+    role;
+    mimeType;
+    order;
+    referenceType;
+    url;
+}
+exports.GenerationInputImageDto = GenerationInputImageDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], GenerationInputImageDto.prototype, "id", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: client_1.GenerationImageRole }),
+    __metadata("design:type", String)
+], GenerationInputImageDto.prototype, "role", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    __metadata("design:type", String)
+], GenerationInputImageDto.prototype, "mimeType", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Number)
+], GenerationInputImageDto.prototype, "order", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: "'asset' | 'style' — apenas para videos com referencia" }),
+    __metadata("design:type", String)
+], GenerationInputImageDto.prototype, "referenceType", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'S3 URL da imagem, se disponivel' }),
+    __metadata("design:type", String)
+], GenerationInputImageDto.prototype, "url", void 0);
 class GenerationResponseDto {
     id;
     type;
     status;
     prompt;
     negativePrompt;
-    inputImageUrl;
-    referenceVideoUrl;
     resolution;
     durationSeconds;
     hasAudio;
     modelUsed;
     parameters;
-    outputUrl;
-    thumbnailUrl;
+    outputs;
+    inputImages;
     hasWatermark;
     creditsConsumed;
     processingTimeMs;
@@ -58,14 +112,6 @@ __decorate([
     __metadata("design:type", String)
 ], GenerationResponseDto.prototype, "negativePrompt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    __metadata("design:type", String)
-], GenerationResponseDto.prototype, "inputImageUrl", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    __metadata("design:type", String)
-], GenerationResponseDto.prototype, "referenceVideoUrl", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ enum: client_1.Resolution }),
     __metadata("design:type", String)
 ], GenerationResponseDto.prototype, "resolution", void 0);
@@ -86,13 +132,13 @@ __decorate([
     __metadata("design:type", Object)
 ], GenerationResponseDto.prototype, "parameters", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    __metadata("design:type", String)
-], GenerationResponseDto.prototype, "outputUrl", void 0);
+    (0, swagger_1.ApiProperty)({ type: [GenerationOutputDto] }),
+    __metadata("design:type", Array)
+], GenerationResponseDto.prototype, "outputs", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    __metadata("design:type", String)
-], GenerationResponseDto.prototype, "thumbnailUrl", void 0);
+    (0, swagger_1.ApiProperty)({ type: [GenerationInputImageDto] }),
+    __metadata("design:type", Array)
+], GenerationResponseDto.prototype, "inputImages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)

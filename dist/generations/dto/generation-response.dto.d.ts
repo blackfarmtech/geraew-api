@@ -1,19 +1,31 @@
-import { GenerationType, GenerationStatus, Resolution } from '@prisma/client';
+import { GenerationType, GenerationStatus, Resolution, GenerationImageRole } from '@prisma/client';
+export declare class GenerationOutputDto {
+    id: string;
+    url: string;
+    mimeType?: string;
+    order: number;
+}
+export declare class GenerationInputImageDto {
+    id: string;
+    role: GenerationImageRole;
+    mimeType?: string;
+    order: number;
+    referenceType?: string;
+    url?: string;
+}
 export declare class GenerationResponseDto {
     id: string;
     type: GenerationType;
     status: GenerationStatus;
     prompt?: string;
     negativePrompt?: string;
-    inputImageUrl?: string;
-    referenceVideoUrl?: string;
     resolution: Resolution;
     durationSeconds?: number;
     hasAudio: boolean;
     modelUsed?: string;
     parameters?: Record<string, unknown>;
-    outputUrl?: string;
-    thumbnailUrl?: string;
+    outputs: GenerationOutputDto[];
+    inputImages: GenerationInputImageDto[];
     hasWatermark: boolean;
     creditsConsumed: number;
     processingTimeMs?: number;

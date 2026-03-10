@@ -4,7 +4,7 @@ import { GenerationType, Resolution } from '@prisma/client';
 
 @Injectable()
 export class PlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async findAllPlans() {
     return this.prisma.plan.findMany({
@@ -40,8 +40,9 @@ export class PlansService {
   async getCreditCost(
     generationType: GenerationType,
     resolution: Resolution,
-    hasAudio: boolean = false,
+    hasAudio: boolean,
   ) {
+    console.log(generationType, resolution, hasAudio);
     const cost = await this.prisma.creditCost.findUnique({
       where: {
         generationType_resolution_hasAudio: {
@@ -68,7 +69,7 @@ export class PlansService {
     hasAudio: boolean = false,
   ): Promise<number> {
     const cost = await this.getCreditCost(generationType, resolution, hasAudio);
-
+    console.log(cost)
     if (cost.isPerSecond && durationSeconds) {
       return cost.creditsPerUnit * durationSeconds;
     }

@@ -33,6 +33,7 @@ enum GenerationType {
   TEXT_TO_VIDEO
   IMAGE_TO_VIDEO
   MOTION_CONTROL
+  REFERENCE_VIDEO
 }
 
 enum GenerationStatus {
@@ -71,6 +72,12 @@ enum Resolution {
   RES_1080P
 }
 
+enum GenerationImageRole {
+  FIRST_FRAME
+  LAST_FRAME
+  REFERENCE
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -86,6 +93,9 @@ model User {
   // OAuth
   oauthProvider   String? @map("oauth_provider")
   oauthProviderId String? @map("oauth_provider_id")
+
+  // Stripe
+  stripeCustomerId String? @unique @map("stripe_customer_id")
 
   // Status
   emailVerified Boolean @default(false) @map("email_verified")
@@ -121,6 +131,7 @@ model Plan {
   hasApiAccess             Boolean @default(false) @map("has_api_access")
   isActive                 Boolean @default(true) @map("is_active")
   sortOrder                Int     @default(0) @map("sort_order")
+  stripePriceId            String? @map("stripe_price_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -148,12 +159,13 @@ model CreditCost {
 }
 
 model CreditPackage {
-  id         String  @id @default(cuid())
-  name       String
-  credits    Int
-  priceCents Int     @map("price_cents")
-  isActive   Boolean @default(true) @map("is_active")
-  sortOrder  Int     @default(0) @map("sort_order")
+  id            String  @id @default(cuid())
+  name          String  @unique
+  credits       Int
+  priceCents    Int     @map("price_cents")
+  isActive      Boolean @default(true) @map("is_active")
+  sortOrder     Int     @default(0) @map("sort_order")
+  stripePriceId String? @map("stripe_price_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -233,33 +245,31 @@ model CreditTransaction {
 }
 
 model Generation {
-  id     String           @id @default(cuid())
-  userId String           @map("user_id")
-  type   GenerationType
-  status GenerationStatus @default(PENDING)
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  type        GenerationType
+  status      GenerationStatus @default(PENDING)
+  aspectRatio String?          @map("aspect_ratio") @db.Text
 
   // Input
-  prompt            String? @db.Text
-  negativePrompt    String? @map("negative_prompt") @db.Text
-  inputImageUrl     String? @map("input_image_url")
-  referenceVideoUrl String? @map("reference_video_url")
+  prompt         String? @db.Text
+  negativePrompt String? @map("negative_prompt") @db.Text
 
   // Parameters
   resolution      Resolution
   durationSeconds Int?       @map("duration_seconds")
   hasAudio        Boolean    @default(false) @map("has_audio")
-  modelUsed       String?    @map("model_used")
+  modelUsed       String     @map("model_used")
   parameters      Json?
+  quantity        Int?       @map("quantity")
 
   // Output
-  outputUrl    String? @map("output_url")
-  thumbnailUrl String? @map("thumbnail_url")
   hasWatermark Boolean @default(false) @map("has_watermark")
 
   // Costs
   creditsConsumed Int @default(0) @map("credits_consumed")
 
-  // Met
+  // Metadata
   processingStartedAt DateTime? @map("processing_started_at")
   processingTimeMs    Int?      @map("processing_time_ms")
   errorMessage        String?   @map("error_message")
@@ -275,8 +285,10 @@ model Generation {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   creditTransactions CreditTransaction[]
+  inputImages        GenerationInputImage[]
+  outputs            GenerationOutput[]
 
   @@index([userId])
   @@index([status])
@@ -285,6 +297,38 @@ model Generation {
   @@index([userId, isDeleted, createdAt(sort: Desc)])
   @@index([expiresAt])
   @@map("generations")
+}
+
+model GenerationInputImage {
+  id            String              @id @default(cuid())
+  generationId  String              @map("generation_id")
+  role          GenerationImageRole
+  mimeType      String?             @map("mime_type")
+  order         Int                 @default(0)
+  referenceType String?             @map("reference_type") // 'asset' | 'style' para videos com referencia
+  url           String?             // S3 URL se/quando for feito upload
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@index([generationId])
+  @@map("generation_input_images")
+}
+
+model GenerationOutput {
+  id           String  @id @default(cuid())
+  generationId String  @map("generation_id")
+  url          String
+  mimeType     String? @map("mime_type")
+  order        Int     @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@index([generationId])
+  @@map("generation_outputs")
 }
 
 model Payment {

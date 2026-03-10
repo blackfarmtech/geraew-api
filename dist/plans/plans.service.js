@@ -41,7 +41,8 @@ let PlansService = class PlansService {
         }
         return plan;
     }
-    async getCreditCost(generationType, resolution, hasAudio = false) {
+    async getCreditCost(generationType, resolution, hasAudio) {
+        console.log(generationType, resolution, hasAudio);
         const cost = await this.prisma.creditCost.findUnique({
             where: {
                 generationType_resolution_hasAudio: {
@@ -58,6 +59,7 @@ let PlansService = class PlansService {
     }
     async calculateGenerationCost(generationType, resolution, durationSeconds, hasAudio = false) {
         const cost = await this.getCreditCost(generationType, resolution, hasAudio);
+        console.log(cost);
         if (cost.isPerSecond && durationSeconds) {
             return cost.creditsPerUnit * durationSeconds;
         }

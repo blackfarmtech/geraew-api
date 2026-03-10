@@ -45,11 +45,239 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
             where: { externalPaymentId },
         });
     }
-    async processSubscriptionPayment(paymentId) {
-        this.logger.log(`Processing subscription payment: ${paymentId} (stub — not yet implemented)`);
+    async processSubscriptionPayment(userId, planSlug, stripeSubscriptionId, amountCents, externalPaymentId) {
+        const plan = await this.prisma.plan.findUnique({
+            where: { slug: planSlug },
+        });
+        if (!plan) {
+            throw new common_1.NotFoundException(`Plano "${planSlug}" não encontrado`);
+        }
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        await this.prisma.$transaction(async (tx) => {
+            const subscription = await tx.subscription.create({
+                data: {
+                    userId,
+                    planId: plan.id,
+                    status: 'ACTIVE',
+                    currentPeriodStart: now,
+                    currentPeriodEnd: periodEnd,
+                    paymentProvider: 'stripe',
+                    externalSubscriptionId: stripeSubscriptionId,
+                },
+            });
+            await tx.creditBalance.upsert({
+                where: { userId },
+                create: {
+                    userId,
+                    planCreditsRemaining: plan.creditsPerMonth,
+                    bonusCreditsRemaining: 0,
+                    planCreditsUsed: 0,
+                    periodStart: now,
+                    periodEnd: periodEnd,
+                },
+                update: {
+                    planCreditsRemaining: plan.creditsPerMonth,
+                    planCreditsUsed: 0,
+                    periodStart: now,
+                    periodEnd: periodEnd,
+                },
+            });
+            const payment = await tx.payment.create({
+                data: {
+                    userId,
+                    type: 'SUBSCRIPTION',
+                    amountCents,
+                    currency: 'BRL',
+                    status: 'COMPLETED',
+                    provider: 'stripe',
+                    externalPaymentId,
+                    subscriptionId: subscription.id,
+                },
+            });
+            await tx.creditTransaction.create({
+                data: {
+                    userId,
+                    type: 'SUBSCRIPTION_RENEWAL',
+                    amount: plan.creditsPerMonth,
+                    source: 'plan',
+                    description: `Assinatura criada — plano ${plan.name}`,
+                    paymentId: payment.id,
+                },
+            });
+        });
+        this.logger.log(`Processed subscription payment for user ${userId}, plan ${planSlug}`);
     }
-    async processCreditPurchase(paymentId) {
-        this.logger.log(`Processing credit purchase: ${paymentId} (stub — not yet implemented)`);
+    async processCreditPurchase(userId, packageId, amountCents, externalPaymentId) {
+        const creditPackage = await this.prisma.creditPackage.findUnique({
+            where: { id: packageId },
+        });
+        if (!creditPackage) {
+            throw new common_1.NotFoundException(`Pacote "${packageId}" não encontrado`);
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.creditBalance.upsert({
+                where: { userId },
+                create: {
+                    userId,
+                    planCreditsRemaining: 0,
+                    bonusCreditsRemaining: creditPackage.credits,
+                    planCreditsUsed: 0,
+                },
+                update: {
+                    bonusCreditsRemaining: {
+                        increment: creditPackage.credits,
+                    },
+                },
+            });
+            const payment = await tx.payment.create({
+                data: {
+                    userId,
+                    type: 'CREDIT_PURCHASE',
+                    amountCents,
+                    currency: 'BRL',
+                    status: 'COMPLETED',
+                    provider: 'stripe',
+                    externalPaymentId,
+                    creditPackageId: packageId,
+                },
+            });
+            await tx.creditTransaction.create({
+                data: {
+                    userId,
+                    type: 'PURCHASE',
+                    amount: creditPackage.credits,
+                    source: 'bonus',
+                    description: `Compra avulsa — ${creditPackage.name} (${creditPackage.credits} créditos)`,
+                    paymentId: payment.id,
+                },
+            });
+        });
+        this.logger.log(`Processed credit purchase for user ${userId}, package ${creditPackage.name}`);
+    }
+    async handleSubscriptionRenewal(stripeSubscriptionId, periodStart, periodEnd, amountCents, externalPaymentId) {
+        const subscription = await this.prisma.subscription.findFirst({
+            where: { externalSubscriptionId: stripeSubscriptionId },
+            include: { plan: true },
+        });
+        if (!subscription) {
+            this.logger.warn(`Subscription not found for Stripe ID ${stripeSubscriptionId}`);
+            return;
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.subscription.update({
+                where: { id: subscription.id },
+                data: {
+                    status: 'ACTIVE',
+                    currentPeriodStart: periodStart,
+                    currentPeriodEnd: periodEnd,
+                    paymentRetryCount: 0,
+                },
+            });
+            await tx.creditBalance.upsert({
+                where: { userId: subscription.userId },
+                create: {
+                    userId: subscription.userId,
+                    planCreditsRemaining: subscription.plan.creditsPerMonth,
+                    bonusCreditsRemaining: 0,
+                    planCreditsUsed: 0,
+                    periodStart,
+                    periodEnd,
+                },
+                update: {
+                    planCreditsRemaining: subscription.plan.creditsPerMonth,
+                    planCreditsUsed: 0,
+                    periodStart,
+                    periodEnd,
+                },
+            });
+            const payment = await tx.payment.create({
+                data: {
+                    userId: subscription.userId,
+                    type: 'SUBSCRIPTION',
+                    amountCents,
+                    currency: 'BRL',
+                    status: 'COMPLETED',
+                    provider: 'stripe',
+                    externalPaymentId,
+                    subscriptionId: subscription.id,
+                },
+            });
+            await tx.creditTransaction.create({
+                data: {
+                    userId: subscription.userId,
+                    type: 'SUBSCRIPTION_RENEWAL',
+                    amount: subscription.plan.creditsPerMonth,
+                    source: 'plan',
+                    description: `Renovação mensal — plano ${subscription.plan.name}`,
+                    paymentId: payment.id,
+                },
+            });
+        });
+        this.logger.log(`Processed subscription renewal for user ${subscription.userId}`);
+    }
+    async handlePaymentFailed(stripeSubscriptionId, amountCents, externalPaymentId) {
+        const subscription = await this.prisma.subscription.findFirst({
+            where: { externalSubscriptionId: stripeSubscriptionId },
+        });
+        if (!subscription) {
+            this.logger.warn(`Subscription not found for Stripe ID ${stripeSubscriptionId}`);
+            return;
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.subscription.update({
+                where: { id: subscription.id },
+                data: {
+                    status: 'PAST_DUE',
+                    paymentRetryCount: { increment: 1 },
+                },
+            });
+            await tx.payment.create({
+                data: {
+                    userId: subscription.userId,
+                    type: 'SUBSCRIPTION',
+                    amountCents,
+                    currency: 'BRL',
+                    status: 'FAILED',
+                    provider: 'stripe',
+                    externalPaymentId,
+                    subscriptionId: subscription.id,
+                },
+            });
+        });
+        this.logger.warn(`Payment failed for subscription ${subscription.id}, retry count: ${subscription.paymentRetryCount + 1}`);
+    }
+    async handleSubscriptionDeleted(stripeSubscriptionId) {
+        const subscription = await this.prisma.subscription.findFirst({
+            where: { externalSubscriptionId: stripeSubscriptionId },
+        });
+        if (!subscription) {
+            this.logger.warn(`Subscription not found for Stripe ID ${stripeSubscriptionId}`);
+            return;
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.subscription.update({
+                where: { id: subscription.id },
+                data: {
+                    status: 'CANCELED',
+                    cancelAtPeriodEnd: false,
+                },
+            });
+            const balance = await tx.creditBalance.findUnique({
+                where: { userId: subscription.userId },
+            });
+            if (balance) {
+                await tx.creditBalance.update({
+                    where: { userId: subscription.userId },
+                    data: {
+                        planCreditsRemaining: 0,
+                        planCreditsUsed: 0,
+                    },
+                });
+            }
+        });
+        this.logger.log(`Subscription ${subscription.id} deleted for user ${subscription.userId}`);
     }
 };
 exports.PaymentsService = PaymentsService;

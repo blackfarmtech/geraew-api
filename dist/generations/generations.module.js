@@ -14,11 +14,7 @@ const prisma_module_1 = require("../prisma/prisma.module");
 const credits_module_1 = require("../credits/credits.module");
 const plans_module_1 = require("../plans/plans.module");
 const uploads_module_1 = require("../uploads/uploads.module");
-const nano_banana_provider_1 = require("./providers/nano-banana.provider");
-const kling_provider_1 = require("./providers/kling.provider");
-const veo_provider_1 = require("./providers/veo.provider");
-const gemini_media_provider_1 = require("./providers/gemini-media.provider");
-const vertex_gemini_provider_1 = require("./providers/vertex-gemini.provider");
+const geraew_provider_1 = require("./providers/geraew.provider");
 let GenerationsModule = class GenerationsModule {
 };
 exports.GenerationsModule = GenerationsModule;
@@ -26,14 +22,7 @@ exports.GenerationsModule = GenerationsModule = __decorate([
     (0, common_1.Module)({
         imports: [prisma_module_1.PrismaModule, credits_module_1.CreditsModule, plans_module_1.PlansModule, uploads_module_1.UploadsModule],
         controllers: [generations_controller_1.GenerationsController],
-        providers: [
-            generations_service_1.GenerationsService,
-            nano_banana_provider_1.NanoBananaProvider,
-            kling_provider_1.KlingProvider,
-            veo_provider_1.VeoProvider,
-            gemini_media_provider_1.GeminiMediaProvider,
-            vertex_gemini_provider_1.VertexGeminiProvider,
-        ],
+        providers: [generations_service_1.GenerationsService, geraew_provider_1.GeraewProvider],
         exports: [generations_service_1.GenerationsService],
     })
 ], GenerationsModule);

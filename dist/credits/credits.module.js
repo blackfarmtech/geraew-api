@@ -12,12 +12,13 @@ const credits_controller_1 = require("./credits.controller");
 const credits_service_1 = require("./credits.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const plans_module_1 = require("../plans/plans.module");
+const payments_module_1 = require("../payments/payments.module");
 let CreditsModule = class CreditsModule {
 };
 exports.CreditsModule = CreditsModule;
 exports.CreditsModule = CreditsModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, plans_module_1.PlansModule],
+        imports: [prisma_module_1.PrismaModule, plans_module_1.PlansModule, payments_module_1.PaymentsModule],
         controllers: [credits_controller_1.CreditsController],
         providers: [credits_service_1.CreditsService],
         exports: [credits_service_1.CreditsService],

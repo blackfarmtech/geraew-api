@@ -6,10 +6,14 @@ import { EstimateCostDto, EstimateCostResponseDto } from './dto/estimate-cost.dt
 import { PurchaseCreditsDto } from './dto/purchase-credits.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PlansService } from '../plans/plans.service';
+import { StripeService } from '../payments/stripe.service';
+import { PrismaService } from '../prisma/prisma.service';
 export declare class CreditsController {
     private readonly creditsService;
     private readonly plansService;
-    constructor(creditsService: CreditsService, plansService: PlansService);
+    private readonly stripeService;
+    private readonly prisma;
+    constructor(creditsService: CreditsService, plansService: PlansService, stripeService: StripeService, prisma: PrismaService);
     getBalance(userId: string): Promise<CreditBalanceResponseDto>;
     getTransactions(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<CreditTransactionResponseDto>>;
     getPackages(): Promise<{
@@ -19,17 +23,11 @@ export declare class CreditsController {
         isActive: boolean;
         priceCents: number;
         sortOrder: number;
+        stripePriceId: string | null;
         credits: number;
     }[]>;
     purchaseCredits(userId: string, dto: PurchaseCreditsDto): Promise<{
-        message: string;
-        package: {
-            id: string;
-            name: string;
-            credits: number;
-            priceCents: number;
-        };
-        userId: string;
+        checkoutUrl: string;
     }>;
     estimateCost(userId: string, dto: EstimateCostDto): Promise<EstimateCostResponseDto>;
 }

@@ -19,6 +19,7 @@ export declare class CreditsService {
         isActive: boolean;
         priceCents: number;
         sortOrder: number;
+        stripePriceId: string | null;
         credits: number;
     }[]>;
     estimateCost(userId: string, type: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean): Promise<EstimateCostResponseDto>;

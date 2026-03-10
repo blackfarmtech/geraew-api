@@ -18,6 +18,7 @@ export declare class PlansService {
         galleryRetentionDays: number | null;
         hasApiAccess: boolean;
         sortOrder: number;
+        stripePriceId: string | null;
     }[]>;
     findPlanBySlug(slug: string): Promise<{
         description: string | null;
@@ -34,6 +35,7 @@ export declare class PlansService {
         galleryRetentionDays: number | null;
         hasApiAccess: boolean;
         sortOrder: number;
+        stripePriceId: string | null;
     }>;
     findPlanById(id: string): Promise<{
         description: string | null;
@@ -50,8 +52,9 @@ export declare class PlansService {
         galleryRetentionDays: number | null;
         hasApiAccess: boolean;
         sortOrder: number;
+        stripePriceId: string | null;
     }>;
-    getCreditCost(generationType: GenerationType, resolution: Resolution, hasAudio?: boolean): Promise<{
+    getCreditCost(generationType: GenerationType, resolution: Resolution, hasAudio: boolean): Promise<{
         id: string;
         createdAt: Date;
         isActive: boolean;
@@ -70,6 +73,7 @@ export declare class PlansService {
         isActive: boolean;
         priceCents: number;
         sortOrder: number;
+        stripePriceId: string | null;
         credits: number;
     }[]>;
     findPackageById(id: string): Promise<{
@@ -79,6 +83,7 @@ export declare class PlansService {
         isActive: boolean;
         priceCents: number;
         sortOrder: number;
+        stripePriceId: string | null;
         credits: number;
     }>;
 }

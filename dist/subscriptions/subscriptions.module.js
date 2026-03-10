@@ -12,12 +12,13 @@ const subscriptions_controller_1 = require("./subscriptions.controller");
 const subscriptions_service_1 = require("./subscriptions.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const plans_module_1 = require("../plans/plans.module");
+const payments_module_1 = require("../payments/payments.module");
 let SubscriptionsModule = class SubscriptionsModule {
 };
 exports.SubscriptionsModule = SubscriptionsModule;
 exports.SubscriptionsModule = SubscriptionsModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, plans_module_1.PlansModule],
+        imports: [prisma_module_1.PrismaModule, plans_module_1.PlansModule, payments_module_1.PaymentsModule],
         controllers: [subscriptions_controller_1.SubscriptionsController],
         providers: [subscriptions_service_1.SubscriptionsService],
         exports: [subscriptions_service_1.SubscriptionsService],

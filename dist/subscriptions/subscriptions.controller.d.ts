@@ -5,7 +5,9 @@ export declare class SubscriptionsController {
     private readonly subscriptionsService;
     constructor(subscriptionsService: SubscriptionsService);
     getCurrent(userId: string): Promise<SubscriptionResponseDto | null>;
-    create(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
+    create(userId: string, dto: CreateSubscriptionDto): Promise<{
+        checkoutUrl: string;
+    }>;
     upgrade(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
     downgrade(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
     cancel(userId: string): Promise<SubscriptionResponseDto>;

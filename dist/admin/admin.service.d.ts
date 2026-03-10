@@ -76,7 +76,7 @@ export declare class AdminService {
         durationSeconds: number | null;
         hasAudio: boolean;
         creditsConsumed: number;
-        outputUrl: string | null;
+        outputUrls: string[];
         errorMessage: string | null;
         processingTimeMs: number | null;
         createdAt: Date;

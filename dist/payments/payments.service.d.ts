@@ -13,8 +13,8 @@ export declare class PaymentsService {
         status: import(".prisma/client").$Enums.PaymentStatus;
         metadata: Prisma.JsonValue | null;
         provider: string;
-        amountCents: number;
         currency: string;
+        amountCents: number;
         externalPaymentId: string | null;
         externalInvoiceId: string | null;
         subscriptionId: string | null;
@@ -29,8 +29,8 @@ export declare class PaymentsService {
         status: import(".prisma/client").$Enums.PaymentStatus;
         metadata: Prisma.JsonValue | null;
         provider: string;
-        amountCents: number;
         currency: string;
+        amountCents: number;
         externalPaymentId: string | null;
         externalInvoiceId: string | null;
         subscriptionId: string | null;
@@ -45,13 +45,16 @@ export declare class PaymentsService {
         status: import(".prisma/client").$Enums.PaymentStatus;
         metadata: Prisma.JsonValue | null;
         provider: string;
-        amountCents: number;
         currency: string;
+        amountCents: number;
         externalPaymentId: string | null;
         externalInvoiceId: string | null;
         subscriptionId: string | null;
         creditPackageId: string | null;
     } | null>;
-    processSubscriptionPayment(paymentId: string): Promise<void>;
-    processCreditPurchase(paymentId: string): Promise<void>;
+    processSubscriptionPayment(userId: string, planSlug: string, stripeSubscriptionId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    processCreditPurchase(userId: string, packageId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    handleSubscriptionRenewal(stripeSubscriptionId: string, periodStart: Date, periodEnd: Date, amountCents: number, externalPaymentId: string): Promise<void>;
+    handlePaymentFailed(stripeSubscriptionId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    handleSubscriptionDeleted(stripeSubscriptionId: string): Promise<void>;
 }

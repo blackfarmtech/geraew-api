@@ -3,6 +3,16 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Stripe Price IDs — lidos do .env (dev usa test IDs, prod usa live IDs)
+const STRIPE = {
+  priceStarter: process.env.STRIPE_PRICE_STARTER ?? '',
+  pricePro: process.env.STRIPE_PRICE_PRO ?? '',
+  priceBusiness: process.env.STRIPE_PRICE_BUSINESS ?? '',
+  priceCredits500: process.env.STRIPE_PRICE_CREDITS_500 ?? '',
+  priceCredits1000: process.env.STRIPE_PRICE_CREDITS_1000 ?? '',
+  priceCredits5000: process.env.STRIPE_PRICE_CREDITS_5000 ?? '',
+};
+
 async function main() {
   console.log('🌱 Starting database seed...');
 
@@ -29,7 +39,7 @@ async function main() {
     }),
     prisma.plan.upsert({
       where: { slug: 'starter' },
-      update: {},
+      update: { stripePriceId: STRIPE.priceStarter },
       create: {
         slug: 'starter',
         name: 'Starter',
@@ -40,11 +50,12 @@ async function main() {
         galleryRetentionDays: null,
         hasApiAccess: false,
         sortOrder: 1,
+        stripePriceId: STRIPE.priceStarter,
       },
     }),
     prisma.plan.upsert({
       where: { slug: 'pro' },
-      update: {},
+      update: { stripePriceId: STRIPE.pricePro },
       create: {
         slug: 'pro',
         name: 'Pro',
@@ -55,11 +66,12 @@ async function main() {
         galleryRetentionDays: null,
         hasApiAccess: false,
         sortOrder: 2,
+        stripePriceId: STRIPE.pricePro,
       },
     }),
     prisma.plan.upsert({
       where: { slug: 'business' },
-      update: {},
+      update: { stripePriceId: STRIPE.priceBusiness },
       create: {
         slug: 'business',
         name: 'Business',
@@ -70,6 +82,7 @@ async function main() {
         galleryRetentionDays: null,
         hasApiAccess: true,
         sortOrder: 3,
+        stripePriceId: STRIPE.priceBusiness,
       },
     }),
   ]);
@@ -111,6 +124,15 @@ async function main() {
     // Image to Video with audio (Veo 3.1)
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, creditsPerUnit: 96, isPerSecond: true },
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, creditsPerUnit: 144, isPerSecond: true },
+
+    // Reference Video without audio (Veo 3.1)
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, creditsPerUnit: 48, isPerSecond: true },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, creditsPerUnit: 48, isPerSecond: true },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, creditsPerUnit: 96, isPerSecond: true },
+
+    // Reference Video with audio (Veo 3.1)
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, creditsPerUnit: 96, isPerSecond: true },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, creditsPerUnit: 144, isPerSecond: true },
   ];
 
   for (const cost of creditCosts) {
@@ -135,28 +157,37 @@ async function main() {
   console.log('📦 Creating credit packages...');
 
   const packages = await Promise.all([
-    prisma.creditPackage.create({
-      data: {
+    prisma.creditPackage.upsert({
+      where: { name: 'Pacote 500' },
+      update: { stripePriceId: STRIPE.priceCredits500 },
+      create: {
         name: 'Pacote 500',
         credits: 500,
         priceCents: 1790,
         sortOrder: 0,
+        stripePriceId: STRIPE.priceCredits500,
       },
     }),
-    prisma.creditPackage.create({
-      data: {
+    prisma.creditPackage.upsert({
+      where: { name: 'Pacote 1.000' },
+      update: { stripePriceId: STRIPE.priceCredits1000 },
+      create: {
         name: 'Pacote 1.000',
         credits: 1000,
         priceCents: 2990,
         sortOrder: 1,
+        stripePriceId: STRIPE.priceCredits1000,
       },
     }),
-    prisma.creditPackage.create({
-      data: {
+    prisma.creditPackage.upsert({
+      where: { name: 'Pacote 5.000' },
+      update: { stripePriceId: STRIPE.priceCredits5000 },
+      create: {
         name: 'Pacote 5.000',
         credits: 5000,
         priceCents: 12990,
         sortOrder: 2,
+        stripePriceId: STRIPE.priceCredits5000,
       },
     }),
   ]);
@@ -184,9 +215,6 @@ async function main() {
 
     // Regular test users with different plans
     const testUsers = [
-      { email: 'free@test.com', name: 'Free User', plan: 'free' },
-      { email: 'starter@test.com', name: 'Starter User', plan: 'starter' },
-      { email: 'pro@test.com', name: 'Pro User', plan: 'pro' },
       { email: 'business@test.com', name: 'Business User', plan: 'business' },
     ];
 
@@ -210,8 +238,10 @@ async function main() {
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + 1);
 
-        await prisma.subscription.create({
-          data: {
+        await prisma.subscription.upsert({
+          where: { id: (await prisma.subscription.findFirst({ where: { userId: user.id } }))?.id ?? '' },
+          update: { planId: plan.id, status: 'ACTIVE', currentPeriodStart: now, currentPeriodEnd: endDate },
+          create: {
             userId: user.id,
             planId: plan.id,
             status: 'ACTIVE',
@@ -222,8 +252,15 @@ async function main() {
         });
 
         // Create credit balance
-        await prisma.creditBalance.create({
-          data: {
+        await prisma.creditBalance.upsert({
+          where: { userId: user.id },
+          update: {
+            planCreditsRemaining: plan.creditsPerMonth,
+            planCreditsUsed: 0,
+            periodStart: now,
+            periodEnd: endDate,
+          },
+          create: {
             userId: user.id,
             planCreditsRemaining: plan.creditsPerMonth,
             bonusCreditsRemaining: 0,
@@ -253,69 +290,6 @@ async function main() {
       where: { email: 'pro@test.com' },
     });
 
-    if (proUser) {
-      console.log('🎨 Creating sample generations...');
-
-      const sampleGenerations = [
-        {
-          userId: proUser.id,
-          type: 'TEXT_TO_IMAGE' as const,
-          status: 'COMPLETED' as const,
-          prompt: 'A futuristic city skyline at sunset with flying cars',
-          resolution: 'RES_2K' as const,
-          creditsConsumed: 15,
-          outputUrl: 'https://placeholder.com/sample1.jpg',
-          hasWatermark: false,
-          processingTimeMs: 8500,
-          completedAt: new Date(),
-        },
-        {
-          userId: proUser.id,
-          type: 'TEXT_TO_VIDEO' as const,
-          status: 'COMPLETED' as const,
-          prompt: 'A serene beach with waves crashing',
-          resolution: 'RES_1080P' as const,
-          durationSeconds: 5,
-          hasAudio: true,
-          creditsConsumed: 480,
-          outputUrl: 'https://placeholder.com/sample2.mp4',
-          thumbnailUrl: 'https://placeholder.com/sample2-thumb.jpg',
-          hasWatermark: false,
-          processingTimeMs: 45000,
-          completedAt: new Date(),
-        },
-        {
-          userId: proUser.id,
-          type: 'IMAGE_TO_IMAGE' as const,
-          status: 'PROCESSING' as const,
-          prompt: 'Transform to cyberpunk style',
-          inputImageUrl: 'https://placeholder.com/input.jpg',
-          resolution: 'RES_1K' as const,
-          creditsConsumed: 10,
-          processingStartedAt: new Date(),
-        },
-        {
-          userId: proUser.id,
-          type: 'MOTION_CONTROL' as const,
-          status: 'FAILED' as const,
-          inputImageUrl: 'https://placeholder.com/input2.jpg',
-          referenceVideoUrl: 'https://placeholder.com/reference.mp4',
-          resolution: 'RES_1080P' as const,
-          durationSeconds: 3,
-          creditsConsumed: 33,
-          errorMessage: 'Invalid reference video format',
-          errorCode: 'INVALID_FILE_TYPE',
-        },
-      ];
-
-      for (const gen of sampleGenerations) {
-        await prisma.generation.create({
-          data: gen,
-        });
-      }
-
-      console.log(`✅ Created ${sampleGenerations.length} sample generations`);
-    }
   }
 
   console.log('🎉 Seed completed successfully!');

@@ -18,20 +18,18 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
-import { GenerationType } from '@prisma/client';
 import { GenerationsService } from './generations.service';
 import { CurrentUser } from '../common/decorators';
-import { TextToImageDto } from './dto/text-to-image.dto';
-import { ImageToImageDto } from './dto/image-to-image.dto';
-import { TextToVideoDto } from './dto/text-to-video.dto';
-import { ImageToVideoDto } from './dto/image-to-video.dto';
-import { MotionControlDto } from './dto/motion-control.dto';
 import { GenerationFiltersDto } from './dto/generation-filters.dto';
 import {
   GenerationResponseDto,
   CreateGenerationResponseDto,
 } from './dto/generation-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { GenerateImageDto } from './dto/generate-image.dto';
+import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
+import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
+import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -39,34 +37,15 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 export class GenerationsController {
   constructor(private readonly generationsService: GenerationsService) {}
 
-  @Post('text-to-image')
+  @Post('generate-image')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Gera imagem a partir de texto' })
+  @ApiOperation({ summary: 'Gera imagem (text-to-image ou image-to-image)' })
   @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
-  async textToImage(
+  async generateImage(
     @CurrentUser('sub') userId: string,
-    @Body() dto: TextToImageDto,
+    @Body() dto: GenerateImageDto,
   ): Promise<CreateGenerationResponseDto> {
-    return this.generationsService.createGeneration(
-      userId,
-      GenerationType.TEXT_TO_IMAGE,
-      dto,
-    );
-  }
-
-  @Post('image-to-image')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Gera imagem a partir de imagem + prompt' })
-  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
-  async imageToImage(
-    @CurrentUser('sub') userId: string,
-    @Body() dto: ImageToImageDto,
-  ): Promise<CreateGenerationResponseDto> {
-    return this.generationsService.createGeneration(
-      userId,
-      GenerationType.IMAGE_TO_IMAGE,
-      dto,
-    );
+    return this.generationsService.generateImage(userId, dto);
   }
 
   @Post('text-to-video')
@@ -75,13 +54,9 @@ export class GenerationsController {
   @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
   async textToVideo(
     @CurrentUser('sub') userId: string,
-    @Body() dto: TextToVideoDto,
+    @Body() dto: GenerateVideoTextToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
-    return this.generationsService.createGeneration(
-      userId,
-      GenerationType.TEXT_TO_VIDEO,
-      dto,
-    );
+    return this.generationsService.generateTextToVideo(userId, dto);
   }
 
   @Post('image-to-video')
@@ -90,28 +65,20 @@ export class GenerationsController {
   @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
   async imageToVideo(
     @CurrentUser('sub') userId: string,
-    @Body() dto: ImageToVideoDto,
+    @Body() dto: GenerateVideoImageToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
-    return this.generationsService.createGeneration(
-      userId,
-      GenerationType.IMAGE_TO_VIDEO,
-      dto,
-    );
+    return this.generationsService.generateImageToVideo(userId, dto);
   }
 
-  @Post('motion-control')
+  @Post('video-with-references')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Gera vídeo com motion control' })
+  @ApiOperation({ summary: 'Gera vídeo com imagens de referência' })
   @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
-  async motionControl(
+  async videoWithReferences(
     @CurrentUser('sub') userId: string,
-    @Body() dto: MotionControlDto,
+    @Body() dto: GenerateVideoWithReferencesDto,
   ): Promise<CreateGenerationResponseDto> {
-    return this.generationsService.createGeneration(
-      userId,
-      GenerationType.MOTION_CONTROL,
-      dto,
-    );
+    return this.generationsService.generateVideoWithReferences(userId, dto);
   }
 
   @Get()

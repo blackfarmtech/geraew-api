@@ -3,7 +3,6 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditsService } from '../credits/credits.service';
@@ -13,17 +12,50 @@ import {
   GenerationStatus,
   CreditTransactionType,
   Resolution,
+  GenerationImageRole,
 } from '@prisma/client';
 import { GenerationFiltersDto } from './dto/generation-filters.dto';
-import { GenerationResponseDto, CreateGenerationResponseDto } from './dto/generation-response.dto';
+import {
+  GenerationResponseDto,
+  CreateGenerationResponseDto,
+} from './dto/generation-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
-import { NanoBananaProvider } from './providers/nano-banana.provider';
-import { KlingProvider } from './providers/kling.provider';
-import { VeoProvider } from './providers/veo.provider';
-import { GeminiMediaProvider } from './providers/gemini-media.provider';
-import { VertexGeminiProvider } from './providers/vertex-gemini.provider';
-import { BaseProvider, GenerationInput } from './providers/base.provider';
 import { UploadsService } from '../uploads/uploads.service';
+import { GeraewProvider } from './providers/geraew.provider';
+import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
+import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
+import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
+import { GenerateImageDto } from './dto/generate-image.dto';
+
+type GenerationWithRelations = {
+  id: string;
+  type: GenerationType;
+  status: GenerationStatus;
+  prompt: string | null;
+  negativePrompt: string | null;
+  resolution: Resolution;
+  durationSeconds: number | null;
+  hasAudio: boolean;
+  modelUsed: string;
+  parameters: unknown;
+  hasWatermark: boolean;
+  creditsConsumed: number;
+  processingTimeMs: number | null;
+  errorMessage: string | null;
+  errorCode: string | null;
+  isFavorited: boolean;
+  createdAt: Date;
+  completedAt: Date | null;
+  outputs: Array<{ id: string; url: string; mimeType: string | null; order: number }>;
+  inputImages: Array<{
+    id: string;
+    role: GenerationImageRole;
+    mimeType: string | null;
+    order: number;
+    referenceType: string | null;
+    url: string | null;
+  }>;
+};
 
 @Injectable()
 export class GenerationsService {
@@ -34,44 +66,400 @@ export class GenerationsService {
     private readonly creditsService: CreditsService,
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
-    private readonly nanoBananaProvider: NanoBananaProvider,
-    private readonly klingProvider: KlingProvider,
-    private readonly veoProvider: VeoProvider,
-    private readonly geminiMediaProvider: GeminiMediaProvider,
-    private readonly vertexGeminiProvider: VertexGeminiProvider,
-  ) { }
+    private readonly geraewProvider: GeraewProvider,
+  ) {}
 
-  async createGeneration(
+  // ─── Image generation (text-to-image / image-to-image) ────
+
+  async generateImage(
     userId: string,
-    type: GenerationType,
-    dto: {
-      prompt?: string;
-      negativePrompt?: string;
-      inputImageUrl?: string;
-      referenceVideoUrl?: string;
-      resolution: Resolution;
-      durationSeconds?: number;
-      hasAudio?: boolean;
-      aspectRatio?: string;
-      outputFormat?: string;
-      googleSearch?: boolean;
-      imageModel?: string;
-      referenceImageUrls?: string[];
-      lastFrameUrl?: string;
-      parameters?: Record<string, unknown>;
-    },
+    dto: GenerateImageDto,
   ): Promise<CreateGenerationResponseDto> {
-    const hasAudio = dto.hasAudio ?? false;
+    const type =
+      dto.images?.length
+        ? GenerationType.IMAGE_TO_IMAGE
+        : GenerationType.TEXT_TO_IMAGE;
 
-    // 1. Calculate credits required
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
-      dto.durationSeconds,
+    );
+
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: dto.model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: { mimeType: dto.mime_type },
+      },
+    });
+
+    if (dto.images?.length) {
+      const uploadedUrls = await Promise.all(
+        dto.images.map((img) =>
+          this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.images.map((img, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: img.mime_type ?? 'image/png',
+          order: i,
+          url: uploadedUrls[i],
+        })),
+      });
+    }
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+
+    this.processImageGeneration(generation.id, dto).catch((error) => {
+      this.handleFailure(generation.id, userId, creditsRequired, error);
+    });
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Text to Video ────────────────────────────────────────
+
+  async generateTextToVideo(
+    userId: string,
+    dto: GenerateVideoTextToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.TEXT_TO_VIDEO;
+    const hasAudio = dto.generate_audio ?? true;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
       hasAudio,
     );
 
-    // 2. Check sufficient balance
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        negativePrompt: dto.negative_prompt,
+        modelUsed: dto.model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        quantity: dto.sample_count,
+        creditsConsumed: creditsRequired,
+      },
+    });
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+
+    this.processTextToVideoGeneration(generation.id, dto).catch((error) => {
+      this.handleFailure(generation.id, userId, creditsRequired, error);
+    });
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Image to Video ───────────────────────────────────────
+
+  async generateImageToVideo(
+    userId: string,
+    dto: GenerateVideoImageToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.IMAGE_TO_VIDEO;
+    const model = dto.model ?? 'veo-3.1-generate-preview';
+    const hasAudio = dto.generate_audio ?? true;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
+      hasAudio,
+    );
+
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        negativePrompt: dto.negative_prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        quantity: dto.sample_count,
+        creditsConsumed: creditsRequired,
+      },
+    });
+
+    const firstFrameUrl = await this.uploadBase64Image(
+      dto.first_frame,
+      dto.first_frame_mime_type ?? 'image/jpeg',
+      generation.id,
+    );
+    const inputImageData: Array<{
+      generationId: string;
+      role: GenerationImageRole;
+      mimeType: string;
+      order: number;
+      url: string;
+    }> = [
+      {
+        generationId: generation.id,
+        role: GenerationImageRole.FIRST_FRAME,
+        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+        order: 0,
+        url: firstFrameUrl,
+      },
+    ];
+    if (dto.last_frame) {
+      const lastFrameUrl = await this.uploadBase64Image(
+        dto.last_frame,
+        dto.last_frame_mime_type ?? 'image/jpeg',
+        generation.id,
+      );
+      inputImageData.push({
+        generationId: generation.id,
+        role: GenerationImageRole.LAST_FRAME,
+        mimeType: dto.last_frame_mime_type ?? 'image/jpeg',
+        order: 1,
+        url: lastFrameUrl,
+      });
+    }
+    await this.prisma.generationInputImage.createMany({ data: inputImageData });
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+
+    this.processImageToVideoGeneration(generation.id, dto, model).catch(
+      (error) => {
+        this.handleFailure(generation.id, userId, creditsRequired, error);
+      },
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Video with References ────────────────────────────────
+
+  async generateVideoWithReferences(
+    userId: string,
+    dto: GenerateVideoWithReferencesDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.REFERENCE_VIDEO;
+    const model = dto.model ?? 'veo-3.1-generate-preview';
+    const hasAudio = dto.generate_audio ?? true;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
+      hasAudio,
+    );
+
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        negativePrompt: dto.negative_prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        quantity: dto.sample_count,
+        creditsConsumed: creditsRequired,
+      },
+    });
+
+    if (dto.reference_images?.length) {
+      const uploadedUrls = await Promise.all(
+        dto.reference_images.map((ref) =>
+          this.uploadBase64Image(ref.base64, ref.mime_type ?? 'image/jpeg', generation.id),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.reference_images.map((ref, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: ref.mime_type ?? 'image/jpeg',
+          order: i,
+          referenceType: ref.reference_type,
+          url: uploadedUrls[i],
+        })),
+      });
+    }
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+
+    this.processReferenceVideoGeneration(generation.id, dto, model).catch(
+      (error) => {
+        this.handleFailure(generation.id, userId, creditsRequired, error);
+      },
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Background processors ────────────────────────────────
+
+  private async processImageGeneration(
+    generationId: string,
+    dto: GenerateImageDto,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    const result = await this.geraewProvider.generateImage({
+      id: generationId,
+      prompt: dto.prompt,
+      model: dto.model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      mimeType: dto.mime_type,
+      images: dto.images?.map((img) => ({
+        base64: img.base64,
+        mimeType: img.mime_type ?? 'image/png',
+      })),
+    });
+
+    await this.completeGeneration(generationId, result, startTime);
+  }
+
+  private async processTextToVideoGeneration(
+    generationId: string,
+    dto: GenerateVideoTextToVideoDto,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    const result = await this.geraewProvider.generateTextToVideo({
+      id: generationId,
+      prompt: dto.prompt,
+      model: dto.model,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: dto.generate_audio ?? true,
+      sampleCount: dto.sample_count,
+      negativePrompt: dto.negative_prompt,
+    });
+
+    await this.completeGeneration(generationId, result, startTime);
+  }
+
+  private async processImageToVideoGeneration(
+    generationId: string,
+    dto: GenerateVideoImageToVideoDto,
+    model: string,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    const result = await this.geraewProvider.generateImageToVideo({
+      id: generationId,
+      prompt: dto.prompt,
+      model,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: dto.generate_audio ?? true,
+      sampleCount: dto.sample_count,
+      negativePrompt: dto.negative_prompt,
+      firstFrame: dto.first_frame,
+      firstFrameMimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+      lastFrame: dto.last_frame,
+      lastFrameMimeType: dto.last_frame_mime_type,
+    });
+
+    await this.completeGeneration(generationId, result, startTime);
+  }
+
+  private async processReferenceVideoGeneration(
+    generationId: string,
+    dto: GenerateVideoWithReferencesDto,
+    model: string,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    const result = await this.geraewProvider.generateVideoWithReferences({
+      id: generationId,
+      prompt: dto.prompt,
+      model,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: dto.generate_audio ?? true,
+      sampleCount: dto.sample_count,
+      negativePrompt: dto.negative_prompt,
+      referenceImages: (dto.reference_images ?? []).map((ref) => ({
+        base64: ref.base64,
+        mimeType: ref.mime_type ?? 'image/jpeg',
+        referenceType: ref.reference_type,
+      })),
+    });
+
+    await this.completeGeneration(generationId, result, startTime);
+  }
+
+  // ─── Shared helpers ───────────────────────────────────────
+
+  private async ensureSufficientBalance(
+    userId: string,
+    creditsRequired: number,
+  ): Promise<void> {
     const balance = await this.creditsService.getBalance(userId);
     if (balance.totalCreditsAvailable < creditsRequired) {
       throw new BadRequestException({
@@ -80,166 +468,53 @@ export class GenerationsService {
         statusCode: 402,
       });
     }
+  }
 
-    // 3. Check concurrent generation limit
-    // await this.checkConcurrentLimit(userId);
-
-    // 4. Debit credits
-    // We create the generation first (inside a transaction) so we can reference its ID
-    const generation = await this.prisma.$transaction(async (tx) => {
-      // Create generation record
-      const gen = await tx.generation.create({
-        data: {
-          userId,
-          type,
-          status: GenerationStatus.PROCESSING,
-          prompt: dto.prompt,
-          negativePrompt: dto.negativePrompt,
-          inputImageUrl: dto.inputImageUrl,
-          referenceVideoUrl: dto.referenceVideoUrl,
-          resolution: dto.resolution,
-          durationSeconds: dto.durationSeconds,
-          hasAudio,
-          parameters: {
-            ...(dto.parameters ?? {}),
-            ...(dto.aspectRatio ? { aspectRatio: dto.aspectRatio } : {}),
-            ...(dto.outputFormat ? { outputFormat: dto.outputFormat } : {}),
-            ...(dto.googleSearch !== undefined ? { googleSearch: dto.googleSearch } : {}),
-            ...(dto.imageModel ? { imageModel: dto.imageModel } : {}),
-            ...(dto.referenceImageUrls?.length ? { referenceImageUrls: dto.referenceImageUrls } : {}),
-          } as any,
-          creditsConsumed: creditsRequired,
-        },
-      });
-
-      return gen;
-    });
-
-    // Debit credits (uses its own transaction)
+  private async debitCredits(
+    userId: string,
+    creditsRequired: number,
+    generationId: string,
+    type: GenerationType,
+    resolution: Resolution,
+  ): Promise<void> {
     await this.creditsService.debit(
       userId,
       creditsRequired,
       CreditTransactionType.GENERATION_DEBIT,
-      generation.id,
-      `Geração ${type} ${dto.resolution}`,
+      generationId,
+      `Geração ${type} ${resolution}`,
     );
-
-    // 5. Fire-and-forget background processing
-    this.processGeneration(generation).catch((error) => {
-      this.handleFailure(generation.id, userId, creditsRequired, error);
-    });
-
-    // 6. Return immediately
-    return {
-      id: generation.id,
-      status: GenerationStatus.PROCESSING,
-      creditsConsumed: creditsRequired,
-    };
   }
 
-  private async checkConcurrentLimit(userId: string): Promise<void> {
-    // Get user's active subscription to know the plan limits
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: { in: ['ACTIVE', 'TRIALING'] },
-      },
-      include: { plan: true },
-    });
-
-    const maxConcurrent = subscription?.plan?.maxConcurrentGenerations ?? 1;
-
-    const activeCount = await this.prisma.generation.count({
-      where: {
-        userId,
-        status: GenerationStatus.PROCESSING,
-      },
-    });
-
-    if (activeCount >= maxConcurrent) {
-      throw new BadRequestException({
-        code: 'MAX_CONCURRENT_REACHED',
-        message: `Limite de ${maxConcurrent} geração(ões) simultânea(s) atingido. Aguarde a conclusão das gerações em andamento.`,
-        statusCode: 429,
-      });
-    }
-  }
-
-  private getProvider(type: GenerationType): BaseProvider {
-    switch (type) {
-      case GenerationType.TEXT_TO_IMAGE:
-      case GenerationType.IMAGE_TO_IMAGE:
-        return this.vertexGeminiProvider;
-      case GenerationType.MOTION_CONTROL:
-        return this.klingProvider;
-      case GenerationType.TEXT_TO_VIDEO:
-      case GenerationType.IMAGE_TO_VIDEO:
-        return this.geminiMediaProvider;
-      default:
-        throw new BadRequestException(`Tipo de geração não suportado: ${type}`);
-    }
-  }
-
-  private async processGeneration(generation: {
-    id: string;
-    type: GenerationType;
-    prompt: string | null;
-    negativePrompt: string | null;
-    inputImageUrl: string | null;
-    referenceVideoUrl: string | null;
-    resolution: Resolution;
-    durationSeconds: number | null;
-    hasAudio: boolean;
-    parameters: unknown;
-  }): Promise<void> {
-    const startTime = Date.now();
-
-    // Update processing_started_at
-    await this.prisma.generation.update({
-      where: { id: generation.id },
-      data: { processingStartedAt: new Date() },
-    });
-
-    const provider = this.getProvider(generation.type);
-
-    // Resolve S3 file keys to signed URLs so external APIs can access them
-    const inputImageUrl = generation.inputImageUrl
-      ? await this.resolveFileUrl(generation.inputImageUrl)
-      : undefined;
-    const referenceVideoUrl = generation.referenceVideoUrl
-      ? await this.resolveFileUrl(generation.referenceVideoUrl)
-      : undefined;
-
-    const input: GenerationInput = {
-      id: generation.id,
-      type: generation.type,
-      prompt: generation.prompt ?? undefined,
-      negativePrompt: generation.negativePrompt ?? undefined,
-      inputImageUrl,
-      referenceVideoUrl,
-      resolution: generation.resolution,
-      durationSeconds: generation.durationSeconds ?? undefined,
-      hasAudio: generation.hasAudio,
-      parameters: (generation.parameters as Record<string, unknown>) ?? undefined,
-    };
-
-    const result = await provider.generate(input);
-
+  private async completeGeneration(
+    generationId: string,
+    result: { outputUrls: string[]; modelUsed: string },
+    startTime: number,
+  ): Promise<void> {
     const processingTimeMs = Date.now() - startTime;
 
-    await this.prisma.generation.update({
-      where: { id: generation.id },
-      data: {
-        status: GenerationStatus.COMPLETED,
-        outputUrl: result.outputUrl,
-        thumbnailUrl: result.thumbnailUrl,
-        modelUsed: result.modelUsed,
-        processingTimeMs,
-        completedAt: new Date(),
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.generation.update({
+        where: { id: generationId },
+        data: {
+          status: GenerationStatus.COMPLETED,
+          modelUsed: result.modelUsed,
+          processingTimeMs,
+          completedAt: new Date(),
+        },
+      }),
+      this.prisma.generationOutput.createMany({
+        data: result.outputUrls.map((url, i) => ({
+          generationId,
+          url,
+          order: i,
+        })),
+      }),
+    ]);
 
-    this.logger.log(`Generation ${generation.id} completed in ${processingTimeMs}ms`);
+    this.logger.log(
+      `Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`,
+    );
   }
 
   private async handleFailure(
@@ -248,7 +523,10 @@ export class GenerationsService {
     creditsConsumed: number,
     error: Error,
   ): Promise<void> {
-    this.logger.error(`Generation ${generationId} failed: ${error.message}`, error.stack);
+    this.logger.error(
+      `Generation ${generationId} failed: ${error.message}`,
+      error.stack,
+    );
 
     await this.prisma.generation.update({
       where: { id: generationId },
@@ -259,18 +537,28 @@ export class GenerationsService {
       },
     });
 
-    // Refund credits
     await this.creditsService.refund(userId, creditsConsumed, generationId);
 
-    this.logger.log(`Refunded ${creditsConsumed} credits for failed generation ${generationId}`);
+    this.logger.log(
+      `Refunded ${creditsConsumed} credits for failed generation ${generationId}`,
+    );
   }
 
-  async findById(userId: string, generationId: string): Promise<GenerationResponseDto> {
+  // ─── Read operations ──────────────────────────────────────
+
+  async findById(
+    userId: string,
+    generationId: string,
+  ): Promise<GenerationResponseDto> {
     const generation = await this.prisma.generation.findFirst({
       where: {
         id: generationId,
         userId,
         isDeleted: false,
+      },
+      include: {
+        outputs: { orderBy: { order: 'asc' } },
+        inputImages: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -302,7 +590,6 @@ export class GenerationsService {
       where.isFavorited = filters.favorited;
     }
 
-    // Parse sort
     let orderBy: Record<string, string> = { createdAt: 'desc' };
     if (filters.sort) {
       const [field, direction] = filters.sort.split(':');
@@ -321,6 +608,10 @@ export class GenerationsService {
         orderBy,
         skip: filters.skip,
         take: filters.limit,
+        include: {
+          outputs: { orderBy: { order: 'asc' } },
+          inputImages: { orderBy: { order: 'asc' } },
+        },
       }),
       this.prisma.generation.count({ where }),
     ]);
@@ -364,45 +655,35 @@ export class GenerationsService {
     });
   }
 
-  private toResponseDto(generation: {
-    id: string;
-    type: GenerationType;
-    status: GenerationStatus;
-    prompt: string | null;
-    negativePrompt: string | null;
-    inputImageUrl: string | null;
-    referenceVideoUrl: string | null;
-    resolution: Resolution;
-    durationSeconds: number | null;
-    hasAudio: boolean;
-    modelUsed: string | null;
-    parameters: unknown;
-    outputUrl: string | null;
-    thumbnailUrl: string | null;
-    hasWatermark: boolean;
-    creditsConsumed: number;
-    processingTimeMs: number | null;
-    errorMessage: string | null;
-    errorCode: string | null;
-    isFavorited: boolean;
-    createdAt: Date;
-    completedAt: Date | null;
-  }): GenerationResponseDto {
+  // ─── Response mapping ─────────────────────────────────────
+
+  private toResponseDto(generation: GenerationWithRelations): GenerationResponseDto {
     return {
       id: generation.id,
       type: generation.type,
       status: generation.status,
       prompt: generation.prompt ?? undefined,
       negativePrompt: generation.negativePrompt ?? undefined,
-      inputImageUrl: generation.inputImageUrl ?? undefined,
-      referenceVideoUrl: generation.referenceVideoUrl ?? undefined,
       resolution: generation.resolution,
       durationSeconds: generation.durationSeconds ?? undefined,
       hasAudio: generation.hasAudio,
       modelUsed: generation.modelUsed ?? undefined,
-      parameters: (generation.parameters as Record<string, unknown>) ?? undefined,
-      outputUrl: generation.outputUrl ?? undefined,
-      thumbnailUrl: generation.thumbnailUrl ?? undefined,
+      parameters:
+        (generation.parameters as Record<string, unknown>) ?? undefined,
+      outputs: generation.outputs.map((o) => ({
+        id: o.id,
+        url: o.url,
+        mimeType: o.mimeType ?? undefined,
+        order: o.order,
+      })),
+      inputImages: generation.inputImages.map((img) => ({
+        id: img.id,
+        role: img.role,
+        mimeType: img.mimeType ?? undefined,
+        order: img.order,
+        referenceType: img.referenceType ?? undefined,
+        url: img.url ?? undefined,
+      })),
       hasWatermark: generation.hasWatermark,
       creditsConsumed: generation.creditsConsumed,
       processingTimeMs: generation.processingTimeMs ?? undefined,
@@ -414,10 +695,21 @@ export class GenerationsService {
     };
   }
 
-  /**
-   * If the value looks like an S3 file key (no protocol), generate a signed URL.
-   * If it's already a full URL, return as-is.
-   */
+  private async uploadBase64Image(
+    base64: string,
+    mimeType: string,
+    generationId: string,
+  ): Promise<string> {
+    const buffer = Buffer.from(base64, 'base64');
+    const ext = mimeType.split('/')[1] ?? 'jpg';
+    return this.uploadsService.uploadBuffer(
+      buffer,
+      `inputs/${generationId}`,
+      `input.${ext}`,
+      mimeType,
+    );
+  }
+
   private async resolveFileUrl(value: string): Promise<string> {
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return value;

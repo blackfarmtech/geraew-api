@@ -211,9 +211,8 @@ export class AdminService {
         skip: pagination.skip,
         take: pagination.limit,
         include: {
-          user: {
-            select: { id: true, email: true, name: true },
-          },
+          user: { select: { id: true, email: true, name: true } },
+          outputs: { orderBy: { order: 'asc' as const } },
         },
       }),
       this.prisma.generation.count(),
@@ -229,7 +228,7 @@ export class AdminService {
       durationSeconds: gen.durationSeconds,
       hasAudio: gen.hasAudio,
       creditsConsumed: gen.creditsConsumed,
-      outputUrl: gen.outputUrl,
+      outputUrls: gen.outputs?.map((o) => o.url) ?? [],
       errorMessage: gen.errorMessage,
       processingTimeMs: gen.processingTimeMs,
       createdAt: gen.createdAt,

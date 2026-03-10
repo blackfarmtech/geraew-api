@@ -62,11 +62,10 @@ __decorate([
     (0, common_1.Post)(),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Criar assinatura' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Criar assinatura (redireciona para Stripe Checkout)' }),
     (0, swagger_1.ApiResponse)({
         status: 201,
-        description: 'Assinatura criada com sucesso',
-        type: subscription_response_dto_1.SubscriptionResponseDto,
+        description: 'URL do checkout retornada com sucesso',
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos' }),
     (0, swagger_1.ApiResponse)({ status: 401, description: 'Não autenticado' }),

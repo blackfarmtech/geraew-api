@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus, PaymentType, Prisma } from '@prisma/client';
 
@@ -46,24 +46,335 @@ export class PaymentsService {
     });
   }
 
-  async processSubscriptionPayment(paymentId: string): Promise<void> {
-    // TODO: Implement real subscription payment processing
-    // 1. Find payment and related subscription
-    // 2. Update subscription status to active
-    // 3. Reset plan credits for the new period
-    // 4. Create credit transaction for subscription_renewal
+  /**
+   * Processa o primeiro pagamento de uma assinatura (checkout.session.completed).
+   * Cria subscription local, inicializa créditos e registra payment.
+   */
+  async processSubscriptionPayment(
+    userId: string,
+    planSlug: string,
+    stripeSubscriptionId: string,
+    amountCents: number,
+    externalPaymentId: string,
+  ): Promise<void> {
+    const plan = await this.prisma.plan.findUnique({
+      where: { slug: planSlug },
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`Plano "${planSlug}" não encontrado`);
+    }
+
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Criar subscription local
+      const subscription = await tx.subscription.create({
+        data: {
+          userId,
+          planId: plan.id,
+          status: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          paymentProvider: 'stripe',
+          externalSubscriptionId: stripeSubscriptionId,
+        },
+      });
+
+      // Inicializar/resetar saldo de créditos
+      await tx.creditBalance.upsert({
+        where: { userId },
+        create: {
+          userId,
+          planCreditsRemaining: plan.creditsPerMonth,
+          bonusCreditsRemaining: 0,
+          planCreditsUsed: 0,
+          periodStart: now,
+          periodEnd: periodEnd,
+        },
+        update: {
+          planCreditsRemaining: plan.creditsPerMonth,
+          planCreditsUsed: 0,
+          periodStart: now,
+          periodEnd: periodEnd,
+        },
+      });
+
+      // Registrar transação de créditos
+      const payment = await tx.payment.create({
+        data: {
+          userId,
+          type: 'SUBSCRIPTION',
+          amountCents,
+          currency: 'BRL',
+          status: 'COMPLETED',
+          provider: 'stripe',
+          externalPaymentId,
+          subscriptionId: subscription.id,
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          type: 'SUBSCRIPTION_RENEWAL',
+          amount: plan.creditsPerMonth,
+          source: 'plan',
+          description: `Assinatura criada — plano ${plan.name}`,
+          paymentId: payment.id,
+        },
+      });
+    });
+
     this.logger.log(
-      `Processing subscription payment: ${paymentId} (stub — not yet implemented)`,
+      `Processed subscription payment for user ${userId}, plan ${planSlug}`,
     );
   }
 
-  async processCreditPurchase(paymentId: string): Promise<void> {
-    // TODO: Implement real credit purchase processing
-    // 1. Find payment and related credit package
-    // 2. Add bonus credits to user balance
-    // 3. Create credit transaction for purchase
+  /**
+   * Processa compra avulsa de créditos (checkout.session.completed).
+   * Adiciona bonus credits e registra payment.
+   */
+  async processCreditPurchase(
+    userId: string,
+    packageId: string,
+    amountCents: number,
+    externalPaymentId: string,
+  ): Promise<void> {
+    const creditPackage = await this.prisma.creditPackage.findUnique({
+      where: { id: packageId },
+    });
+
+    if (!creditPackage) {
+      throw new NotFoundException(`Pacote "${packageId}" não encontrado`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Adicionar créditos bônus
+      await tx.creditBalance.upsert({
+        where: { userId },
+        create: {
+          userId,
+          planCreditsRemaining: 0,
+          bonusCreditsRemaining: creditPackage.credits,
+          planCreditsUsed: 0,
+        },
+        update: {
+          bonusCreditsRemaining: {
+            increment: creditPackage.credits,
+          },
+        },
+      });
+
+      const payment = await tx.payment.create({
+        data: {
+          userId,
+          type: 'CREDIT_PURCHASE',
+          amountCents,
+          currency: 'BRL',
+          status: 'COMPLETED',
+          provider: 'stripe',
+          externalPaymentId,
+          creditPackageId: packageId,
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          type: 'PURCHASE',
+          amount: creditPackage.credits,
+          source: 'bonus',
+          description: `Compra avulsa — ${creditPackage.name} (${creditPackage.credits} créditos)`,
+          paymentId: payment.id,
+        },
+      });
+    });
+
     this.logger.log(
-      `Processing credit purchase: ${paymentId} (stub — not yet implemented)`,
+      `Processed credit purchase for user ${userId}, package ${creditPackage.name}`,
+    );
+  }
+
+  /**
+   * Processa renovação de assinatura (invoice.payment_succeeded).
+   * Renova período e reseta créditos.
+   */
+  async handleSubscriptionRenewal(
+    stripeSubscriptionId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    amountCents: number,
+    externalPaymentId: string,
+  ): Promise<void> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { externalSubscriptionId: stripeSubscriptionId },
+      include: { plan: true },
+    });
+
+    if (!subscription) {
+      this.logger.warn(
+        `Subscription not found for Stripe ID ${stripeSubscriptionId}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Atualizar período da subscription
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          paymentRetryCount: 0,
+        },
+      });
+
+      // Resetar créditos do plano
+      await tx.creditBalance.upsert({
+        where: { userId: subscription.userId },
+        create: {
+          userId: subscription.userId,
+          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          bonusCreditsRemaining: 0,
+          planCreditsUsed: 0,
+          periodStart,
+          periodEnd,
+        },
+        update: {
+          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsUsed: 0,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      const payment = await tx.payment.create({
+        data: {
+          userId: subscription.userId,
+          type: 'SUBSCRIPTION',
+          amountCents,
+          currency: 'BRL',
+          status: 'COMPLETED',
+          provider: 'stripe',
+          externalPaymentId,
+          subscriptionId: subscription.id,
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId: subscription.userId,
+          type: 'SUBSCRIPTION_RENEWAL',
+          amount: subscription.plan.creditsPerMonth,
+          source: 'plan',
+          description: `Renovação mensal — plano ${subscription.plan.name}`,
+          paymentId: payment.id,
+        },
+      });
+    });
+
+    this.logger.log(
+      `Processed subscription renewal for user ${subscription.userId}`,
+    );
+  }
+
+  /**
+   * Processa falha de pagamento (invoice.payment_failed).
+   * Marca subscription como PAST_DUE.
+   */
+  async handlePaymentFailed(
+    stripeSubscriptionId: string,
+    amountCents: number,
+    externalPaymentId: string,
+  ): Promise<void> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { externalSubscriptionId: stripeSubscriptionId },
+    });
+
+    if (!subscription) {
+      this.logger.warn(
+        `Subscription not found for Stripe ID ${stripeSubscriptionId}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'PAST_DUE',
+          paymentRetryCount: { increment: 1 },
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          userId: subscription.userId,
+          type: 'SUBSCRIPTION',
+          amountCents,
+          currency: 'BRL',
+          status: 'FAILED',
+          provider: 'stripe',
+          externalPaymentId,
+          subscriptionId: subscription.id,
+        },
+      });
+    });
+
+    this.logger.warn(
+      `Payment failed for subscription ${subscription.id}, retry count: ${subscription.paymentRetryCount + 1}`,
+    );
+  }
+
+  /**
+   * Processa cancelamento definitivo de subscription (customer.subscription.deleted).
+   * Marca como CANCELED e zera créditos do plano.
+   */
+  async handleSubscriptionDeleted(
+    stripeSubscriptionId: string,
+  ): Promise<void> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { externalSubscriptionId: stripeSubscriptionId },
+    });
+
+    if (!subscription) {
+      this.logger.warn(
+        `Subscription not found for Stripe ID ${stripeSubscriptionId}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'CANCELED',
+          cancelAtPeriodEnd: false,
+        },
+      });
+
+      // Zerar créditos do plano (bonus permanecem)
+      const balance = await tx.creditBalance.findUnique({
+        where: { userId: subscription.userId },
+      });
+
+      if (balance) {
+        await tx.creditBalance.update({
+          where: { userId: subscription.userId },
+          data: {
+            planCreditsRemaining: 0,
+            planCreditsUsed: 0,
+          },
+        });
+      }
+    });
+
+    this.logger.log(
+      `Subscription ${subscription.id} deleted for user ${subscription.userId}`,
     );
   }
 }

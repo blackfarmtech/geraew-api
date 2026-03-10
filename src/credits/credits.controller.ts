@@ -22,6 +22,8 @@ import { EstimateCostDto, EstimateCostResponseDto } from './dto/estimate-cost.dt
 import { PurchaseCreditsDto } from './dto/purchase-credits.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PlansService } from '../plans/plans.service';
+import { StripeService } from '../payments/stripe.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('credits')
 @ApiBearerAuth()
@@ -30,6 +32,8 @@ export class CreditsController {
   constructor(
     private readonly creditsService: CreditsService,
     private readonly plansService: PlansService,
+    private readonly stripeService: StripeService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get('balance')
@@ -71,27 +75,39 @@ export class CreditsController {
 
   @Post('purchase')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Compra pacote de créditos avulso (placeholder)' })
+  @ApiOperation({ summary: 'Compra pacote de créditos (redireciona para Stripe Checkout)' })
   @ApiResponse({
     status: 200,
-    description: 'Informações do pacote para checkout',
+    description: 'URL do checkout retornada com sucesso',
   })
   async purchaseCredits(
     @CurrentUser('sub') userId: string,
     @Body() dto: PurchaseCreditsDto,
-  ) {
+  ): Promise<{ checkoutUrl: string }> {
     const pkg = await this.plansService.findPackageById(dto.packageId);
 
-    return {
-      message: 'Checkout de pacote de créditos (placeholder — integração de pagamento pendente)',
-      package: {
-        id: pkg.id,
-        name: pkg.name,
-        credits: pkg.credits,
-        priceCents: pkg.priceCents,
-      },
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+
+    const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
-    };
+      user.email,
+      user.name,
+    );
+
+    const checkoutUrl = await this.stripeService.createCreditPurchaseCheckout(
+      customerId,
+      pkg.id,
+      pkg.name,
+      pkg.credits,
+      pkg.priceCents,
+      userId,
+      pkg.stripePriceId,
+    );
+
+    return { checkoutUrl };
   }
 
   @Post('estimate')

@@ -15,35 +15,30 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GenerationsController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
-const client_1 = require("@prisma/client");
 const generations_service_1 = require("./generations.service");
 const decorators_1 = require("../common/decorators");
-const text_to_image_dto_1 = require("./dto/text-to-image.dto");
-const image_to_image_dto_1 = require("./dto/image-to-image.dto");
-const text_to_video_dto_1 = require("./dto/text-to-video.dto");
-const image_to_video_dto_1 = require("./dto/image-to-video.dto");
-const motion_control_dto_1 = require("./dto/motion-control.dto");
 const generation_filters_dto_1 = require("./dto/generation-filters.dto");
 const generation_response_dto_1 = require("./dto/generation-response.dto");
+const generate_image_dto_1 = require("./dto/generate-image.dto");
+const generate_video_text_to_video_dto_1 = require("./dto/videos/generate-video-text-to-video.dto");
+const generate_video_image_to_video_dto_1 = require("./dto/videos/generate-video-image-to-video.dto");
+const generate_video_with_references_dto_1 = require("./dto/videos/generate-video-with-references.dto");
 let GenerationsController = class GenerationsController {
     generationsService;
     constructor(generationsService) {
         this.generationsService = generationsService;
     }
-    async textToImage(userId, dto) {
-        return this.generationsService.createGeneration(userId, client_1.GenerationType.TEXT_TO_IMAGE, dto);
-    }
-    async imageToImage(userId, dto) {
-        return this.generationsService.createGeneration(userId, client_1.GenerationType.IMAGE_TO_IMAGE, dto);
+    async generateImage(userId, dto) {
+        return this.generationsService.generateImage(userId, dto);
     }
     async textToVideo(userId, dto) {
-        return this.generationsService.createGeneration(userId, client_1.GenerationType.TEXT_TO_VIDEO, dto);
+        return this.generationsService.generateTextToVideo(userId, dto);
     }
     async imageToVideo(userId, dto) {
-        return this.generationsService.createGeneration(userId, client_1.GenerationType.IMAGE_TO_VIDEO, dto);
+        return this.generationsService.generateImageToVideo(userId, dto);
     }
-    async motionControl(userId, dto) {
-        return this.generationsService.createGeneration(userId, client_1.GenerationType.MOTION_CONTROL, dto);
+    async videoWithReferences(userId, dto) {
+        return this.generationsService.generateVideoWithReferences(userId, dto);
     }
     async findAll(userId, filters) {
         return this.generationsService.findAll(userId, filters);
@@ -63,27 +58,16 @@ let GenerationsController = class GenerationsController {
 };
 exports.GenerationsController = GenerationsController;
 __decorate([
-    (0, common_1.Post)('text-to-image'),
+    (0, common_1.Post)('generate-image'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Gera imagem a partir de texto' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Gera imagem (text-to-image ou image-to-image)' }),
     (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, text_to_image_dto_1.TextToImageDto]),
+    __metadata("design:paramtypes", [String, generate_image_dto_1.GenerateImageDto]),
     __metadata("design:returntype", Promise)
-], GenerationsController.prototype, "textToImage", null);
-__decorate([
-    (0, common_1.Post)('image-to-image'),
-    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Gera imagem a partir de imagem + prompt' }),
-    (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
-    __param(0, (0, decorators_1.CurrentUser)('sub')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, image_to_image_dto_1.ImageToImageDto]),
-    __metadata("design:returntype", Promise)
-], GenerationsController.prototype, "imageToImage", null);
+], GenerationsController.prototype, "generateImage", null);
 __decorate([
     (0, common_1.Post)('text-to-video'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
@@ -92,7 +76,7 @@ __decorate([
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, text_to_video_dto_1.TextToVideoDto]),
+    __metadata("design:paramtypes", [String, generate_video_text_to_video_dto_1.GenerateVideoTextToVideoDto]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "textToVideo", null);
 __decorate([
@@ -103,20 +87,20 @@ __decorate([
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, image_to_video_dto_1.ImageToVideoDto]),
+    __metadata("design:paramtypes", [String, generate_video_image_to_video_dto_1.GenerateVideoImageToVideoDto]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "imageToVideo", null);
 __decorate([
-    (0, common_1.Post)('motion-control'),
+    (0, common_1.Post)('video-with-references'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Gera vídeo com motion control' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Gera vídeo com imagens de referência' }),
     (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, motion_control_dto_1.MotionControlDto]),
+    __metadata("design:paramtypes", [String, generate_video_with_references_dto_1.GenerateVideoWithReferencesDto]),
     __metadata("design:returntype", Promise)
-], GenerationsController.prototype, "motionControl", null);
+], GenerationsController.prototype, "videoWithReferences", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

@@ -13,13 +13,16 @@ exports.SubscriptionsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const plans_service_1 = require("../plans/plans.service");
+const stripe_service_1 = require("../payments/stripe.service");
 const PLAN_ORDER = ['free', 'starter', 'pro', 'business'];
 let SubscriptionsService = class SubscriptionsService {
     prisma;
     plansService;
-    constructor(prisma, plansService) {
+    stripeService;
+    constructor(prisma, plansService, stripeService) {
         this.prisma = prisma;
         this.plansService = plansService;
+        this.stripeService = stripeService;
     }
     async getCurrentSubscription(userId) {
         const subscription = await this.prisma.subscription.findFirst({
@@ -44,54 +47,20 @@ let SubscriptionsService = class SubscriptionsService {
             where: {
                 userId,
                 status: { in: ['ACTIVE', 'TRIALING'] },
+                plan: { slug: { not: 'free' } },
             },
+            include: { plan: true },
         });
         if (existing) {
             throw new common_1.ConflictException('Usuário já possui uma assinatura ativa. Use upgrade ou downgrade.');
         }
-        const now = new Date();
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
-        const subscription = await this.prisma.$transaction(async (tx) => {
-            const sub = await tx.subscription.create({
-                data: {
-                    userId,
-                    planId: plan.id,
-                    status: 'ACTIVE',
-                    currentPeriodStart: now,
-                    currentPeriodEnd: periodEnd,
-                },
-                include: { plan: true },
-            });
-            await tx.creditBalance.upsert({
-                where: { userId },
-                create: {
-                    userId,
-                    planCreditsRemaining: plan.creditsPerMonth,
-                    bonusCreditsRemaining: 0,
-                    planCreditsUsed: 0,
-                    periodStart: now,
-                    periodEnd: periodEnd,
-                },
-                update: {
-                    planCreditsRemaining: plan.creditsPerMonth,
-                    planCreditsUsed: 0,
-                    periodStart: now,
-                    periodEnd: periodEnd,
-                },
-            });
-            await tx.creditTransaction.create({
-                data: {
-                    userId,
-                    type: 'SUBSCRIPTION_RENEWAL',
-                    amount: plan.creditsPerMonth,
-                    source: 'plan',
-                    description: `Assinatura criada — plano ${plan.name}`,
-                },
-            });
-            return sub;
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { email: true, name: true },
         });
-        return this.toResponseDto(subscription);
+        const customerId = await this.stripeService.getOrCreateCustomer(userId, user.email, user.name);
+        const checkoutUrl = await this.stripeService.createSubscriptionCheckout(customerId, plan.slug, plan.name, plan.priceCents, userId, plan.stripePriceId);
+        return { checkoutUrl };
     }
     async upgrade(userId, planSlug) {
         const current = await this.prisma.subscription.findFirst({
@@ -199,6 +168,9 @@ let SubscriptionsService = class SubscriptionsService {
         if (current.cancelAtPeriodEnd) {
             throw new common_1.BadRequestException('Assinatura já está marcada para cancelamento');
         }
+        if (current.externalSubscriptionId) {
+            await this.stripeService.cancelSubscription(current.externalSubscriptionId);
+        }
         const subscription = await this.prisma.subscription.update({
             where: { id: current.id },
             data: { cancelAtPeriodEnd: true },
@@ -217,6 +189,9 @@ let SubscriptionsService = class SubscriptionsService {
         });
         if (!current) {
             throw new common_1.NotFoundException('Nenhuma assinatura ativa com cancelamento pendente encontrada');
+        }
+        if (current.externalSubscriptionId) {
+            await this.stripeService.reactivateSubscription(current.externalSubscriptionId);
         }
         const subscription = await this.prisma.subscription.update({
             where: { id: current.id },
@@ -253,6 +228,7 @@ exports.SubscriptionsService = SubscriptionsService;
 exports.SubscriptionsService = SubscriptionsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        plans_service_1.PlansService])
+        plans_service_1.PlansService,
+        stripe_service_1.StripeService])
 ], SubscriptionsService);
 //# sourceMappingURL=subscriptions.service.js.map

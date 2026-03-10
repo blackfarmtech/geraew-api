@@ -22,12 +22,18 @@ const credit_balance_response_dto_1 = require("./dto/credit-balance-response.dto
 const estimate_cost_dto_1 = require("./dto/estimate-cost.dto");
 const purchase_credits_dto_1 = require("./dto/purchase-credits.dto");
 const plans_service_1 = require("../plans/plans.service");
+const stripe_service_1 = require("../payments/stripe.service");
+const prisma_service_1 = require("../prisma/prisma.service");
 let CreditsController = class CreditsController {
     creditsService;
     plansService;
-    constructor(creditsService, plansService) {
+    stripeService;
+    prisma;
+    constructor(creditsService, plansService, stripeService, prisma) {
         this.creditsService = creditsService;
         this.plansService = plansService;
+        this.stripeService = stripeService;
+        this.prisma = prisma;
     }
     async getBalance(userId) {
         return this.creditsService.getBalance(userId);
@@ -40,16 +46,13 @@ let CreditsController = class CreditsController {
     }
     async purchaseCredits(userId, dto) {
         const pkg = await this.plansService.findPackageById(dto.packageId);
-        return {
-            message: 'Checkout de pacote de créditos (placeholder — integração de pagamento pendente)',
-            package: {
-                id: pkg.id,
-                name: pkg.name,
-                credits: pkg.credits,
-                priceCents: pkg.priceCents,
-            },
-            userId,
-        };
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { email: true, name: true },
+        });
+        const customerId = await this.stripeService.getOrCreateCustomer(userId, user.email, user.name);
+        const checkoutUrl = await this.stripeService.createCreditPurchaseCheckout(customerId, pkg.id, pkg.name, pkg.credits, pkg.priceCents, userId, pkg.stripePriceId);
+        return { checkoutUrl };
     }
     async estimateCost(userId, dto) {
         return this.creditsService.estimateCost(userId, dto.type, dto.resolution, dto.durationSeconds, dto.hasAudio);
@@ -97,10 +100,10 @@ __decorate([
 __decorate([
     (0, common_1.Post)('purchase'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Compra pacote de créditos avulso (placeholder)' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Compra pacote de créditos (redireciona para Stripe Checkout)' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Informações do pacote para checkout',
+        description: 'URL do checkout retornada com sucesso',
     }),
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
@@ -128,6 +131,8 @@ exports.CreditsController = CreditsController = __decorate([
     (0, swagger_1.ApiBearerAuth)(),
     (0, common_1.Controller)('api/v1/credits'),
     __metadata("design:paramtypes", [credits_service_1.CreditsService,
-        plans_service_1.PlansService])
+        plans_service_1.PlansService,
+        stripe_service_1.StripeService,
+        prisma_service_1.PrismaService])
 ], CreditsController);
 //# sourceMappingURL=credits.controller.js.map

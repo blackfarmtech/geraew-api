@@ -20,6 +20,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { GenerationsModule } from './generations/generations.module';
 import { GalleryModule } from './gallery/gallery.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({

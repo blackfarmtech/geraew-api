@@ -45,11 +45,10 @@ export class SubscriptionsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Criar assinatura' })
+  @ApiOperation({ summary: 'Criar assinatura (redireciona para Stripe Checkout)' })
   @ApiResponse({
     status: 201,
-    description: 'Assinatura criada com sucesso',
-    type: SubscriptionResponseDto,
+    description: 'URL do checkout retornada com sucesso',
   })
   @ApiResponse({ status: 400, description: 'Dados inválidos' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
@@ -57,7 +56,7 @@ export class SubscriptionsController {
   async create(
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<{ checkoutUrl: string }> {
     return this.subscriptionsService.createSubscription(
       userId,
       dto.planSlug,

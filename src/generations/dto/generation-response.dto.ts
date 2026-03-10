@@ -1,5 +1,39 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { GenerationType, GenerationStatus, Resolution } from '@prisma/client';
+import { GenerationType, GenerationStatus, Resolution, GenerationImageRole } from '@prisma/client';
+
+export class GenerationOutputDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  url: string;
+
+  @ApiPropertyOptional()
+  mimeType?: string;
+
+  @ApiProperty()
+  order: number;
+}
+
+export class GenerationInputImageDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty({ enum: GenerationImageRole })
+  role: GenerationImageRole;
+
+  @ApiPropertyOptional()
+  mimeType?: string;
+
+  @ApiProperty()
+  order: number;
+
+  @ApiPropertyOptional({ description: "'asset' | 'style' — apenas para videos com referencia" })
+  referenceType?: string;
+
+  @ApiPropertyOptional({ description: 'S3 URL da imagem, se disponivel' })
+  url?: string;
+}
 
 export class GenerationResponseDto {
   @ApiProperty()
@@ -17,12 +51,6 @@ export class GenerationResponseDto {
   @ApiPropertyOptional()
   negativePrompt?: string;
 
-  @ApiPropertyOptional()
-  inputImageUrl?: string;
-
-  @ApiPropertyOptional()
-  referenceVideoUrl?: string;
-
   @ApiProperty({ enum: Resolution })
   resolution: Resolution;
 
@@ -38,11 +66,11 @@ export class GenerationResponseDto {
   @ApiPropertyOptional()
   parameters?: Record<string, unknown>;
 
-  @ApiPropertyOptional()
-  outputUrl?: string;
+  @ApiProperty({ type: [GenerationOutputDto] })
+  outputs: GenerationOutputDto[];
 
-  @ApiPropertyOptional()
-  thumbnailUrl?: string;
+  @ApiProperty({ type: [GenerationInputImageDto] })
+  inputImages: GenerationInputImageDto[];
 
   @ApiProperty()
   hasWatermark: boolean;

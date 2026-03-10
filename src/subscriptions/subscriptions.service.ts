@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
+import { StripeService } from '../payments/stripe.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 
 const PLAN_ORDER = ['free', 'starter', 'pro', 'business'];
@@ -15,6 +16,7 @@ export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly plansService: PlansService,
+    private readonly stripeService: StripeService,
   ) {}
 
   async getCurrentSubscription(
@@ -36,10 +38,14 @@ export class SubscriptionsService {
     return this.toResponseDto(subscription);
   }
 
+  /**
+   * Cria Stripe Checkout Session para assinatura.
+   * A subscription local é criada apenas no webhook checkout.session.completed.
+   */
   async createSubscription(
     userId: string,
     planSlug: string,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<{ checkoutUrl: string }> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
 
     if (plan.slug === 'free') {
@@ -52,7 +58,9 @@ export class SubscriptionsService {
       where: {
         userId,
         status: { in: ['ACTIVE', 'TRIALING'] },
+        plan: { slug: { not: 'free' } },
       },
+      include: { plan: true },
     });
 
     if (existing) {
@@ -61,56 +69,27 @@ export class SubscriptionsService {
       );
     }
 
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-    const subscription = await this.prisma.$transaction(async (tx) => {
-      const sub = await tx.subscription.create({
-        data: {
-          userId,
-          planId: plan.id,
-          status: 'ACTIVE',
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-        },
-        include: { plan: true },
-      });
-
-      // Initialize/reset credit balance for the new subscription period
-      await tx.creditBalance.upsert({
-        where: { userId },
-        create: {
-          userId,
-          planCreditsRemaining: plan.creditsPerMonth,
-          bonusCreditsRemaining: 0,
-          planCreditsUsed: 0,
-          periodStart: now,
-          periodEnd: periodEnd,
-        },
-        update: {
-          planCreditsRemaining: plan.creditsPerMonth,
-          planCreditsUsed: 0,
-          periodStart: now,
-          periodEnd: periodEnd,
-        },
-      });
-
-      // Record credit transaction for subscription renewal
-      await tx.creditTransaction.create({
-        data: {
-          userId,
-          type: 'SUBSCRIPTION_RENEWAL',
-          amount: plan.creditsPerMonth,
-          source: 'plan',
-          description: `Assinatura criada — plano ${plan.name}`,
-        },
-      });
-
-      return sub;
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, name: true },
     });
 
-    return this.toResponseDto(subscription);
+    const customerId = await this.stripeService.getOrCreateCustomer(
+      userId,
+      user.email,
+      user.name,
+    );
+
+    const checkoutUrl = await this.stripeService.createSubscriptionCheckout(
+      customerId,
+      plan.slug,
+      plan.name,
+      plan.priceCents,
+      userId,
+      plan.stripePriceId,
+    );
+
+    return { checkoutUrl };
   }
 
   async upgrade(
@@ -231,14 +210,9 @@ export class SubscriptionsService {
       );
     }
 
-    // Downgrade is effective next cycle — store the target plan
-    // For MVP: we mark cancelAtPeriodEnd-like behavior by scheduling the change
-    // The actual plan switch happens at renewal time
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
       data: {
-        // Store pending downgrade info in the subscription
-        // The cron job will apply the downgrade at period end
         cancelAtPeriodEnd: true,
       },
       include: { plan: true },
@@ -264,6 +238,13 @@ export class SubscriptionsService {
       throw new BadRequestException('Assinatura já está marcada para cancelamento');
     }
 
+    // Cancelar no Stripe (cancel_at_period_end)
+    if (current.externalSubscriptionId) {
+      await this.stripeService.cancelSubscription(
+        current.externalSubscriptionId,
+      );
+    }
+
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
       data: { cancelAtPeriodEnd: true },
@@ -286,6 +267,13 @@ export class SubscriptionsService {
     if (!current) {
       throw new NotFoundException(
         'Nenhuma assinatura ativa com cancelamento pendente encontrada',
+      );
+    }
+
+    // Reativar no Stripe
+    if (current.externalSubscriptionId) {
+      await this.stripeService.reactivateSubscription(
+        current.externalSubscriptionId,
       );
     }
 
