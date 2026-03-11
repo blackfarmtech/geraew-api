@@ -1,0 +1,1 @@
+{"version":3,"file":"create-subscription.dto.js","sourceRoot":"","sources":["../../../src/subscriptions/dto/create-subscription.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAAuD;AACvD,6CAA8C;AAE9C,MAAa,qBAAqB;IAOhC,QAAQ,CAAS;CAClB;AARD,sDAQC;AADC;IANC,IAAA,qBAAW,EAAC;QACX,WAAW,EAAE,wBAAwB;QACrC,OAAO,EAAE,SAAS;KACnB,CAAC;IACD,IAAA,0BAAQ,GAAE;IACV,IAAA,4BAAU,GAAE;;uDACI"}

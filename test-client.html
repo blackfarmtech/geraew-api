@@ -356,7 +356,8 @@
 
     <div style="margin-bottom:16px">
       <div class="field api-url-field">
-        <input id="apiBase" type="text" value="http://localhost:3000" placeholder="Base URL da API" />
+        <input id="apiBase" type="text" value="https://clip-generator-geraew-api.ernvcw.easypanel.host"
+          placeholder="Base URL da API" />
         <button class="btn btn-secondary" onclick="saveBase()">Salvar</button>
       </div>
     </div>
@@ -467,9 +468,9 @@
           <div class="field">
             <label>Resolucao</label>
             <select id="t2vRes">
-              <option value="res_1080p" selected>1080p</option>
-              <option value="res_4k">4k</option>
-              <option value="res_720p">720p</option>
+              <option value="RES_1080P" selected>1080p</option>
+              <option value="RES_4K">4k</option>
+              <option value="RES_720P">720p</option>
             </select>
           </div>
         </div>
@@ -601,8 +602,8 @@
           <div class="field">
             <label>Resolucao</label>
             <select id="refsRes">
-              <option value="res_1080p" selected>1080p</option>
-              <option value="res_4k">4k</option>
+              <option value="RES_1080P" selected>1080p</option>
+              <option value="RES_4K">4k</option>
             </select>
           </div>
         </div>
@@ -652,7 +653,7 @@
     // ── State ───────────────────────────────────────────────
     let token = localStorage.getItem('geraew_token') || '';
     let userEmail = localStorage.getItem('geraew_email') || '';
-    let apiBase = localStorage.getItem('geraew_base') || 'http://localhost:3000';
+    let apiBase = localStorage.getItem('geraew_base') || 'https://clip-generator-geraew-api.ernvcw.easypanel.host';
     let refImageCount = 1;
 
     document.getElementById('apiBase').value = apiBase;

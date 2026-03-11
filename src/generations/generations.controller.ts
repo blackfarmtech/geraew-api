@@ -10,6 +10,7 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  Sse,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,7 +19,9 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
+import { Observable, map } from 'rxjs';
 import { GenerationsService } from './generations.service';
+import { GenerationEventsService } from './generation-events.service';
 import { CurrentUser } from '../common/decorators';
 import { GenerationFiltersDto } from './dto/generation-filters.dto';
 import {
@@ -35,7 +38,30 @@ import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with
 @ApiBearerAuth()
 @Controller('api/v1/generations')
 export class GenerationsController {
-  constructor(private readonly generationsService: GenerationsService) {}
+  constructor(
+    private readonly generationsService: GenerationsService,
+    private readonly generationEvents: GenerationEventsService,
+  ) {}
+
+  @Sse('events')
+  @ApiOperation({ summary: 'SSE — recebe eventos de todas as gerações do usuário em tempo real' })
+  sseAll(@CurrentUser('sub') userId: string): Observable<MessageEvent> {
+    return this.generationEvents.subscribe(userId).pipe(
+      map((event: any) => ({ data: event } as MessageEvent)),
+    );
+  }
+
+  @Sse(':id/events')
+  @ApiOperation({ summary: 'SSE — recebe eventos de uma geração específica em tempo real' })
+  @ApiParam({ name: 'id', description: 'ID da geração' })
+  sseOne(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ): Observable<MessageEvent> {
+    return this.generationEvents.subscribeToGeneration(userId, id).pipe(
+      map((event: any) => ({ data: event } as MessageEvent)),
+    );
+  }
 
   @Post('generate-image')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))

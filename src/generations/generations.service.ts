@@ -22,6 +22,7 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { GeraewProvider } from './providers/geraew.provider';
+import { GenerationEventsService } from './generation-events.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
@@ -67,6 +68,7 @@ export class GenerationsService {
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
     private readonly geraewProvider: GeraewProvider,
+    private readonly generationEvents: GenerationEventsService,
   ) {}
 
   // ─── Image generation (text-to-image / image-to-image) ────
@@ -493,7 +495,7 @@ export class GenerationsService {
   ): Promise<void> {
     const processingTimeMs = Date.now() - startTime;
 
-    await this.prisma.$transaction([
+    const [updatedGeneration] = await this.prisma.$transaction([
       this.prisma.generation.update({
         where: { id: generationId },
         data: {
@@ -511,6 +513,16 @@ export class GenerationsService {
         })),
       }),
     ]);
+
+    this.generationEvents.emit({
+      userId: updatedGeneration.userId,
+      generationId,
+      status: 'completed',
+      data: {
+        outputUrls: result.outputUrls,
+        processingTimeMs,
+      },
+    });
 
     this.logger.log(
       `Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`,
@@ -538,6 +550,17 @@ export class GenerationsService {
     });
 
     await this.creditsService.refund(userId, creditsConsumed, generationId);
+
+    this.generationEvents.emit({
+      userId,
+      generationId,
+      status: 'failed',
+      data: {
+        errorMessage: error.message,
+        errorCode: 'GENERATION_FAILED',
+        creditsRefunded: creditsConsumed,
+      },
+    });
 
     this.logger.log(
       `Refunded ${creditsConsumed} credits for failed generation ${generationId}`,
