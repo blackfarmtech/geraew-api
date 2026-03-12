@@ -16,6 +16,7 @@ const credits_module_1 = require("../credits/credits.module");
 const plans_module_1 = require("../plans/plans.module");
 const uploads_module_1 = require("../uploads/uploads.module");
 const geraew_provider_1 = require("./providers/geraew.provider");
+const nano_banana_provider_1 = require("./providers/nano-banana.provider");
 let GenerationsModule = class GenerationsModule {
 };
 exports.GenerationsModule = GenerationsModule;
@@ -23,7 +24,7 @@ exports.GenerationsModule = GenerationsModule = __decorate([
     (0, common_1.Module)({
         imports: [prisma_module_1.PrismaModule, credits_module_1.CreditsModule, plans_module_1.PlansModule, uploads_module_1.UploadsModule],
         controllers: [generations_controller_1.GenerationsController],
-        providers: [generations_service_1.GenerationsService, generation_events_service_1.GenerationEventsService, geraew_provider_1.GeraewProvider],
+        providers: [generations_service_1.GenerationsService, generation_events_service_1.GenerationEventsService, geraew_provider_1.GeraewProvider, nano_banana_provider_1.NanoBananaProvider],
         exports: [generations_service_1.GenerationsService],
     })
 ], GenerationsModule);

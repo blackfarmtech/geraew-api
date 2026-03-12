@@ -7,11 +7,12 @@ import { CreditsModule } from '../credits/credits.module';
 import { PlansModule } from '../plans/plans.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { GeraewProvider } from './providers/geraew.provider';
+import { NanoBananaProvider } from './providers/nano-banana.provider';
 
 @Module({
   imports: [PrismaModule, CreditsModule, PlansModule, UploadsModule],
   controllers: [GenerationsController],
-  providers: [GenerationsService, GenerationEventsService, GeraewProvider],
+  providers: [GenerationsService, GenerationEventsService, GeraewProvider, NanoBananaProvider],
   exports: [GenerationsService],
 })
 export class GenerationsModule {}

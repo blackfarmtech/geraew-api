@@ -22,6 +22,7 @@ const decorators_1 = require("../common/decorators");
 const generation_filters_dto_1 = require("./dto/generation-filters.dto");
 const generation_response_dto_1 = require("./dto/generation-response.dto");
 const generate_image_dto_1 = require("./dto/generate-image.dto");
+const generate_image_nano_banana_dto_1 = require("./dto/generate-image-nano-banana.dto");
 const generate_video_text_to_video_dto_1 = require("./dto/videos/generate-video-text-to-video.dto");
 const generate_video_image_to_video_dto_1 = require("./dto/videos/generate-video-image-to-video.dto");
 const generate_video_with_references_dto_1 = require("./dto/videos/generate-video-with-references.dto");
@@ -40,6 +41,9 @@ let GenerationsController = class GenerationsController {
     }
     async generateImage(userId, dto) {
         return this.generationsService.generateImage(userId, dto);
+    }
+    async generateImageNanoBanana(userId, dto) {
+        return this.generationsService.generateImageNanoBanana(userId, dto);
     }
     async textToVideo(userId, dto) {
         return this.generationsService.generateTextToVideo(userId, dto);
@@ -96,6 +100,17 @@ __decorate([
     __metadata("design:paramtypes", [String, generate_image_dto_1.GenerateImageDto]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "generateImage", null);
+__decorate([
+    (0, common_1.Post)('generate-image-nano-banana'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Gera imagem via Nano Banana 2 (kie-api) — text-to-image ou image-to-image' }),
+    (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, generate_image_nano_banana_dto_1.GenerateImageNanoBananaDto]),
+    __metadata("design:returntype", Promise)
+], GenerationsController.prototype, "generateImageNanoBanana", null);
 __decorate([
     (0, common_1.Post)('text-to-video'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

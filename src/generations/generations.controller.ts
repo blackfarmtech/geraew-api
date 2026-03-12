@@ -30,6 +30,7 @@ import {
 } from './dto/generation-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
+import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
@@ -72,6 +73,17 @@ export class GenerationsController {
     @Body() dto: GenerateImageDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateImage(userId, dto);
+  }
+
+  @Post('generate-image-nano-banana')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera imagem via Nano Banana 2 (kie-api) — text-to-image ou image-to-image' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async generateImageNanoBanana(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateImageNanoBananaDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateImageNanoBanana(userId, dto);
   }
 
   @Post('text-to-video')

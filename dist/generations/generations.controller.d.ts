@@ -5,6 +5,7 @@ import { GenerationFiltersDto } from './dto/generation-filters.dto';
 import { GenerationResponseDto, CreateGenerationResponseDto } from './dto/generation-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
+import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
@@ -15,6 +16,7 @@ export declare class GenerationsController {
     sseAll(userId: string): Observable<MessageEvent>;
     sseOne(userId: string, id: string): Observable<MessageEvent>;
     generateImage(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
+    generateImageNanoBanana(userId: string, dto: GenerateImageNanoBananaDto): Promise<CreateGenerationResponseDto>;
     textToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     imageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     videoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;

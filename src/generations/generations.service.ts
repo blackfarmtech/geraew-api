@@ -22,11 +22,13 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { GeraewProvider } from './providers/geraew.provider';
+import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { GenerationEventsService } from './generation-events.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
+import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 
 type GenerationWithRelations = {
   id: string;
@@ -68,6 +70,7 @@ export class GenerationsService {
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
     private readonly geraewProvider: GeraewProvider,
+    private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly generationEvents: GenerationEventsService,
   ) {}
 
@@ -126,6 +129,86 @@ export class GenerationsService {
     this.processImageGeneration(generation.id, dto).catch((error) => {
       this.handleFailure(generation.id, userId, creditsRequired, error);
     });
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Image generation via Nano Banana 2 (kie-api) ────────
+
+  async generateImageNanoBanana(
+    userId: string,
+    dto: GenerateImageNanoBananaDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type =
+      dto.images?.length
+        ? GenerationType.IMAGE_TO_IMAGE
+        : GenerationType.TEXT_TO_IMAGE;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+    );
+
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: 'nano-banana-2',
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: {
+          output_format: dto.output_format,
+          google_search: dto.google_search,
+        },
+      },
+    });
+
+    let imageUrls: string[] | undefined;
+    if (dto.images?.length) {
+      const uploadedUrls = await Promise.all(
+        dto.images.map((img) =>
+          this.uploadBase64Image(
+            img.base64,
+            img.mime_type ?? 'image/png',
+            generation.id,
+          ),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.images.map((img, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: img.mime_type ?? 'image/png',
+          order: i,
+          url: uploadedUrls[i],
+        })),
+      });
+      imageUrls = uploadedUrls;
+    }
+
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dto.resolution,
+    );
+
+    this.processNanoBananaImageGeneration(generation.id, dto, imageUrls).catch(
+      (error) => {
+        this.handleFailure(generation.id, userId, creditsRequired, error);
+      },
+    );
 
     return {
       id: generation.id,
@@ -362,6 +445,31 @@ export class GenerationsService {
         base64: img.base64,
         mimeType: img.mime_type ?? 'image/png',
       })),
+    });
+
+    await this.completeGeneration(generationId, result, startTime);
+  }
+
+  private async processNanoBananaImageGeneration(
+    generationId: string,
+    dto: GenerateImageNanoBananaDto,
+    imageUrls?: string[],
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    const result = await this.nanoBananaProvider.generateImage({
+      id: generationId,
+      prompt: dto.prompt,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      outputFormat: dto.output_format,
+      googleSearch: dto.google_search,
+      imageUrls,
     });
 
     await this.completeGeneration(generationId, result, startTime);

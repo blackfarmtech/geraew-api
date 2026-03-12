@@ -19,6 +19,7 @@ const client_1 = require("@prisma/client");
 const paginated_response_dto_1 = require("../common/dto/paginated-response.dto");
 const uploads_service_1 = require("../uploads/uploads.service");
 const geraew_provider_1 = require("./providers/geraew.provider");
+const nano_banana_provider_1 = require("./providers/nano-banana.provider");
 const generation_events_service_1 = require("./generation-events.service");
 let GenerationsService = GenerationsService_1 = class GenerationsService {
     prisma;
@@ -26,14 +27,16 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     plansService;
     uploadsService;
     geraewProvider;
+    nanoBananaProvider;
     generationEvents;
     logger = new common_1.Logger(GenerationsService_1.name);
-    constructor(prisma, creditsService, plansService, uploadsService, geraewProvider, generationEvents) {
+    constructor(prisma, creditsService, plansService, uploadsService, geraewProvider, nanoBananaProvider, generationEvents) {
         this.prisma = prisma;
         this.creditsService = creditsService;
         this.plansService = plansService;
         this.uploadsService = uploadsService;
         this.geraewProvider = geraewProvider;
+        this.nanoBananaProvider = nanoBananaProvider;
         this.generationEvents = generationEvents;
     }
     async generateImage(userId, dto) {
@@ -70,6 +73,53 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         }
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
         this.processImageGeneration(generation.id, dto).catch((error) => {
+            this.handleFailure(generation.id, userId, creditsRequired, error);
+        });
+        return {
+            id: generation.id,
+            status: client_1.GenerationStatus.PROCESSING,
+            creditsConsumed: creditsRequired,
+        };
+    }
+    async generateImageNanoBanana(userId, dto) {
+        const type = dto.images?.length
+            ? client_1.GenerationType.IMAGE_TO_IMAGE
+            : client_1.GenerationType.TEXT_TO_IMAGE;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        await this.ensureSufficientBalance(userId, creditsRequired);
+        const generation = await this.prisma.generation.create({
+            data: {
+                userId,
+                type,
+                status: client_1.GenerationStatus.PROCESSING,
+                prompt: dto.prompt,
+                modelUsed: 'nano-banana-2',
+                resolution: dto.resolution,
+                aspectRatio: dto.aspect_ratio,
+                hasAudio: false,
+                creditsConsumed: creditsRequired,
+                parameters: {
+                    output_format: dto.output_format,
+                    google_search: dto.google_search,
+                },
+            },
+        });
+        let imageUrls;
+        if (dto.images?.length) {
+            const uploadedUrls = await Promise.all(dto.images.map((img) => this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id)));
+            await this.prisma.generationInputImage.createMany({
+                data: dto.images.map((img, i) => ({
+                    generationId: generation.id,
+                    role: client_1.GenerationImageRole.REFERENCE,
+                    mimeType: img.mime_type ?? 'image/png',
+                    order: i,
+                    url: uploadedUrls[i],
+                })),
+            });
+            imageUrls = uploadedUrls;
+        }
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        this.processNanoBananaImageGeneration(generation.id, dto, imageUrls).catch((error) => {
             this.handleFailure(generation.id, userId, creditsRequired, error);
         });
         return {
@@ -224,6 +274,23 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 base64: img.base64,
                 mimeType: img.mime_type ?? 'image/png',
             })),
+        });
+        await this.completeGeneration(generationId, result, startTime);
+    }
+    async processNanoBananaImageGeneration(generationId, dto, imageUrls) {
+        const startTime = Date.now();
+        await this.prisma.generation.update({
+            where: { id: generationId },
+            data: { processingStartedAt: new Date() },
+        });
+        const result = await this.nanoBananaProvider.generateImage({
+            id: generationId,
+            prompt: dto.prompt,
+            resolution: dto.resolution,
+            aspectRatio: dto.aspect_ratio,
+            outputFormat: dto.output_format,
+            googleSearch: dto.google_search,
+            imageUrls,
         });
         await this.completeGeneration(generationId, result, startTime);
     }
@@ -498,6 +565,7 @@ exports.GenerationsService = GenerationsService = GenerationsService_1 = __decor
         plans_service_1.PlansService,
         uploads_service_1.UploadsService,
         geraew_provider_1.GeraewProvider,
+        nano_banana_provider_1.NanoBananaProvider,
         generation_events_service_1.GenerationEventsService])
 ], GenerationsService);
 //# sourceMappingURL=generations.service.js.map
