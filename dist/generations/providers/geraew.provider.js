@@ -183,6 +183,8 @@ let GeraewProvider = GeraewProvider_1 = class GeraewProvider {
         return { outputUrls, modelUsed: model };
     }
     async pollVideoStatus(operationName, maxAttempts = 60, intervalMs = 10_000) {
+        const maxNetworkRetries = 5;
+        let networkFailures = 0;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             if (attempt > 0) {
                 await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -195,10 +197,16 @@ let GeraewProvider = GeraewProvider_1 = class GeraewProvider {
                     headers: this.headers(),
                     body: JSON.stringify({ operationName }),
                 });
+                networkFailures = 0;
             }
             catch (error) {
-                this.logger.error(`[VIDEO POLL] Fetch failed to ${statusUrl}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
-                throw error;
+                networkFailures++;
+                this.logger.warn(`[VIDEO POLL] Fetch failed (${networkFailures}/${maxNetworkRetries}) to ${statusUrl}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
+                if (networkFailures >= maxNetworkRetries) {
+                    this.logger.error(`[VIDEO POLL] Max network retries exceeded`);
+                    throw error;
+                }
+                continue;
             }
             if (!response.ok) {
                 const errorText = await response.text();

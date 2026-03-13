@@ -333,6 +333,9 @@ export class GeraewProvider {
     maxAttempts = 60,
     intervalMs = 10_000,
   ): Promise<Array<{ base64?: string; gcsUri?: string; mimeType: string }>> {
+    const maxNetworkRetries = 5;
+    let networkFailures = 0;
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -346,9 +349,18 @@ export class GeraewProvider {
           headers: this.headers(),
           body: JSON.stringify({ operationName }),
         });
+        networkFailures = 0; // reset on success
       } catch (error) {
-        this.logger.error(`[VIDEO POLL] Fetch failed to ${statusUrl}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
-        throw error;
+        networkFailures++;
+        this.logger.warn(
+          `[VIDEO POLL] Fetch failed (${networkFailures}/${maxNetworkRetries}) to ${statusUrl}: ${error.message}`,
+          error.cause ? JSON.stringify(error.cause) : undefined,
+        );
+        if (networkFailures >= maxNetworkRetries) {
+          this.logger.error(`[VIDEO POLL] Max network retries exceeded`);
+          throw error;
+        }
+        continue; // retry on next attempt
       }
 
       if (!response.ok) {
