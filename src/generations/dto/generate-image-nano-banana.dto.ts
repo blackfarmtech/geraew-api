@@ -27,6 +27,17 @@ export class NanoBananaImageInputDto {
 }
 
 export class GenerateImageNanoBananaDto {
+  @ApiPropertyOptional({
+    description:
+      'Modelo a ser utilizado. nano-banana-pro = gemini-3-pro-image-preview, nano-banana-2 = gemini-3.1-flash-image-preview',
+    enum: ['nano-banana-pro', 'nano-banana-2'],
+    default: 'nano-banana-2',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['nano-banana-pro', 'nano-banana-2'])
+  model?: string;
+
   @ApiProperty({
     description: 'Prompt de texto para gerar/editar a imagem',
     example: 'A futuristic cityscape at sunset, cyberpunk style',

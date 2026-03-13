@@ -22,7 +22,7 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { GeraewProvider } from './providers/geraew.provider';
-import { NanoBananaProvider } from './providers/nano-banana.provider';
+import { NanoBananaProvider, mapGeminiToNanoBanana } from './providers/nano-banana.provider';
 import { GenerationEventsService } from './generation-events.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
@@ -226,7 +226,7 @@ export class GenerationsService {
         type,
         status: GenerationStatus.PROCESSING,
         prompt: dto.prompt,
-        modelUsed: 'nano-banana-2',
+        modelUsed: dto.model ?? 'nano-banana-2',
         resolution: dto.resolution,
         aspectRatio: dto.aspect_ratio,
         hasAudio: false,
@@ -565,8 +565,10 @@ export class GenerationsService {
           .map((img) => img.url)
           .filter(Boolean) as string[];
 
+        const nanaBananaModel = mapGeminiToNanoBanana(dto.model);
         const result = await this.nanoBananaProvider.generateImage({
           id: generationId,
+          model: nanaBananaModel,
           prompt: dto.prompt,
           resolution: dto.resolution,
           aspectRatio: dto.aspect_ratio,
@@ -574,7 +576,7 @@ export class GenerationsService {
           imageUrls: imageUrls.length ? imageUrls : undefined,
         });
 
-        await this.completeGeneration(generationId, result, startTime, 'nano-banana-2');
+        await this.completeGeneration(generationId, result, startTime, nanaBananaModel);
       } catch (fallbackError) {
         throw fallbackError;
       }
@@ -595,6 +597,7 @@ export class GenerationsService {
 
     const result = await this.nanoBananaProvider.generateImage({
       id: generationId,
+      model: dto.model,
       prompt: dto.prompt,
       resolution: dto.resolution,
       aspectRatio: dto.aspect_ratio,

@@ -9,8 +9,18 @@ const RESOLUTION_MAP: Record<string, string> = {
   RES_4K: '4K',
 };
 
+const GEMINI_TO_NANO_BANANA: Record<string, string> = {
+  'gemini-3-pro-image-preview': 'nano-banana-pro',
+  'gemini-3.1-flash-image-preview': 'nano-banana-2',
+};
+
+export function mapGeminiToNanoBanana(geminiModel: string): string {
+  return GEMINI_TO_NANO_BANANA[geminiModel] ?? 'nano-banana-2';
+}
+
 export interface NanoBananaImageInput {
   id: string;
+  model?: string;
   prompt: string;
   resolution: string;
   aspectRatio?: string;
@@ -60,14 +70,16 @@ export class NanoBananaProvider {
   }
 
   async generateImage(input: NanoBananaImageInput): Promise<GenerationResult> {
+    const model = input.model ?? 'nano-banana-2';
+
     this.logger.log(
-      `Creating Nano Banana 2 task — resolution ${input.resolution}`,
+      `Creating ${model} task — resolution ${input.resolution}`,
     );
 
     const resolution = RESOLUTION_MAP[input.resolution] ?? '1K';
 
     const body: Record<string, unknown> = {
-      model: 'nano-banana-2',
+      model,
       input: {
         prompt: input.prompt,
         resolution,
@@ -123,7 +135,7 @@ export class NanoBananaProvider {
     }
 
     this.logger.log(`${outputUrls.length} image(s) uploaded to S3`);
-    return { outputUrls, modelUsed: 'nano-banana-2' };
+    return { outputUrls, modelUsed: model };
   }
 
   private async pollTaskStatus(
