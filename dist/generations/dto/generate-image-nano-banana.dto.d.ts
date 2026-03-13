@@ -4,6 +4,7 @@ export declare class NanoBananaImageInputDto {
     mime_type?: string;
 }
 export declare class GenerateImageNanoBananaDto {
+    model?: string;
     prompt: string;
     resolution: Resolution;
     aspect_ratio?: string;

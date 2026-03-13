@@ -35,6 +35,7 @@ __decorate([
     __metadata("design:type", String)
 ], NanoBananaImageInputDto.prototype, "mime_type", void 0);
 class GenerateImageNanoBananaDto {
+    model;
     prompt;
     resolution;
     aspect_ratio;
@@ -43,6 +44,17 @@ class GenerateImageNanoBananaDto {
     images;
 }
 exports.GenerateImageNanoBananaDto = GenerateImageNanoBananaDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Modelo a ser utilizado. nano-banana-pro = gemini-3-pro-image-preview, nano-banana-2 = gemini-3.1-flash-image-preview',
+        enum: ['nano-banana-pro', 'nano-banana-2'],
+        default: 'nano-banana-2',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsIn)(['nano-banana-pro', 'nano-banana-2']),
+    __metadata("design:type", String)
+], GenerateImageNanoBananaDto.prototype, "model", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Prompt de texto para gerar/editar a imagem',

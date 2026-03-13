@@ -22,7 +22,7 @@ export declare class CreditsService {
         stripePriceId: string | null;
         credits: number;
     }[]>;
-    estimateCost(userId: string, type: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean): Promise<EstimateCostResponseDto>;
+    estimateCost(userId: string, type: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number): Promise<EstimateCostResponseDto>;
     debit(userId: string, amount: number, type: CreditTransactionType, generationId?: string, description?: string): Promise<void>;
     refund(userId: string, amount: number, generationId: string): Promise<void>;
 }

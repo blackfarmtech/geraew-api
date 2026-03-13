@@ -57,13 +57,13 @@ let PlansService = class PlansService {
         }
         return cost;
     }
-    async calculateGenerationCost(generationType, resolution, durationSeconds, hasAudio = false) {
+    async calculateGenerationCost(generationType, resolution, durationSeconds, hasAudio = false, sampleCount = 1) {
         const cost = await this.getCreditCost(generationType, resolution, hasAudio);
-        console.log(cost);
+        let total = cost.creditsPerUnit;
         if (cost.isPerSecond && durationSeconds) {
-            return cost.creditsPerUnit * durationSeconds;
+            total = cost.creditsPerUnit * durationSeconds;
         }
-        return cost.creditsPerUnit;
+        return total * Math.max(sampleCount, 1);
     }
     async findAllPackages() {
         return this.prisma.creditPackage.findMany({

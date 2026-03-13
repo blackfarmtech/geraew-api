@@ -65,7 +65,7 @@ export declare class PlansService {
         creditsPerUnit: number;
         isPerSecond: boolean;
     }>;
-    calculateGenerationCost(generationType: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean): Promise<number>;
+    calculateGenerationCost(generationType: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number): Promise<number>;
     findAllPackages(): Promise<{
         name: string;
         id: string;

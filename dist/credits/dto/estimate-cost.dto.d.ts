@@ -4,6 +4,7 @@ export declare class EstimateCostDto {
     resolution: Resolution;
     durationSeconds?: number;
     hasAudio?: boolean;
+    sampleCount?: number;
 }
 export declare class EstimateCostResponseDto {
     creditsRequired: number;

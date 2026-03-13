@@ -120,18 +120,26 @@ export class GeraewProvider {
       }));
     }
 
-    const response = await fetch(
-      `${this.baseUrl}/api/image/generate-gemini`,
-      {
+    const url = `${this.baseUrl}/api/image/generate-gemini`;
+    this.logger.log(`[IMAGE] POST ${url}`);
+    this.logger.log(`[IMAGE] Body: ${JSON.stringify({ ...body, images: body.images ? `[${(body.images as unknown[]).length} image(s)]` : undefined })}`);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(body),
-      },
-    );
+      });
+    } catch (error) {
+      this.logger.error(`[IMAGE] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
+      throw error;
+    }
 
-    console.log(response);
+    this.logger.log(`[IMAGE] Response status: ${response.status}`);
     if (!response.ok) {
       const errorText = await response.text();
+      this.logger.error(`[IMAGE] Error response: ${errorText}`);
       throw new Error(`Image API error (${response.status}): ${errorText}`);
     }
 
@@ -258,14 +266,26 @@ export class GeraewProvider {
     generationId: string,
     model: string,
   ): Promise<GenerationResult> {
-    const startResponse = await fetch(`${this.baseUrl}${route}`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
+    const url = `${this.baseUrl}${route}`;
+    this.logger.log(`[VIDEO] POST ${url}`);
+    this.logger.log(`[VIDEO] Body: ${JSON.stringify(body)}`);
 
+    let startResponse: Response;
+    try {
+      startResponse = await fetch(url, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      this.logger.error(`[VIDEO] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
+      throw error;
+    }
+
+    this.logger.log(`[VIDEO] Response status: ${startResponse.status}`);
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
+      this.logger.error(`[VIDEO] Error response: ${errorText}`);
       throw new Error(
         `Video API error (${startResponse.status}): ${errorText}`,
       );
@@ -274,7 +294,7 @@ export class GeraewProvider {
     const { operationName } = (await startResponse.json()) as {
       operationName: string;
     };
-    this.logger.log(`Video generation started: ${operationName}`);
+    this.logger.log(`[VIDEO] Generation started: ${operationName}`);
 
     const videos = await this.pollVideoStatus(operationName);
 
@@ -318,14 +338,22 @@ export class GeraewProvider {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
 
-      const response = await fetch(`${this.baseUrl}/api/video/status`, {
-        method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify({ operationName }),
-      });
+      const statusUrl = `${this.baseUrl}/api/video/status`;
+      let response: Response;
+      try {
+        response = await fetch(statusUrl, {
+          method: 'POST',
+          headers: this.headers(),
+          body: JSON.stringify({ operationName }),
+        });
+      } catch (error) {
+        this.logger.error(`[VIDEO POLL] Fetch failed to ${statusUrl}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
+        throw error;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
+        this.logger.error(`[VIDEO POLL] Error response (${response.status}): ${errorText}`);
         throw new Error(
           `Video status check error (${response.status}): ${errorText}`,
         );

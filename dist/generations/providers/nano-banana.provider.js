@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var NanoBananaProvider_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NanoBananaProvider = void 0;
+exports.mapGeminiToNanoBanana = mapGeminiToNanoBanana;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const uploads_service_1 = require("../../uploads/uploads.service");
@@ -19,6 +20,13 @@ const RESOLUTION_MAP = {
     RES_2K: '2K',
     RES_4K: '4K',
 };
+const GEMINI_TO_NANO_BANANA = {
+    'gemini-3-pro-image-preview': 'nano-banana-pro',
+    'gemini-3.1-flash-image-preview': 'nano-banana-2',
+};
+function mapGeminiToNanoBanana(geminiModel) {
+    return GEMINI_TO_NANO_BANANA[geminiModel] ?? 'nano-banana-2';
+}
 let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
     configService;
     uploadsService;
@@ -32,10 +40,11 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
         this.apiKey = this.configService.get('NANO_BANANA_API_KEY', '');
     }
     async generateImage(input) {
-        this.logger.log(`Creating Nano Banana 2 task — resolution ${input.resolution}`);
+        const model = input.model ?? 'nano-banana-2';
+        this.logger.log(`Creating ${model} task — resolution ${input.resolution}`);
         const resolution = RESOLUTION_MAP[input.resolution] ?? '1K';
         const body = {
-            model: 'nano-banana-2',
+            model,
             input: {
                 prompt: input.prompt,
                 resolution,
@@ -70,7 +79,7 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
             throw new Error('Nano Banana returned no images.');
         }
         this.logger.log(`${outputUrls.length} image(s) uploaded to S3`);
-        return { outputUrls, modelUsed: 'nano-banana-2' };
+        return { outputUrls, modelUsed: model };
     }
     async pollTaskStatus(taskId, maxAttempts = 120, intervalMs = 5_000) {
         for (let attempt = 0; attempt < maxAttempts; attempt++) {

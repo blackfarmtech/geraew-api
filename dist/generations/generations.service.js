@@ -135,7 +135,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 type,
                 status: client_1.GenerationStatus.PROCESSING,
                 prompt: dto.prompt,
-                modelUsed: 'nano-banana-2',
+                modelUsed: dto.model ?? 'nano-banana-2',
                 resolution: dto.resolution,
                 aspectRatio: dto.aspect_ratio,
                 hasAudio: false,
@@ -173,7 +173,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     async generateTextToVideo(userId, dto) {
         const type = client_1.GenerationType.TEXT_TO_VIDEO;
         const hasAudio = dto.generate_audio ?? true;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio);
+        const sampleCount = dto.sample_count ?? 1;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -187,7 +188,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 durationSeconds: dto.duration_seconds,
                 hasAudio,
                 aspectRatio: dto.aspect_ratio,
-                quantity: dto.sample_count,
+                quantity: sampleCount,
                 creditsConsumed: creditsRequired,
             },
         });
@@ -205,7 +206,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = client_1.GenerationType.IMAGE_TO_VIDEO;
         const model = dto.model ?? 'veo-3.1-generate-preview';
         const hasAudio = dto.generate_audio ?? true;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio);
+        const sampleCount = dto.sample_count ?? 1;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -219,7 +221,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 durationSeconds: dto.duration_seconds,
                 hasAudio,
                 aspectRatio: dto.aspect_ratio,
-                quantity: dto.sample_count,
+                quantity: sampleCount,
                 creditsConsumed: creditsRequired,
             },
         });
@@ -258,7 +260,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = client_1.GenerationType.REFERENCE_VIDEO;
         const model = dto.model ?? 'veo-3.1-generate-preview';
         const hasAudio = dto.generate_audio ?? true;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio);
+        const sampleCount = dto.sample_count ?? 1;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -272,7 +275,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 durationSeconds: dto.duration_seconds,
                 hasAudio,
                 aspectRatio: dto.aspect_ratio,
-                quantity: dto.sample_count,
+                quantity: sampleCount,
                 creditsConsumed: creditsRequired,
             },
         });
@@ -349,15 +352,17 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 const imageUrls = inputImages
                     .map((img) => img.url)
                     .filter(Boolean);
+                const nanaBananaModel = (0, nano_banana_provider_1.mapGeminiToNanoBanana)(dto.model);
                 const result = await this.nanoBananaProvider.generateImage({
                     id: generationId,
+                    model: nanaBananaModel,
                     prompt: dto.prompt,
                     resolution: dto.resolution,
                     aspectRatio: dto.aspect_ratio,
                     outputFormat: dto.mime_type === 'image/jpeg' ? 'jpg' : 'png',
                     imageUrls: imageUrls.length ? imageUrls : undefined,
                 });
-                await this.completeGeneration(generationId, result, startTime, 'nano-banana-2');
+                await this.completeGeneration(generationId, result, startTime, nanaBananaModel);
             }
             catch (fallbackError) {
                 throw fallbackError;
@@ -372,6 +377,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         });
         const result = await this.nanoBananaProvider.generateImage({
             id: generationId,
+            model: dto.model,
             prompt: dto.prompt,
             resolution: dto.resolution,
             aspectRatio: dto.aspect_ratio,

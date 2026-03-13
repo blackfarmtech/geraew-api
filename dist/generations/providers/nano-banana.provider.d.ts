@@ -1,8 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GenerationResult } from './geraew.provider';
+export declare function mapGeminiToNanoBanana(geminiModel: string): string;
 export interface NanoBananaImageInput {
     id: string;
+    model?: string;
     prompt: string;
     resolution: string;
     aspectRatio?: string;
