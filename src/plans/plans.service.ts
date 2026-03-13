@@ -67,14 +67,16 @@ export class PlansService {
     resolution: Resolution,
     durationSeconds?: number,
     hasAudio: boolean = false,
+    sampleCount: number = 1,
   ): Promise<number> {
     const cost = await this.getCreditCost(generationType, resolution, hasAudio);
-    console.log(cost)
+
+    let total = cost.creditsPerUnit;
     if (cost.isPerSecond && durationSeconds) {
-      return cost.creditsPerUnit * durationSeconds;
+      total = cost.creditsPerUnit * durationSeconds;
     }
 
-    return cost.creditsPerUnit;
+    return total * Math.max(sampleCount, 1);
   }
 
   async findAllPackages() {

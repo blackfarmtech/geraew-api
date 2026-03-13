@@ -24,11 +24,13 @@ export declare class GenerationsService {
     private readonly logger;
     constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, generationEvents: GenerationEventsService);
     generateImage(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
+    generateImageWithFallback(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
     generateImageNanoBanana(userId: string, dto: GenerateImageNanoBananaDto): Promise<CreateGenerationResponseDto>;
     generateTextToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     generateImageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     generateVideoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
     private processImageGeneration;
+    private processImageWithFallback;
     private processNanoBananaImageGeneration;
     private processTextToVideoGeneration;
     private processImageToVideoGeneration;

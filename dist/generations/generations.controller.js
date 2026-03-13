@@ -42,6 +42,9 @@ let GenerationsController = class GenerationsController {
     async generateImage(userId, dto) {
         return this.generationsService.generateImage(userId, dto);
     }
+    async generateImageWithFallback(userId, dto) {
+        return this.generationsService.generateImageWithFallback(userId, dto);
+    }
     async generateImageNanoBanana(userId, dto) {
         return this.generationsService.generateImageNanoBanana(userId, dto);
     }
@@ -100,6 +103,19 @@ __decorate([
     __metadata("design:paramtypes", [String, generate_image_dto_1.GenerateImageDto]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "generateImage", null);
+__decorate([
+    (0, common_1.Post)('generate-image-auto'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Gera imagem tentando Geraew (Gemini) primeiro; se falhar, usa Nano Banana 2 como fallback',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, generate_image_dto_1.GenerateImageDto]),
+    __metadata("design:returntype", Promise)
+], GenerationsController.prototype, "generateImageWithFallback", null);
 __decorate([
     (0, common_1.Post)('generate-image-nano-banana'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

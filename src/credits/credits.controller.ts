@@ -128,6 +128,7 @@ export class CreditsController {
       dto.resolution,
       dto.durationSeconds,
       dto.hasAudio,
+      dto.sampleCount,
     );
   }
 }

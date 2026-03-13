@@ -75,6 +75,20 @@ export class GenerationsController {
     return this.generationsService.generateImage(userId, dto);
   }
 
+  @Post('generate-image-auto')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary:
+      'Gera imagem tentando Geraew (Gemini) primeiro; se falhar, usa Nano Banana 2 como fallback',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async generateImageWithFallback(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateImageDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateImageWithFallback(userId, dto);
+  }
+
   @Post('generate-image-nano-banana')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Gera imagem via Nano Banana 2 (kie-api) — text-to-image ou image-to-image' })

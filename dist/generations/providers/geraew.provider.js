@@ -57,6 +57,7 @@ let GeraewProvider = GeraewProvider_1 = class GeraewProvider {
             headers: this.headers(),
             body: JSON.stringify(body),
         });
+        console.log(response);
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Image API error (${response.status}): ${errorText}`);

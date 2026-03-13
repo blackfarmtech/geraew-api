@@ -137,6 +137,71 @@ export class GenerationsService {
     };
   }
 
+  // ─── Image generation with fallback (geraew → nano-banana) ─
+
+  async generateImageWithFallback(
+    userId: string,
+    dto: GenerateImageDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type =
+      dto.images?.length
+        ? GenerationType.IMAGE_TO_IMAGE
+        : GenerationType.TEXT_TO_IMAGE;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+    );
+
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: dto.model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: { mimeType: dto.mime_type, provider: 'geraew' },
+      },
+    });
+
+    if (dto.images?.length) {
+      const uploadedUrls = await Promise.all(
+        dto.images.map((img) =>
+          this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.images.map((img, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: img.mime_type ?? 'image/png',
+          order: i,
+          url: uploadedUrls[i],
+        })),
+      });
+    }
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+
+    this.processImageWithFallback(generation.id, userId, creditsRequired, dto).catch(
+      (error) => {
+        this.handleFailure(generation.id, userId, creditsRequired, error);
+      },
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
   // ─── Image generation via Nano Banana 2 (kie-api) ────────
 
   async generateImageNanoBanana(
@@ -226,11 +291,14 @@ export class GenerationsService {
     const type = GenerationType.TEXT_TO_VIDEO;
     const hasAudio = dto.generate_audio ?? true;
 
+    const sampleCount = dto.sample_count ?? 1;
+
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
+      sampleCount,
     );
 
     await this.ensureSufficientBalance(userId, creditsRequired);
@@ -247,7 +315,7 @@ export class GenerationsService {
         durationSeconds: dto.duration_seconds,
         hasAudio,
         aspectRatio: dto.aspect_ratio,
-        quantity: dto.sample_count,
+        quantity: sampleCount,
         creditsConsumed: creditsRequired,
       },
     });
@@ -275,11 +343,14 @@ export class GenerationsService {
     const model = dto.model ?? 'veo-3.1-generate-preview';
     const hasAudio = dto.generate_audio ?? true;
 
+    const sampleCount = dto.sample_count ?? 1;
+
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
+      sampleCount,
     );
 
     await this.ensureSufficientBalance(userId, creditsRequired);
@@ -296,7 +367,7 @@ export class GenerationsService {
         durationSeconds: dto.duration_seconds,
         hasAudio,
         aspectRatio: dto.aspect_ratio,
-        quantity: dto.sample_count,
+        quantity: sampleCount,
         creditsConsumed: creditsRequired,
       },
     });
@@ -362,11 +433,14 @@ export class GenerationsService {
     const model = dto.model ?? 'veo-3.1-generate-preview';
     const hasAudio = dto.generate_audio ?? true;
 
+    const sampleCount = dto.sample_count ?? 1;
+
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
+      sampleCount,
     );
 
     await this.ensureSufficientBalance(userId, creditsRequired);
@@ -383,7 +457,7 @@ export class GenerationsService {
         durationSeconds: dto.duration_seconds,
         hasAudio,
         aspectRatio: dto.aspect_ratio,
-        quantity: dto.sample_count,
+        quantity: sampleCount,
         creditsConsumed: creditsRequired,
       },
     });
@@ -448,6 +522,63 @@ export class GenerationsService {
     });
 
     await this.completeGeneration(generationId, result, startTime);
+  }
+
+  private async processImageWithFallback(
+    generationId: string,
+    userId: string,
+    creditsConsumed: number,
+    dto: GenerateImageDto,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: { processingStartedAt: new Date() },
+    });
+
+    try {
+      const result = await this.geraewProvider.generateImage({
+        id: generationId,
+        prompt: dto.prompt,
+        model: dto.model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        mimeType: dto.mime_type,
+        images: dto.images?.map((img) => ({
+          base64: img.base64,
+          mimeType: img.mime_type ?? 'image/png',
+        })),
+      });
+
+      await this.completeGeneration(generationId, result, startTime, 'geraew');
+    } catch (geraewError) {
+      this.logger.warn(
+        `Geraew failed for ${generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
+      );
+
+      try {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId },
+        });
+        const imageUrls = inputImages
+          .map((img) => img.url)
+          .filter(Boolean) as string[];
+
+        const result = await this.nanoBananaProvider.generateImage({
+          id: generationId,
+          prompt: dto.prompt,
+          resolution: dto.resolution,
+          aspectRatio: dto.aspect_ratio,
+          outputFormat: dto.mime_type === 'image/jpeg' ? 'jpg' : 'png',
+          imageUrls: imageUrls.length ? imageUrls : undefined,
+        });
+
+        await this.completeGeneration(generationId, result, startTime, 'nano-banana-2');
+      } catch (fallbackError) {
+        throw fallbackError;
+      }
+    }
   }
 
   private async processNanoBananaImageGeneration(
@@ -600,18 +731,33 @@ export class GenerationsService {
     generationId: string,
     result: { outputUrls: string[]; modelUsed: string },
     startTime: number,
+    provider?: string,
   ): Promise<void> {
     const processingTimeMs = Date.now() - startTime;
+
+    const updateData: Record<string, unknown> = {
+      status: GenerationStatus.COMPLETED,
+      modelUsed: result.modelUsed,
+      processingTimeMs,
+      completedAt: new Date(),
+    };
+
+    if (provider) {
+      const existing = await this.prisma.generation.findUnique({
+        where: { id: generationId },
+        select: { parameters: true },
+      });
+      const params =
+        existing?.parameters && typeof existing.parameters === 'object'
+          ? (existing.parameters as Record<string, unknown>)
+          : {};
+      updateData.parameters = { ...params, provider };
+    }
 
     const [updatedGeneration] = await this.prisma.$transaction([
       this.prisma.generation.update({
         where: { id: generationId },
-        data: {
-          status: GenerationStatus.COMPLETED,
-          modelUsed: result.modelUsed,
-          processingTimeMs,
-          completedAt: new Date(),
-        },
+        data: updateData,
       }),
       this.prisma.generationOutput.createMany({
         data: result.outputUrls.map((url, i) => ({

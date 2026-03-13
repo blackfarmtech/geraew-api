@@ -13,5 +13,8 @@
     "additionalDirectories": [
       "/Users/gustavogomes/projects/pessoais/geraew/frontend/src/pages"
     ]
+  },
+  "enabledPlugins": {
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
   }
 }

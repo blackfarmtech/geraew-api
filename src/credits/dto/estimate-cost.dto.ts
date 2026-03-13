@@ -23,6 +23,13 @@ export class EstimateCostDto {
   @IsOptional()
   @IsBoolean()
   hasAudio?: boolean;
+
+  @ApiPropertyOptional({ description: 'Number of samples to generate', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  sampleCount?: number;
 }
 
 export class EstimateCostResponseDto {

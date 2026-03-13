@@ -91,12 +91,14 @@ export class CreditsService {
     resolution: Resolution,
     durationSeconds?: number,
     hasAudio: boolean = false,
+    sampleCount: number = 1,
   ): Promise<EstimateCostResponseDto> {
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       resolution,
       durationSeconds,
       hasAudio,
+      sampleCount,
     );
 
     const balance = await this.getBalance(userId);

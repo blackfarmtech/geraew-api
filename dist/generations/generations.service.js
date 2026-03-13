@@ -81,6 +81,48 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             creditsConsumed: creditsRequired,
         };
     }
+    async generateImageWithFallback(userId, dto) {
+        const type = dto.images?.length
+            ? client_1.GenerationType.IMAGE_TO_IMAGE
+            : client_1.GenerationType.TEXT_TO_IMAGE;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        await this.ensureSufficientBalance(userId, creditsRequired);
+        const generation = await this.prisma.generation.create({
+            data: {
+                userId,
+                type,
+                status: client_1.GenerationStatus.PROCESSING,
+                prompt: dto.prompt,
+                modelUsed: dto.model,
+                resolution: dto.resolution,
+                aspectRatio: dto.aspect_ratio,
+                hasAudio: false,
+                creditsConsumed: creditsRequired,
+                parameters: { mimeType: dto.mime_type, provider: 'geraew' },
+            },
+        });
+        if (dto.images?.length) {
+            const uploadedUrls = await Promise.all(dto.images.map((img) => this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id)));
+            await this.prisma.generationInputImage.createMany({
+                data: dto.images.map((img, i) => ({
+                    generationId: generation.id,
+                    role: client_1.GenerationImageRole.REFERENCE,
+                    mimeType: img.mime_type ?? 'image/png',
+                    order: i,
+                    url: uploadedUrls[i],
+                })),
+            });
+        }
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        this.processImageWithFallback(generation.id, userId, creditsRequired, dto).catch((error) => {
+            this.handleFailure(generation.id, userId, creditsRequired, error);
+        });
+        return {
+            id: generation.id,
+            status: client_1.GenerationStatus.PROCESSING,
+            creditsConsumed: creditsRequired,
+        };
+    }
     async generateImageNanoBanana(userId, dto) {
         const type = dto.images?.length
             ? client_1.GenerationType.IMAGE_TO_IMAGE
@@ -277,6 +319,51 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         });
         await this.completeGeneration(generationId, result, startTime);
     }
+    async processImageWithFallback(generationId, userId, creditsConsumed, dto) {
+        const startTime = Date.now();
+        await this.prisma.generation.update({
+            where: { id: generationId },
+            data: { processingStartedAt: new Date() },
+        });
+        try {
+            const result = await this.geraewProvider.generateImage({
+                id: generationId,
+                prompt: dto.prompt,
+                model: dto.model,
+                resolution: dto.resolution,
+                aspectRatio: dto.aspect_ratio,
+                mimeType: dto.mime_type,
+                images: dto.images?.map((img) => ({
+                    base64: img.base64,
+                    mimeType: img.mime_type ?? 'image/png',
+                })),
+            });
+            await this.completeGeneration(generationId, result, startTime, 'geraew');
+        }
+        catch (geraewError) {
+            this.logger.warn(`Geraew failed for ${generationId}, falling back to Nano Banana: ${geraewError.message}`);
+            try {
+                const inputImages = await this.prisma.generationInputImage.findMany({
+                    where: { generationId },
+                });
+                const imageUrls = inputImages
+                    .map((img) => img.url)
+                    .filter(Boolean);
+                const result = await this.nanoBananaProvider.generateImage({
+                    id: generationId,
+                    prompt: dto.prompt,
+                    resolution: dto.resolution,
+                    aspectRatio: dto.aspect_ratio,
+                    outputFormat: dto.mime_type === 'image/jpeg' ? 'jpg' : 'png',
+                    imageUrls: imageUrls.length ? imageUrls : undefined,
+                });
+                await this.completeGeneration(generationId, result, startTime, 'nano-banana-2');
+            }
+            catch (fallbackError) {
+                throw fallbackError;
+            }
+        }
+    }
     async processNanoBananaImageGeneration(generationId, dto, imageUrls) {
         const startTime = Date.now();
         await this.prisma.generation.update({
@@ -373,17 +460,28 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     async debitCredits(userId, creditsRequired, generationId, type, resolution) {
         await this.creditsService.debit(userId, creditsRequired, client_1.CreditTransactionType.GENERATION_DEBIT, generationId, `Geração ${type} ${resolution}`);
     }
-    async completeGeneration(generationId, result, startTime) {
+    async completeGeneration(generationId, result, startTime, provider) {
         const processingTimeMs = Date.now() - startTime;
+        const updateData = {
+            status: client_1.GenerationStatus.COMPLETED,
+            modelUsed: result.modelUsed,
+            processingTimeMs,
+            completedAt: new Date(),
+        };
+        if (provider) {
+            const existing = await this.prisma.generation.findUnique({
+                where: { id: generationId },
+                select: { parameters: true },
+            });
+            const params = existing?.parameters && typeof existing.parameters === 'object'
+                ? existing.parameters
+                : {};
+            updateData.parameters = { ...params, provider };
+        }
         const [updatedGeneration] = await this.prisma.$transaction([
             this.prisma.generation.update({
                 where: { id: generationId },
-                data: {
-                    status: client_1.GenerationStatus.COMPLETED,
-                    modelUsed: result.modelUsed,
-                    processingTimeMs,
-                    completedAt: new Date(),
-                },
+                data: updateData,
             }),
             this.prisma.generationOutput.createMany({
                 data: result.outputUrls.map((url, i) => ({

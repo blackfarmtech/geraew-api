@@ -16,6 +16,7 @@ export declare class GenerationsController {
     sseAll(userId: string): Observable<MessageEvent>;
     sseOne(userId: string, id: string): Observable<MessageEvent>;
     generateImage(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
+    generateImageWithFallback(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
     generateImageNanoBanana(userId: string, dto: GenerateImageNanoBananaDto): Promise<CreateGenerationResponseDto>;
     textToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     imageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
