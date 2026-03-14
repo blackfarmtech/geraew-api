@@ -29,6 +29,8 @@ const payments_module_1 = require("./payments/payments.module");
 const generations_module_1 = require("./generations/generations.module");
 const gallery_module_1 = require("./gallery/gallery.module");
 const folders_module_1 = require("./folders/folders.module");
+const video_editor_module_1 = require("./video-editor/video-editor.module");
+const prompt_enhancer_module_1 = require("./prompt-enhancer/prompt-enhancer.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -61,6 +63,8 @@ exports.AppModule = AppModule = __decorate([
             generations_module_1.GenerationsModule,
             gallery_module_1.GalleryModule,
             folders_module_1.FoldersModule,
+            video_editor_module_1.VideoEditorModule,
+            prompt_enhancer_module_1.PromptEnhancerModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

@@ -20,6 +20,8 @@ import { PaymentsModule } from './payments/payments.module';
 import { GenerationsModule } from './generations/generations.module';
 import { GalleryModule } from './gallery/gallery.module';
 import { FoldersModule } from './folders/folders.module';
+import { VideoEditorModule } from './video-editor/video-editor.module';
+import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
 
 
 @Module({
@@ -50,6 +52,8 @@ import { FoldersModule } from './folders/folders.module';
     GenerationsModule,
     GalleryModule,
     FoldersModule,
+    VideoEditorModule,
+    PromptEnhancerModule,
   ],
   controllers: [AppController],
   providers: [

@@ -113,6 +113,7 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   folders             Folder[]
+  videoProjects       VideoProject[]
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
@@ -443,4 +444,51 @@ model GenerationFolder {
   @@index([folderId])
   @@index([generationId])
   @@map("generation_folders")
+}
+
+// ============================================
+// VIDEO EDITOR
+// ============================================
+
+enum VideoProjectStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model VideoProject {
+  id                 String             @id @default(cuid())
+  userId             String             @map("user_id")
+  name               String             @default("Sem titulo")
+  status             VideoProjectStatus @default(DRAFT)
+  outputUrl          String?            @map("output_url")
+  outputThumbnailUrl String?            @map("output_thumbnail_url")
+  durationMs         Int?               @map("duration_ms")
+  errorMessage       String?            @map("error_message")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clips VideoProjectClip[]
+
+  @@index([userId])
+  @@map("video_projects")
+}
+
+model VideoProjectClip {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  sourceUrl    String   @map("source_url")
+  thumbnailUrl String?  @map("thumbnail_url")
+  order        Int
+  startMs      Int      @default(0) @map("start_ms")
+  endMs        Int?     @map("end_ms")
+  durationMs   Int      @map("duration_ms")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  project VideoProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("video_project_clips")
 }
