@@ -15,6 +15,7 @@ const client_1 = require("@prisma/client");
 class GenerationOutputDto {
     id;
     url;
+    thumbnailUrl;
     mimeType;
     order;
 }
@@ -27,6 +28,10 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", String)
 ], GenerationOutputDto.prototype, "url", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    __metadata("design:type", String)
+], GenerationOutputDto.prototype, "thumbnailUrl", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     __metadata("design:type", String)

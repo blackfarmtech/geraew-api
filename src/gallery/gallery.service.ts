@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerationStatus, GenerationType } from '@prisma/client';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { GalleryFiltersDto } from './dto/gallery-filters.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerationResponseDto } from '../generations/dto/generation-response.dto';
 import { GalleryStatsResponseDto } from './dto/gallery-stats-response.dto';
@@ -12,20 +12,31 @@ export class GalleryService {
 
   async getGallery(
     userId: string,
-    pagination: PaginationDto,
+    filters: GalleryFiltersDto,
   ): Promise<PaginatedResponseDto<GenerationResponseDto>> {
-    const where = {
+    const where: any = {
       userId,
       status: GenerationStatus.COMPLETED,
       isDeleted: false,
     };
 
+    const types = filters.typeArray;
+    if (types && types.length > 0) {
+      where.type = types.length === 1 ? types[0] : { in: types };
+    }
+    if (filters.favorited !== undefined) {
+      where.isFavorited = filters.favorited;
+    }
+    if (filters.folderId) {
+      where.generationFolders = { some: { folderId: filters.folderId } };
+    }
+
     const [generations, total] = await Promise.all([
       this.prisma.generation.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: pagination.skip,
-        take: pagination.limit,
+        skip: filters.skip,
+        take: filters.limit,
         include: {
           outputs: { orderBy: { order: 'asc' } },
           inputImages: { orderBy: { order: 'asc' } },
@@ -48,6 +59,7 @@ export class GalleryService {
       outputs: gen.outputs.map((o) => ({
         id: o.id,
         url: o.url,
+        thumbnailUrl: o.thumbnailUrl ?? undefined,
         mimeType: o.mimeType ?? undefined,
         order: o.order,
       })),
@@ -69,7 +81,7 @@ export class GalleryService {
       completedAt: gen.completedAt ?? undefined,
     }));
 
-    return new PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+    return new PaginatedResponseDto(data, total, filters.page, filters.limit);
   }
 
   async getStats(userId: string): Promise<GalleryStatsResponseDto> {

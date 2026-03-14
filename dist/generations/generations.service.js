@@ -484,6 +484,18 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 : {};
             updateData.parameters = { ...params, provider };
         }
+        const generation = await this.prisma.generation.findUnique({
+            where: { id: generationId },
+            select: { type: true },
+        });
+        const isImage = generation?.type === client_1.GenerationType.TEXT_TO_IMAGE ||
+            generation?.type === client_1.GenerationType.IMAGE_TO_IMAGE;
+        let thumbnailUrls = result.outputUrls.map(() => null);
+        if (isImage) {
+            thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
+                .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.jpg`)
+                .catch(() => null)));
+        }
         const [updatedGeneration] = await this.prisma.$transaction([
             this.prisma.generation.update({
                 where: { id: generationId },
@@ -493,6 +505,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 data: result.outputUrls.map((url, i) => ({
                     generationId,
                     url,
+                    thumbnailUrl: thumbnailUrls[i],
                     order: i,
                 })),
             }),
@@ -628,6 +641,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             outputs: generation.outputs.map((o) => ({
                 id: o.id,
                 url: o.url,
+                thumbnailUrl: o.thumbnailUrl ?? undefined,
                 mimeType: o.mimeType ?? undefined,
                 order: o.order,
             })),

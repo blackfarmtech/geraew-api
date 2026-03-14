@@ -9,6 +9,9 @@ export class GenerationOutputDto {
   url: string;
 
   @ApiPropertyOptional()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional()
   mimeType?: string;
 
   @ApiProperty()

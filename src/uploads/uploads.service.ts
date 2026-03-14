@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+import * as sharp from 'sharp';
 import { PresignedUrlDto } from './dto/presigned-url.dto';
 import { PresignedUrlResponseDto } from './dto/presigned-url-response.dto';
 
@@ -139,6 +140,85 @@ export class UploadsService {
     );
 
     this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
+    return this.getSignedReadUrl(fileKey);
+  }
+
+  /**
+   * Generates a thumbnail from an image URL, uploads it to S3 and returns its signed URL.
+   */
+  async generateThumbnail(
+    sourceUrl: string,
+    folder: string,
+    filename: string,
+    size = 256,
+  ): Promise<string> {
+    const fileKey = `${folder}/${randomUUID()}/${filename}`;
+
+    if (!this.s3Client) {
+      return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+    }
+
+    try {
+      const response = await fetch(sourceUrl);
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const thumbnail = await sharp(buffer)
+        .resize(size, size, { fit: 'cover' })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: fileKey,
+          Body: thumbnail,
+          ContentType: 'image/jpeg',
+        }),
+      );
+
+      this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
+      return this.getSignedReadUrl(fileKey);
+    } catch (error) {
+      this.logger.warn(`Failed to generate thumbnail: ${(error as Error).message}`);
+      return sourceUrl;
+    }
+  }
+
+  /**
+   * Same as generateThumbnail but throws on failure instead of returning sourceUrl.
+   */
+  async generateThumbnailDirect(
+    sourceUrl: string,
+    folder: string,
+    filename: string,
+    size = 256,
+  ): Promise<string> {
+    const fileKey = `${folder}/${randomUUID()}/${filename}`;
+
+    if (!this.s3Client) {
+      return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+    }
+
+    const response = await fetch(sourceUrl);
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const thumbnail = await sharp(buffer)
+      .resize(size, size, { fit: 'cover' })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileKey,
+        Body: thumbnail,
+        ContentType: 'image/jpeg',
+      }),
+    );
+
+    this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
     return this.getSignedReadUrl(fileKey);
   }
 

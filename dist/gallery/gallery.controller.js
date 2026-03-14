@@ -17,15 +17,15 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const gallery_service_1 = require("./gallery.service");
 const decorators_1 = require("../common/decorators");
-const pagination_dto_1 = require("../common/dto/pagination.dto");
+const gallery_filters_dto_1 = require("./dto/gallery-filters.dto");
 const gallery_stats_response_dto_1 = require("./dto/gallery-stats-response.dto");
 let GalleryController = class GalleryController {
     galleryService;
     constructor(galleryService) {
         this.galleryService = galleryService;
     }
-    async getGallery(userId, pagination) {
-        return this.galleryService.getGallery(userId, pagination);
+    async getGallery(userId, filters) {
+        return this.galleryService.getGallery(userId, filters);
     }
     async getStats(userId) {
         return this.galleryService.getStats(userId);
@@ -40,7 +40,7 @@ __decorate([
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, pagination_dto_1.PaginationDto]),
+    __metadata("design:paramtypes", [String, gallery_filters_dto_1.GalleryFiltersDto]),
     __metadata("design:returntype", Promise)
 ], GalleryController.prototype, "getGallery", null);
 __decorate([

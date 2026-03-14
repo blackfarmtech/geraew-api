@@ -28,6 +28,7 @@ const cron_module_1 = require("./cron/cron.module");
 const payments_module_1 = require("./payments/payments.module");
 const generations_module_1 = require("./generations/generations.module");
 const gallery_module_1 = require("./gallery/gallery.module");
+const folders_module_1 = require("./folders/folders.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -59,6 +60,7 @@ exports.AppModule = AppModule = __decorate([
             payments_module_1.PaymentsModule,
             generations_module_1.GenerationsModule,
             gallery_module_1.GalleryModule,
+            folders_module_1.FoldersModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

@@ -19,6 +19,7 @@ import { CronModule } from './cron/cron.module';
 import { PaymentsModule } from './payments/payments.module';
 import { GenerationsModule } from './generations/generations.module';
 import { GalleryModule } from './gallery/gallery.module';
+import { FoldersModule } from './folders/folders.module';
 
 
 @Module({
@@ -48,6 +49,7 @@ import { GalleryModule } from './gallery/gallery.module';
     PaymentsModule,
     GenerationsModule,
     GalleryModule,
+    FoldersModule,
   ],
   controllers: [AppController],
   providers: [

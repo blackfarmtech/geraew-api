@@ -2,6 +2,7 @@ import { GenerationType, GenerationStatus, Resolution, GenerationImageRole } fro
 export declare class GenerationOutputDto {
     id: string;
     url: string;
+    thumbnailUrl?: string;
     mimeType?: string;
     order: number;
 }

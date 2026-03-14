@@ -13,7 +13,7 @@ import {
 } from '@nestjs/swagger';
 import { GalleryService } from './gallery.service';
 import { CurrentUser } from '../common/decorators';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { GalleryFiltersDto } from './dto/gallery-filters.dto';
 import { GalleryStatsResponseDto } from './dto/gallery-stats-response.dto';
 
 @ApiTags('gallery')
@@ -28,9 +28,9 @@ export class GalleryController {
   @ApiResponse({ status: 200, description: 'Galeria retornada com sucesso' })
   async getGallery(
     @CurrentUser('sub') userId: string,
-    @Query() pagination: PaginationDto,
+    @Query() filters: GalleryFiltersDto,
   ) {
-    return this.galleryService.getGallery(userId, pagination);
+    return this.galleryService.getGallery(userId, filters);
   }
 
   @Get('stats')

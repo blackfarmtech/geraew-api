@@ -19,18 +19,28 @@ let GalleryService = class GalleryService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async getGallery(userId, pagination) {
+    async getGallery(userId, filters) {
         const where = {
             userId,
             status: client_1.GenerationStatus.COMPLETED,
             isDeleted: false,
         };
+        const types = filters.typeArray;
+        if (types && types.length > 0) {
+            where.type = types.length === 1 ? types[0] : { in: types };
+        }
+        if (filters.favorited !== undefined) {
+            where.isFavorited = filters.favorited;
+        }
+        if (filters.folderId) {
+            where.generationFolders = { some: { folderId: filters.folderId } };
+        }
         const [generations, total] = await Promise.all([
             this.prisma.generation.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
-                skip: pagination.skip,
-                take: pagination.limit,
+                skip: filters.skip,
+                take: filters.limit,
                 include: {
                     outputs: { orderBy: { order: 'asc' } },
                     inputImages: { orderBy: { order: 'asc' } },
@@ -52,6 +62,7 @@ let GalleryService = class GalleryService {
             outputs: gen.outputs.map((o) => ({
                 id: o.id,
                 url: o.url,
+                thumbnailUrl: o.thumbnailUrl ?? undefined,
                 mimeType: o.mimeType ?? undefined,
                 order: o.order,
             })),
@@ -72,7 +83,7 @@ let GalleryService = class GalleryService {
             createdAt: gen.createdAt,
             completedAt: gen.completedAt ?? undefined,
         }));
-        return new paginated_response_dto_1.PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+        return new paginated_response_dto_1.PaginatedResponseDto(data, total, filters.page, filters.limit);
     }
     async getStats(userId) {
         const baseWhere = {

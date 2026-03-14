@@ -49,7 +49,7 @@ type GenerationWithRelations = {
   isFavorited: boolean;
   createdAt: Date;
   completedAt: Date | null;
-  outputs: Array<{ id: string; url: string; mimeType: string | null; order: number }>;
+  outputs: Array<{ id: string; url: string; thumbnailUrl: string | null; mimeType: string | null; order: number }>;
   inputImages: Array<{
     id: string;
     role: GenerationImageRole;
@@ -757,6 +757,26 @@ export class GenerationsService {
       updateData.parameters = { ...params, provider };
     }
 
+    // Generate thumbnails for image outputs (skip videos)
+    const generation = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { type: true },
+    });
+    const isImage =
+      generation?.type === GenerationType.TEXT_TO_IMAGE ||
+      generation?.type === GenerationType.IMAGE_TO_IMAGE;
+
+    let thumbnailUrls: (string | null)[] = result.outputUrls.map(() => null);
+    if (isImage) {
+      thumbnailUrls = await Promise.all(
+        result.outputUrls.map((url, i) =>
+          this.uploadsService
+            .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.jpg`)
+            .catch(() => null),
+        ),
+      );
+    }
+
     const [updatedGeneration] = await this.prisma.$transaction([
       this.prisma.generation.update({
         where: { id: generationId },
@@ -766,6 +786,7 @@ export class GenerationsService {
         data: result.outputUrls.map((url, i) => ({
           generationId,
           url,
+          thumbnailUrl: thumbnailUrls[i],
           order: i,
         })),
       }),
@@ -953,6 +974,7 @@ export class GenerationsService {
       outputs: generation.outputs.map((o) => ({
         id: o.id,
         url: o.url,
+        thumbnailUrl: o.thumbnailUrl ?? undefined,
         mimeType: o.mimeType ?? undefined,
         order: o.order,
       })),

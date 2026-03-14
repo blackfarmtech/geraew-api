@@ -10,5 +10,7 @@ export declare class UploadsService {
     generatePresignedUrl(dto: PresignedUrlDto): Promise<PresignedUrlResponseDto>;
     uploadFromUrl(sourceUrl: string, folder: string, filename: string): Promise<string>;
     uploadBuffer(buffer: Buffer, folder: string, filename: string, contentType: string): Promise<string>;
+    generateThumbnail(sourceUrl: string, folder: string, filename: string, size?: number): Promise<string>;
+    generateThumbnailDirect(sourceUrl: string, folder: string, filename: string, size?: number): Promise<string>;
     getSignedReadUrl(fileKey: string): Promise<string>;
 }

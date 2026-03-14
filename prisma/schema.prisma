@@ -112,6 +112,7 @@ model User {
   payments            Payment[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  folders             Folder[]
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
@@ -289,6 +290,7 @@ model Generation {
   creditTransactions CreditTransaction[]
   inputImages        GenerationInputImage[]
   outputs            GenerationOutput[]
+  generationFolders  GenerationFolder[]
 
   @@index([userId])
   @@index([status])
@@ -320,6 +322,7 @@ model GenerationOutput {
   id           String  @id @default(cuid())
   generationId String  @map("generation_id")
   url          String
+  thumbnailUrl String? @map("thumbnail_url")
   mimeType     String? @map("mime_type")
   order        Int     @default(0)
 
@@ -405,4 +408,39 @@ model WebhookLog {
   @@index([provider, eventType])
   @@index([externalId])
   @@map("webhook_logs")
+}
+
+model Folder {
+  id          String  @id @default(cuid())
+  userId      String  @map("user_id")
+  name        String
+  description String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationFolders GenerationFolder[]
+
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("folders")
+}
+
+model GenerationFolder {
+  id           String @id @default(cuid())
+  generationId String @map("generation_id")
+  folderId     String @map("folder_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  generation Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  folder     Folder     @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@unique([generationId, folderId])
+  @@index([folderId])
+  @@index([generationId])
+  @@map("generation_folders")
 }
