@@ -263,4 +263,99 @@ export class CreditsService {
       }
     });
   }
+
+  async partialRefund(
+    userId: string,
+    refundAmount: number,
+    generationId: string,
+    description?: string,
+  ): Promise<void> {
+    if (refundAmount <= 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      const debitTransactions = await tx.creditTransaction.findMany({
+        where: {
+          generationId,
+          type: CreditTransactionType.GENERATION_DEBIT,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      let planRefund = 0;
+      let bonusRefund = 0;
+
+      if (debitTransactions.length > 0) {
+        const totalDebited = debitTransactions.reduce(
+          (sum, d) => sum + Math.abs(d.amount),
+          0,
+        );
+        const planDebited = debitTransactions
+          .filter((d) => d.source === 'plan')
+          .reduce((sum, d) => sum + Math.abs(d.amount), 0);
+        const bonusDebited = totalDebited - planDebited;
+
+        // Distribute refund proportionally based on original debit ratio
+        planRefund = Math.round((planDebited / totalDebited) * refundAmount);
+        bonusRefund = refundAmount - planRefund;
+
+        // Ensure we don't refund more than was debited from each source
+        if (planRefund > planDebited) {
+          planRefund = planDebited;
+          bonusRefund = refundAmount - planRefund;
+        }
+        if (bonusRefund > bonusDebited) {
+          bonusRefund = bonusDebited;
+          planRefund = refundAmount - bonusRefund;
+        }
+      } else {
+        bonusRefund = refundAmount;
+      }
+
+      const balance = await tx.creditBalance.findUnique({
+        where: { userId },
+      });
+
+      if (!balance) {
+        throw new NotFoundException('Saldo de créditos não encontrado');
+      }
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          planCreditsRemaining: balance.planCreditsRemaining + planRefund,
+          bonusCreditsRemaining: balance.bonusCreditsRemaining + bonusRefund,
+          planCreditsUsed: balance.planCreditsUsed - planRefund,
+        },
+      });
+
+      const refundDesc =
+        description || `Estorno parcial de ${refundAmount} créditos`;
+
+      if (planRefund > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.GENERATION_REFUND,
+            amount: planRefund,
+            source: 'plan',
+            description: refundDesc,
+            generationId,
+          },
+        });
+      }
+
+      if (bonusRefund > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.GENERATION_REFUND,
+            amount: bonusRefund,
+            source: 'bonus',
+            description: refundDesc,
+            generationId,
+          },
+        });
+      }
+    });
+  }
 }

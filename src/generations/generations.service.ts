@@ -760,7 +760,7 @@ export class GenerationsService {
     // Generate thumbnails for image outputs (skip videos)
     const generation = await this.prisma.generation.findUnique({
       where: { id: generationId },
-      select: { type: true },
+      select: { type: true, quantity: true, creditsConsumed: true, userId: true },
     });
     const isImage =
       generation?.type === GenerationType.TEXT_TO_IMAGE ||
@@ -775,6 +775,19 @@ export class GenerationsService {
             .catch(() => null),
         ),
       );
+    }
+
+    // Partial refund: if fewer outputs than requested quantity
+    const requestedCount = generation?.quantity ?? result.outputUrls.length;
+    const actualCount = result.outputUrls.length;
+    let creditsRefunded = 0;
+
+    if (actualCount < requestedCount && generation) {
+      const costPerUnit = Math.floor(generation.creditsConsumed / requestedCount);
+      const missingCount = requestedCount - actualCount;
+      creditsRefunded = costPerUnit * missingCount;
+
+      updateData.creditsConsumed = generation.creditsConsumed - creditsRefunded;
     }
 
     const [updatedGeneration] = await this.prisma.$transaction([
@@ -792,6 +805,19 @@ export class GenerationsService {
       }),
     ]);
 
+    if (creditsRefunded > 0 && generation) {
+      await this.creditsService.partialRefund(
+        generation.userId,
+        creditsRefunded,
+        generationId,
+        `Estorno parcial: ${actualCount}/${requestedCount} vídeos gerados`,
+      );
+
+      this.logger.log(
+        `Partial refund of ${creditsRefunded} credits for generation ${generationId} — ${actualCount}/${requestedCount} outputs`,
+      );
+    }
+
     this.generationEvents.emit({
       userId: updatedGeneration.userId,
       generationId,
@@ -799,6 +825,11 @@ export class GenerationsService {
       data: {
         outputUrls: result.outputUrls,
         processingTimeMs,
+        ...(creditsRefunded > 0 && {
+          creditsRefunded,
+          requestedCount,
+          actualCount,
+        }),
       },
     });
 
