@@ -5,6 +5,7 @@ export declare class UserResponseDto {
     avatarUrl?: string;
     role: string;
     emailVerified: boolean;
+    hasCompletedOnboarding: boolean;
     createdAt: Date;
 }
 export declare class AuthResponseDto {

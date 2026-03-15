@@ -56,6 +56,21 @@ export class UsersController {
     return this.usersService.updateProfile(userId, dto);
   }
 
+  @Patch('me/onboarding')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Marcar onboarding como concluído' })
+  @ApiResponse({
+    status: 200,
+    description: 'Onboarding concluído',
+    type: UserProfileResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  async completeOnboarding(
+    @CurrentUser('sub') userId: string,
+  ): Promise<UserProfileResponseDto> {
+    return this.usersService.completeOnboarding(userId);
+  }
+
   @Delete('me')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Desativar conta (soft delete)' })

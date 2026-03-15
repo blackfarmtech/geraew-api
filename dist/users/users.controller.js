@@ -30,6 +30,9 @@ let UsersController = class UsersController {
     async updateProfile(userId, dto) {
         return this.usersService.updateProfile(userId, dto);
     }
+    async completeOnboarding(userId) {
+        return this.usersService.completeOnboarding(userId);
+    }
     async deleteAccount(userId) {
         return this.usersService.deleteAccount(userId);
     }
@@ -65,6 +68,21 @@ __decorate([
     __metadata("design:paramtypes", [String, update_user_dto_1.UpdateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "updateProfile", null);
+__decorate([
+    (0, common_1.Patch)('me/onboarding'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Marcar onboarding como concluído' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Onboarding concluído',
+        type: user_profile_response_dto_1.UserProfileResponseDto,
+    }),
+    (0, swagger_1.ApiResponse)({ status: 401, description: 'Não autenticado' }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "completeOnboarding", null);
 __decorate([
     (0, common_1.Delete)('me'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),

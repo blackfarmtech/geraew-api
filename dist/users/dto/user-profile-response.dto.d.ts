@@ -27,6 +27,7 @@ export declare class UserProfileResponseDto {
     role: string;
     emailVerified: boolean;
     createdAt: Date;
+    hasCompletedOnboarding: boolean;
     plan: PlanInfoDto | null;
     credits: CreditInfoDto | null;
     subscription: SubscriptionInfoDto | null;

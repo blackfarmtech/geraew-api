@@ -20,6 +20,9 @@ export class UserResponseDto {
   emailVerified: boolean;
 
   @ApiProperty()
+  hasCompletedOnboarding: boolean;
+
+  @ApiProperty()
   createdAt: Date;
 }
 

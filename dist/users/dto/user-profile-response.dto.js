@@ -103,6 +103,7 @@ class UserProfileResponseDto {
     role;
     emailVerified;
     createdAt;
+    hasCompletedOnboarding;
     plan;
     credits;
     subscription;
@@ -136,6 +137,10 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Date)
 ], UserProfileResponseDto.prototype, "createdAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Boolean)
+], UserProfileResponseDto.prototype, "hasCompletedOnboarding", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     __metadata("design:type", Object)

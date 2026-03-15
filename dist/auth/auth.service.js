@@ -122,6 +122,7 @@ let AuthService = AuthService_1 = class AuthService {
             avatarUrl: user.avatarUrl || '',
             role: user.role,
             emailVerified: user.emailVerified,
+            hasCompletedOnboarding: user.hasCompletedOnboarding,
             createdAt: user.createdAt,
         };
     }

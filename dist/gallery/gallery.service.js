@@ -29,8 +29,8 @@ let GalleryService = class GalleryService {
         if (types && types.length > 0) {
             where.type = types.length === 1 ? types[0] : { in: types };
         }
-        if (filters.favorited !== undefined) {
-            where.isFavorited = filters.favorited;
+        if (filters.favorited === true) {
+            where.isFavorited = true;
         }
         if (filters.folderId) {
             where.generationFolders = { some: { folderId: filters.folderId } };

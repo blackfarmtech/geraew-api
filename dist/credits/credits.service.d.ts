@@ -15,8 +15,8 @@ export declare class CreditsService {
     getPackages(): Promise<{
         name: string;
         id: string;
-        createdAt: Date;
         isActive: boolean;
+        createdAt: Date;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;
@@ -25,4 +25,5 @@ export declare class CreditsService {
     estimateCost(userId: string, type: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number): Promise<EstimateCostResponseDto>;
     debit(userId: string, amount: number, type: CreditTransactionType, generationId?: string, description?: string): Promise<void>;
     refund(userId: string, amount: number, generationId: string): Promise<void>;
+    partialRefund(userId: string, refundAmount: number, generationId: string, description?: string): Promise<void>;
 }

@@ -486,7 +486,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         }
         const generation = await this.prisma.generation.findUnique({
             where: { id: generationId },
-            select: { type: true },
+            select: { type: true, quantity: true, creditsConsumed: true, userId: true },
         });
         const isImage = generation?.type === client_1.GenerationType.TEXT_TO_IMAGE ||
             generation?.type === client_1.GenerationType.IMAGE_TO_IMAGE;
@@ -495,6 +495,15 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
                 .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.jpg`)
                 .catch(() => null)));
+        }
+        const requestedCount = generation?.quantity ?? result.outputUrls.length;
+        const actualCount = result.outputUrls.length;
+        let creditsRefunded = 0;
+        if (actualCount < requestedCount && generation) {
+            const costPerUnit = Math.floor(generation.creditsConsumed / requestedCount);
+            const missingCount = requestedCount - actualCount;
+            creditsRefunded = costPerUnit * missingCount;
+            updateData.creditsConsumed = generation.creditsConsumed - creditsRefunded;
         }
         const [updatedGeneration] = await this.prisma.$transaction([
             this.prisma.generation.update({
@@ -510,6 +519,10 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 })),
             }),
         ]);
+        if (creditsRefunded > 0 && generation) {
+            await this.creditsService.partialRefund(generation.userId, creditsRefunded, generationId, `Estorno parcial: ${actualCount}/${requestedCount} vídeos gerados`);
+            this.logger.log(`Partial refund of ${creditsRefunded} credits for generation ${generationId} — ${actualCount}/${requestedCount} outputs`);
+        }
         this.generationEvents.emit({
             userId: updatedGeneration.userId,
             generationId,
@@ -517,6 +530,11 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             data: {
                 outputUrls: result.outputUrls,
                 processingTimeMs,
+                ...(creditsRefunded > 0 && {
+                    creditsRefunded,
+                    requestedCount,
+                    actualCount,
+                }),
             },
         });
         this.logger.log(`Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`);

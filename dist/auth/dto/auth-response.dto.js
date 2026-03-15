@@ -18,6 +18,7 @@ class UserResponseDto {
     avatarUrl;
     role;
     emailVerified;
+    hasCompletedOnboarding;
     createdAt;
 }
 exports.UserResponseDto = UserResponseDto;
@@ -45,6 +46,10 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)
 ], UserResponseDto.prototype, "emailVerified", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Boolean)
+], UserResponseDto.prototype, "hasCompletedOnboarding", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Date)

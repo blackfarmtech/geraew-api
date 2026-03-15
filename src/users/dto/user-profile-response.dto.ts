@@ -32,6 +32,7 @@ export class UserProfileResponseDto {
   @ApiProperty() role: string;
   @ApiProperty() emailVerified: boolean;
   @ApiProperty() createdAt: Date;
+  @ApiProperty() hasCompletedOnboarding: boolean;
   @ApiPropertyOptional() plan: PlanInfoDto | null;
   @ApiPropertyOptional() credits: CreditInfoDto | null;
   @ApiPropertyOptional() subscription: SubscriptionInfoDto | null;

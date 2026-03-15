@@ -35,6 +35,7 @@ export class UsersService {
       role: user.role,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
+      hasCompletedOnboarding: user.hasCompletedOnboarding,
       plan: activeSubscription
         ? {
             slug: activeSubscription.plan.slug,
@@ -86,6 +87,54 @@ export class UsersService {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
       },
+    });
+
+    return this.getProfile(userId);
+  }
+
+  async completeOnboarding(userId: string): Promise<UserProfileResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isActive: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    if (user.hasCompletedOnboarding) {
+      return this.getProfile(userId);
+    }
+
+    const ONBOARDING_BONUS_CREDITS = 50;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { hasCompletedOnboarding: true },
+      });
+
+      await tx.creditBalance.upsert({
+        where: { userId },
+        create: {
+          userId,
+          planCreditsRemaining: 0,
+          bonusCreditsRemaining: ONBOARDING_BONUS_CREDITS,
+          planCreditsUsed: 0,
+        },
+        update: {
+          bonusCreditsRemaining: { increment: ONBOARDING_BONUS_CREDITS },
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          type: 'ONBOARDING_BONUS',
+          amount: ONBOARDING_BONUS_CREDITS,
+          source: 'bonus',
+          description: 'Bônus por completar o onboarding',
+        },
+      });
     });
 
     return this.getProfile(userId);

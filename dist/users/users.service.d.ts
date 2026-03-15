@@ -6,6 +6,7 @@ export declare class UsersService {
     constructor(prisma: PrismaService);
     getProfile(userId: string): Promise<UserProfileResponseDto>;
     updateProfile(userId: string, dto: UpdateUserDto): Promise<UserProfileResponseDto>;
+    completeOnboarding(userId: string): Promise<UserProfileResponseDto>;
     deleteAccount(userId: string): Promise<{
         message: string;
     }>;
