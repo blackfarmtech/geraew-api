@@ -8,7 +8,7 @@ import { GalleryStatsResponseDto } from './dto/gallery-stats-response.dto';
 
 @Injectable()
 export class GalleryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async getGallery(
     userId: string,

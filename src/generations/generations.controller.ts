@@ -28,6 +28,7 @@ import {
   GenerationResponseDto,
   CreateGenerationResponseDto,
 } from './dto/generation-response.dto';
+import { FolderResponseDto } from '../folders/dto/folder-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
@@ -153,6 +154,17 @@ export class GenerationsController {
     @Param('id') id: string,
   ): Promise<GenerationResponseDto> {
     return this.generationsService.findById(userId, id);
+  }
+
+  @Get(':id/folders')
+  @ApiOperation({ summary: 'Lista as pastas em que uma geração está' })
+  @ApiResponse({ status: 200, type: [FolderResponseDto] })
+  @ApiParam({ name: 'id', description: 'ID da geração' })
+  async findFolders(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ): Promise<FolderResponseDto[]> {
+    return this.generationsService.findFolders(userId, id);
   }
 
   @Delete(':id')
