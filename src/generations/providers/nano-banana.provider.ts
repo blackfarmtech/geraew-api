@@ -90,13 +90,14 @@ export class NanoBananaProvider {
       },
     };
 
-    const createResponse = await fetch(
+    const createResponse = await this.fetchWithTimeout(
       `${this.baseUrl}/api/v1/jobs/createTask`,
       {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(body),
       },
+      60_000,
     );
 
     if (!createResponse.ok) {
@@ -148,9 +149,10 @@ export class NanoBananaProvider {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
 
-      const response = await fetch(
+      const response = await this.fetchWithTimeout(
         `${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`,
         { headers: this.headers() },
+        30_000,
       );
 
       if (!response.ok) {
@@ -198,7 +200,7 @@ export class NanoBananaProvider {
     index: number,
     format: string,
   ): Promise<string> {
-    const response = await fetch(sourceUrl);
+    const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
     if (!response.ok) {
       throw new Error(
         `Failed to download image from Nano Banana (${response.status}): ${sourceUrl}`,
@@ -214,6 +216,20 @@ export class NanoBananaProvider {
       `output_${index}.${ext}`,
       mimeType,
     );
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private headers(): Record<string, string> {

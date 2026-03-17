@@ -21,6 +21,7 @@ const generation_events_service_1 = require("./generation-events.service");
 const decorators_1 = require("../common/decorators");
 const generation_filters_dto_1 = require("./dto/generation-filters.dto");
 const generation_response_dto_1 = require("./dto/generation-response.dto");
+const folder_response_dto_1 = require("../folders/dto/folder-response.dto");
 const generate_image_dto_1 = require("./dto/generate-image.dto");
 const generate_image_nano_banana_dto_1 = require("./dto/generate-image-nano-banana.dto");
 const generate_video_text_to_video_dto_1 = require("./dto/videos/generate-video-text-to-video.dto");
@@ -62,6 +63,9 @@ let GenerationsController = class GenerationsController {
     }
     async findById(userId, id) {
         return this.generationsService.findById(userId, id);
+    }
+    async findFolders(userId, id) {
+        return this.generationsService.findFolders(userId, id);
     }
     async softDelete(userId, id) {
         return this.generationsService.softDelete(userId, id);
@@ -182,6 +186,17 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "findById", null);
+__decorate([
+    (0, common_1.Get)(':id/folders'),
+    (0, swagger_1.ApiOperation)({ summary: 'Lista as pastas em que uma geração está' }),
+    (0, swagger_1.ApiResponse)({ status: 200, type: [folder_response_dto_1.FolderResponseDto] }),
+    (0, swagger_1.ApiParam)({ name: 'id', description: 'ID da geração' }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], GenerationsController.prototype, "findFolders", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),

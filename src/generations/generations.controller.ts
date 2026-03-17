@@ -19,7 +19,7 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
-import { Observable, map } from 'rxjs';
+import { Observable, map, merge, interval } from 'rxjs';
 import { GenerationsService } from './generations.service';
 import { GenerationEventsService } from './generation-events.service';
 import { CurrentUser } from '../common/decorators';
@@ -48,9 +48,13 @@ export class GenerationsController {
   @Sse('events')
   @ApiOperation({ summary: 'SSE — recebe eventos de todas as gerações do usuário em tempo real' })
   sseAll(@CurrentUser('sub') userId: string): Observable<MessageEvent> {
-    return this.generationEvents.subscribe(userId).pipe(
+    const events$ = this.generationEvents.subscribe(userId).pipe(
       map((event: any) => ({ data: event } as MessageEvent)),
     );
+    const heartbeat$ = interval(20_000).pipe(
+      map(() => ({ data: { type: 'heartbeat' } } as unknown as MessageEvent)),
+    );
+    return merge(events$, heartbeat$);
   }
 
   @Sse(':id/events')
@@ -60,9 +64,13 @@ export class GenerationsController {
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,
   ): Observable<MessageEvent> {
-    return this.generationEvents.subscribeToGeneration(userId, id).pipe(
+    const events$ = this.generationEvents.subscribeToGeneration(userId, id).pipe(
       map((event: any) => ({ data: event } as MessageEvent)),
     );
+    const heartbeat$ = interval(20_000).pipe(
+      map(() => ({ data: { type: 'heartbeat' } } as unknown as MessageEvent)),
+    );
+    return merge(events$, heartbeat$);
   }
 
   @Post('generate-image')

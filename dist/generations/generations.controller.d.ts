@@ -3,6 +3,7 @@ import { GenerationsService } from './generations.service';
 import { GenerationEventsService } from './generation-events.service';
 import { GenerationFiltersDto } from './dto/generation-filters.dto';
 import { GenerationResponseDto, CreateGenerationResponseDto } from './dto/generation-response.dto';
+import { FolderResponseDto } from '../folders/dto/folder-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
@@ -23,6 +24,7 @@ export declare class GenerationsController {
     videoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
     findAll(userId: string, filters: GenerationFiltersDto): Promise<PaginatedResponseDto<GenerationResponseDto>>;
     findById(userId: string, id: string): Promise<GenerationResponseDto>;
+    findFolders(userId: string, id: string): Promise<FolderResponseDto[]>;
     softDelete(userId: string, id: string): Promise<void>;
     addFavorite(userId: string, id: string): Promise<void>;
     removeFavorite(userId: string, id: string): Promise<void>;

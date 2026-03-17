@@ -5,12 +5,12 @@ export declare class PaymentsService {
     private readonly logger;
     constructor(prisma: PrismaService);
     createPayment(userId: string, type: PaymentType, amountCents: number, provider: string, metadata?: Prisma.InputJsonValue): Promise<{
+        type: import(".prisma/client").$Enums.PaymentType;
         id: string;
         createdAt: Date;
         updatedAt: Date;
         userId: string;
         status: import(".prisma/client").$Enums.PaymentStatus;
-        type: import(".prisma/client").$Enums.PaymentType;
         metadata: Prisma.JsonValue | null;
         provider: string;
         currency: string;
@@ -21,12 +21,12 @@ export declare class PaymentsService {
         creditPackageId: string | null;
     }>;
     updatePaymentStatus(id: string, status: PaymentStatus, externalPaymentId?: string): Promise<{
+        type: import(".prisma/client").$Enums.PaymentType;
         id: string;
         createdAt: Date;
         updatedAt: Date;
         userId: string;
         status: import(".prisma/client").$Enums.PaymentStatus;
-        type: import(".prisma/client").$Enums.PaymentType;
         metadata: Prisma.JsonValue | null;
         provider: string;
         currency: string;
@@ -37,12 +37,12 @@ export declare class PaymentsService {
         creditPackageId: string | null;
     }>;
     findByExternalPaymentId(externalPaymentId: string): Promise<{
+        type: import(".prisma/client").$Enums.PaymentType;
         id: string;
         createdAt: Date;
         updatedAt: Date;
         userId: string;
         status: import(".prisma/client").$Enums.PaymentStatus;
-        type: import(".prisma/client").$Enums.PaymentType;
         metadata: Prisma.JsonValue | null;
         provider: string;
         currency: string;

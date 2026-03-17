@@ -40,6 +40,14 @@ export declare class GenerationsService {
     private completeGeneration;
     private handleFailure;
     findById(userId: string, generationId: string): Promise<GenerationResponseDto>;
+    findFolders(userId: string, generationId: string): Promise<{
+        id: string;
+        name: string;
+        description: string | undefined;
+        generationCount: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }[]>;
     findAll(userId: string, filters: GenerationFiltersDto): Promise<PaginatedResponseDto<GenerationResponseDto>>;
     softDelete(userId: string, generationId: string): Promise<void>;
     toggleFavorite(userId: string, generationId: string, isFavorited: boolean): Promise<void>;

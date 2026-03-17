@@ -126,11 +126,11 @@ export class GeraewProvider {
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await this.fetchWithTimeout(url, {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(body),
-      });
+      }, 60_000);
     } catch (error) {
       this.logger.error(`[IMAGE] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
       throw error;
@@ -272,11 +272,11 @@ export class GeraewProvider {
 
     let startResponse: Response;
     try {
-      startResponse = await fetch(url, {
+      startResponse = await this.fetchWithTimeout(url, {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(body),
-      });
+      }, 60_000);
     } catch (error) {
       this.logger.error(`[VIDEO] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
       throw error;
@@ -344,11 +344,11 @@ export class GeraewProvider {
       const statusUrl = `${this.baseUrl}/api/video/status`;
       let response: Response;
       try {
-        response = await fetch(statusUrl, {
+        response = await this.fetchWithTimeout(statusUrl, {
           method: 'POST',
           headers: this.headers(),
           body: JSON.stringify({ operationName }),
-        });
+        }, 30_000);
         networkFailures = 0; // reset on success
       } catch (error) {
         networkFailures++;
@@ -403,13 +403,27 @@ export class GeraewProvider {
       'gs://',
       'https://storage.googleapis.com/',
     );
-    const response = await fetch(httpsUrl);
+    const response = await this.fetchWithTimeout(httpsUrl, {}, 120_000);
     if (!response.ok) {
       throw new Error(
         `Failed to download video from GCS (${response.status}): ${httpsUrl}`,
       );
     }
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private headers(): Record<string, string> {

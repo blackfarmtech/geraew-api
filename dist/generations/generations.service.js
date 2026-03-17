@@ -579,6 +579,31 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         }
         return this.toResponseDto(generation);
     }
+    async findFolders(userId, generationId) {
+        const generation = await this.prisma.generation.findFirst({
+            where: { id: generationId, userId, isDeleted: false },
+            select: { id: true },
+        });
+        if (!generation) {
+            throw new common_1.NotFoundException('Geração não encontrada');
+        }
+        const generationFolders = await this.prisma.generationFolder.findMany({
+            where: { generationId },
+            include: {
+                folder: {
+                    include: { _count: { select: { generationFolders: true } } },
+                },
+            },
+        });
+        return generationFolders.map((gf) => ({
+            id: gf.folder.id,
+            name: gf.folder.name,
+            description: gf.folder.description ?? undefined,
+            generationCount: gf.folder._count.generationFolders,
+            createdAt: gf.folder.createdAt,
+            updatedAt: gf.folder.updatedAt,
+        }));
+    }
     async findAll(userId, filters) {
         const where = {
             userId,

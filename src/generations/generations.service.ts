@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditsService } from '../credits/credits.service';
@@ -90,6 +92,7 @@ export class GenerationsService {
       dto.resolution,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -153,6 +156,7 @@ export class GenerationsService {
       dto.resolution,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -218,6 +222,7 @@ export class GenerationsService {
       dto.resolution,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -301,6 +306,7 @@ export class GenerationsService {
       sampleCount,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -353,6 +359,7 @@ export class GenerationsService {
       sampleCount,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -443,6 +450,7 @@ export class GenerationsService {
       sampleCount,
     );
 
+    await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, creditsRequired);
 
     const generation = await this.prisma.generation.create({
@@ -699,6 +707,31 @@ export class GenerationsService {
   }
 
   // ─── Shared helpers ───────────────────────────────────────
+
+  private async checkConcurrentLimit(userId: string): Promise<void> {
+    const [processingCount, subscription] = await Promise.all([
+      this.prisma.generation.count({
+        where: { userId, status: GenerationStatus.PROCESSING },
+      }),
+      this.prisma.subscription.findFirst({
+        where: { userId, status: 'ACTIVE' },
+        select: { plan: { select: { maxConcurrentGenerations: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const maxConcurrent = subscription?.plan.maxConcurrentGenerations ?? 5;
+
+    if (processingCount >= maxConcurrent) {
+      throw new HttpException(
+        {
+          code: 'MAX_CONCURRENT_REACHED',
+          message: `Limite de ${maxConcurrent} geração(ões) simultânea(s) atingido. Aguarde uma geração concluir antes de iniciar outra.`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
 
   private async ensureSufficientBalance(
     userId: string,

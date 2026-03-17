@@ -19,8 +19,8 @@ export declare class CreditsController {
     getPackages(): Promise<{
         name: string;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;
