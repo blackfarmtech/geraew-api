@@ -8,42 +8,42 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var GenerationsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GenerationsService = void 0;
 const common_1 = require("@nestjs/common");
+const bullmq_1 = require("@nestjs/bullmq");
+const bullmq_2 = require("bullmq");
 const prisma_service_1 = require("../prisma/prisma.service");
 const credits_service_1 = require("../credits/credits.service");
 const plans_service_1 = require("../plans/plans.service");
 const client_1 = require("@prisma/client");
 const paginated_response_dto_1 = require("../common/dto/paginated-response.dto");
 const uploads_service_1 = require("../uploads/uploads.service");
-const geraew_provider_1 = require("./providers/geraew.provider");
-const nano_banana_provider_1 = require("./providers/nano-banana.provider");
-const generation_events_service_1 = require("./generation-events.service");
+const generation_queue_constants_1 = require("./queue/generation-queue.constants");
 let GenerationsService = GenerationsService_1 = class GenerationsService {
     prisma;
     creditsService;
     plansService;
     uploadsService;
-    geraewProvider;
-    nanoBananaProvider;
-    generationEvents;
+    generationQueue;
     logger = new common_1.Logger(GenerationsService_1.name);
-    constructor(prisma, creditsService, plansService, uploadsService, geraewProvider, nanoBananaProvider, generationEvents) {
+    constructor(prisma, creditsService, plansService, uploadsService, generationQueue) {
         this.prisma = prisma;
         this.creditsService = creditsService;
         this.plansService = plansService;
         this.uploadsService = uploadsService;
-        this.geraewProvider = geraewProvider;
-        this.nanoBananaProvider = nanoBananaProvider;
-        this.generationEvents = generationEvents;
+        this.generationQueue = generationQueue;
     }
     async generateImage(userId, dto) {
         const type = dto.images?.length
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -72,8 +72,16 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             });
         }
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processImageGeneration(generation.id, dto).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.IMAGE, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model,
+            resolution: dto.resolution,
+            aspectRatio: dto.aspect_ratio,
+            mimeType: dto.mime_type,
+            hasInputImages: !!dto.images?.length,
         });
         return {
             id: generation.id,
@@ -86,6 +94,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -114,8 +123,16 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             });
         }
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processImageWithFallback(generation.id, userId, creditsRequired, dto).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.IMAGE_WITH_FALLBACK, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model,
+            resolution: dto.resolution,
+            aspectRatio: dto.aspect_ratio,
+            mimeType: dto.mime_type,
+            hasInputImages: !!dto.images?.length,
         });
         return {
             id: generation.id,
@@ -128,6 +145,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -161,8 +179,17 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             imageUrls = uploadedUrls;
         }
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processNanoBananaImageGeneration(generation.id, dto, imageUrls).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.IMAGE_NANO_BANANA, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model ?? 'nano-banana-2',
+            resolution: dto.resolution,
+            aspectRatio: dto.aspect_ratio,
+            outputFormat: dto.output_format,
+            googleSearch: dto.google_search,
+            imageUrls,
         });
         return {
             id: generation.id,
@@ -175,6 +202,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -193,8 +221,18 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             },
         });
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processTextToVideoGeneration(generation.id, dto).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.TEXT_TO_VIDEO, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model,
+            resolution: dto.resolution,
+            durationSeconds: dto.duration_seconds,
+            aspectRatio: dto.aspect_ratio,
+            generateAudio: hasAudio,
+            sampleCount,
+            negativePrompt: dto.negative_prompt,
         });
         return {
             id: generation.id,
@@ -208,6 +246,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -247,8 +286,19 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         }
         await this.prisma.generationInputImage.createMany({ data: inputImageData });
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processImageToVideoGeneration(generation.id, dto, model).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.IMAGE_TO_VIDEO, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model ?? model,
+            resolution: dto.resolution,
+            durationSeconds: dto.duration_seconds,
+            aspectRatio: dto.aspect_ratio,
+            generateAudio: hasAudio,
+            sampleCount,
+            negativePrompt: dto.negative_prompt,
+            resolvedModel: model,
         });
         return {
             id: generation.id,
@@ -262,6 +312,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
             data: {
@@ -293,8 +344,19 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             });
         }
         await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
-        this.processReferenceVideoGeneration(generation.id, dto, model).catch((error) => {
-            this.handleFailure(generation.id, userId, creditsRequired, error);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.REFERENCE_VIDEO, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            prompt: dto.prompt,
+            model: dto.model ?? model,
+            resolution: dto.resolution,
+            durationSeconds: dto.duration_seconds,
+            aspectRatio: dto.aspect_ratio,
+            generateAudio: hasAudio,
+            sampleCount,
+            negativePrompt: dto.negative_prompt,
+            resolvedModel: model,
         });
         return {
             id: generation.id,
@@ -302,156 +364,24 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             creditsConsumed: creditsRequired,
         };
     }
-    async processImageGeneration(generationId, dto) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        const result = await this.geraewProvider.generateImage({
-            id: generationId,
-            prompt: dto.prompt,
-            model: dto.model,
-            resolution: dto.resolution,
-            aspectRatio: dto.aspect_ratio,
-            mimeType: dto.mime_type,
-            images: dto.images?.map((img) => ({
-                base64: img.base64,
-                mimeType: img.mime_type ?? 'image/png',
-            })),
-        });
-        await this.completeGeneration(generationId, result, startTime);
-    }
-    async processImageWithFallback(generationId, userId, creditsConsumed, dto) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        try {
-            const result = await this.geraewProvider.generateImage({
-                id: generationId,
-                prompt: dto.prompt,
-                model: dto.model,
-                resolution: dto.resolution,
-                aspectRatio: dto.aspect_ratio,
-                mimeType: dto.mime_type,
-                images: dto.images?.map((img) => ({
-                    base64: img.base64,
-                    mimeType: img.mime_type ?? 'image/png',
-                })),
-            });
-            await this.completeGeneration(generationId, result, startTime, 'geraew');
+    async checkConcurrentLimit(userId) {
+        const [processingCount, subscription] = await Promise.all([
+            this.prisma.generation.count({
+                where: { userId, status: client_1.GenerationStatus.PROCESSING },
+            }),
+            this.prisma.subscription.findFirst({
+                where: { userId, status: 'ACTIVE' },
+                select: { plan: { select: { maxConcurrentGenerations: true } } },
+                orderBy: { createdAt: 'desc' },
+            }),
+        ]);
+        const maxConcurrent = subscription?.plan.maxConcurrentGenerations ?? 5;
+        if (processingCount >= maxConcurrent) {
+            throw new common_1.HttpException({
+                code: 'MAX_CONCURRENT_REACHED',
+                message: `Limite de ${maxConcurrent} geração(ões) simultânea(s) atingido. Aguarde uma geração concluir antes de iniciar outra.`,
+            }, common_1.HttpStatus.TOO_MANY_REQUESTS);
         }
-        catch (geraewError) {
-            this.logger.warn(`Geraew failed for ${generationId}, falling back to Nano Banana: ${geraewError.message}`);
-            try {
-                const inputImages = await this.prisma.generationInputImage.findMany({
-                    where: { generationId },
-                });
-                const imageUrls = inputImages
-                    .map((img) => img.url)
-                    .filter(Boolean);
-                const nanaBananaModel = (0, nano_banana_provider_1.mapGeminiToNanoBanana)(dto.model);
-                const result = await this.nanoBananaProvider.generateImage({
-                    id: generationId,
-                    model: nanaBananaModel,
-                    prompt: dto.prompt,
-                    resolution: dto.resolution,
-                    aspectRatio: dto.aspect_ratio,
-                    outputFormat: dto.mime_type === 'image/jpeg' ? 'jpg' : 'png',
-                    imageUrls: imageUrls.length ? imageUrls : undefined,
-                });
-                await this.completeGeneration(generationId, result, startTime, nanaBananaModel);
-            }
-            catch (fallbackError) {
-                throw fallbackError;
-            }
-        }
-    }
-    async processNanoBananaImageGeneration(generationId, dto, imageUrls) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        const result = await this.nanoBananaProvider.generateImage({
-            id: generationId,
-            model: dto.model,
-            prompt: dto.prompt,
-            resolution: dto.resolution,
-            aspectRatio: dto.aspect_ratio,
-            outputFormat: dto.output_format,
-            googleSearch: dto.google_search,
-            imageUrls,
-        });
-        await this.completeGeneration(generationId, result, startTime);
-    }
-    async processTextToVideoGeneration(generationId, dto) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        const result = await this.geraewProvider.generateTextToVideo({
-            id: generationId,
-            prompt: dto.prompt,
-            model: dto.model,
-            resolution: dto.resolution,
-            durationSeconds: dto.duration_seconds,
-            aspectRatio: dto.aspect_ratio,
-            generateAudio: dto.generate_audio ?? true,
-            sampleCount: dto.sample_count,
-            negativePrompt: dto.negative_prompt,
-        });
-        await this.completeGeneration(generationId, result, startTime);
-    }
-    async processImageToVideoGeneration(generationId, dto, model) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        const result = await this.geraewProvider.generateImageToVideo({
-            id: generationId,
-            prompt: dto.prompt,
-            model,
-            resolution: dto.resolution,
-            durationSeconds: dto.duration_seconds,
-            aspectRatio: dto.aspect_ratio,
-            generateAudio: dto.generate_audio ?? true,
-            sampleCount: dto.sample_count,
-            negativePrompt: dto.negative_prompt,
-            firstFrame: dto.first_frame,
-            firstFrameMimeType: dto.first_frame_mime_type ?? 'image/jpeg',
-            lastFrame: dto.last_frame,
-            lastFrameMimeType: dto.last_frame_mime_type,
-        });
-        await this.completeGeneration(generationId, result, startTime);
-    }
-    async processReferenceVideoGeneration(generationId, dto, model) {
-        const startTime = Date.now();
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: { processingStartedAt: new Date() },
-        });
-        const result = await this.geraewProvider.generateVideoWithReferences({
-            id: generationId,
-            prompt: dto.prompt,
-            model,
-            resolution: dto.resolution,
-            durationSeconds: dto.duration_seconds,
-            aspectRatio: dto.aspect_ratio,
-            generateAudio: dto.generate_audio ?? true,
-            sampleCount: dto.sample_count,
-            negativePrompt: dto.negative_prompt,
-            referenceImages: (dto.reference_images ?? []).map((ref) => ({
-                base64: ref.base64,
-                mimeType: ref.mime_type ?? 'image/jpeg',
-                referenceType: ref.reference_type,
-            })),
-        });
-        await this.completeGeneration(generationId, result, startTime);
     }
     async ensureSufficientBalance(userId, creditsRequired) {
         const balance = await this.creditsService.getBalance(userId);
@@ -465,102 +395,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     }
     async debitCredits(userId, creditsRequired, generationId, type, resolution) {
         await this.creditsService.debit(userId, creditsRequired, client_1.CreditTransactionType.GENERATION_DEBIT, generationId, `Geração ${type} ${resolution}`);
-    }
-    async completeGeneration(generationId, result, startTime, provider) {
-        const processingTimeMs = Date.now() - startTime;
-        const updateData = {
-            status: client_1.GenerationStatus.COMPLETED,
-            modelUsed: result.modelUsed,
-            processingTimeMs,
-            completedAt: new Date(),
-        };
-        if (provider) {
-            const existing = await this.prisma.generation.findUnique({
-                where: { id: generationId },
-                select: { parameters: true },
-            });
-            const params = existing?.parameters && typeof existing.parameters === 'object'
-                ? existing.parameters
-                : {};
-            updateData.parameters = { ...params, provider };
-        }
-        const generation = await this.prisma.generation.findUnique({
-            where: { id: generationId },
-            select: { type: true, quantity: true, creditsConsumed: true, userId: true },
-        });
-        const isImage = generation?.type === client_1.GenerationType.TEXT_TO_IMAGE ||
-            generation?.type === client_1.GenerationType.IMAGE_TO_IMAGE;
-        let thumbnailUrls = result.outputUrls.map(() => null);
-        if (isImage) {
-            thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
-                .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.jpg`)
-                .catch(() => null)));
-        }
-        const requestedCount = generation?.quantity ?? result.outputUrls.length;
-        const actualCount = result.outputUrls.length;
-        let creditsRefunded = 0;
-        if (actualCount < requestedCount && generation) {
-            const costPerUnit = Math.floor(generation.creditsConsumed / requestedCount);
-            const missingCount = requestedCount - actualCount;
-            creditsRefunded = costPerUnit * missingCount;
-            updateData.creditsConsumed = generation.creditsConsumed - creditsRefunded;
-        }
-        const [updatedGeneration] = await this.prisma.$transaction([
-            this.prisma.generation.update({
-                where: { id: generationId },
-                data: updateData,
-            }),
-            this.prisma.generationOutput.createMany({
-                data: result.outputUrls.map((url, i) => ({
-                    generationId,
-                    url,
-                    thumbnailUrl: thumbnailUrls[i],
-                    order: i,
-                })),
-            }),
-        ]);
-        if (creditsRefunded > 0 && generation) {
-            await this.creditsService.partialRefund(generation.userId, creditsRefunded, generationId, `Estorno parcial: ${actualCount}/${requestedCount} vídeos gerados`);
-            this.logger.log(`Partial refund of ${creditsRefunded} credits for generation ${generationId} — ${actualCount}/${requestedCount} outputs`);
-        }
-        this.generationEvents.emit({
-            userId: updatedGeneration.userId,
-            generationId,
-            status: 'completed',
-            data: {
-                outputUrls: result.outputUrls,
-                processingTimeMs,
-                ...(creditsRefunded > 0 && {
-                    creditsRefunded,
-                    requestedCount,
-                    actualCount,
-                }),
-            },
-        });
-        this.logger.log(`Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`);
-    }
-    async handleFailure(generationId, userId, creditsConsumed, error) {
-        this.logger.error(`Generation ${generationId} failed: ${error.message}`, error.stack);
-        await this.prisma.generation.update({
-            where: { id: generationId },
-            data: {
-                status: client_1.GenerationStatus.FAILED,
-                errorMessage: error.message,
-                errorCode: 'GENERATION_FAILED',
-            },
-        });
-        await this.creditsService.refund(userId, creditsConsumed, generationId);
-        this.generationEvents.emit({
-            userId,
-            generationId,
-            status: 'failed',
-            data: {
-                errorMessage: error.message,
-                errorCode: 'GENERATION_FAILED',
-                creditsRefunded: creditsConsumed,
-            },
-        });
-        this.logger.log(`Refunded ${creditsConsumed} credits for failed generation ${generationId}`);
     }
     async findById(userId, generationId) {
         const generation = await this.prisma.generation.findFirst({
@@ -711,22 +545,15 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const ext = mimeType.split('/')[1] ?? 'jpg';
         return this.uploadsService.uploadBuffer(buffer, `inputs/${generationId}`, `input.${ext}`, mimeType);
     }
-    async resolveFileUrl(value) {
-        if (value.startsWith('http://') || value.startsWith('https://')) {
-            return value;
-        }
-        return this.uploadsService.getSignedReadUrl(value);
-    }
 };
 exports.GenerationsService = GenerationsService;
 exports.GenerationsService = GenerationsService = GenerationsService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(4, (0, bullmq_1.InjectQueue)(generation_queue_constants_1.GENERATION_QUEUE)),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         credits_service_1.CreditsService,
         plans_service_1.PlansService,
         uploads_service_1.UploadsService,
-        geraew_provider_1.GeraewProvider,
-        nano_banana_provider_1.NanoBananaProvider,
-        generation_events_service_1.GenerationEventsService])
+        bullmq_2.Queue])
 ], GenerationsService);
 //# sourceMappingURL=generations.service.js.map

@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const core_1 = require("@nestjs/core");
 const throttler_1 = require("@nestjs/throttler");
+const bullmq_1 = require("@nestjs/bullmq");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const prisma_module_1 = require("./prisma/prisma.module");
@@ -39,6 +40,22 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
+            }),
+            bullmq_1.BullModule.forRootAsync({
+                inject: [config_1.ConfigService],
+                useFactory: (config) => {
+                    const redisUrl = new URL(config.getOrThrow('REDIS_URL'));
+                    return {
+                        connection: {
+                            host: redisUrl.hostname,
+                            port: parseInt(redisUrl.port, 10) || 6379,
+                            password: redisUrl.password || undefined,
+                            username: redisUrl.username && redisUrl.username !== 'default'
+                                ? redisUrl.username
+                                : undefined,
+                        },
+                    };
+                },
             }),
             throttler_1.ThrottlerModule.forRoot({
                 throttlers: [

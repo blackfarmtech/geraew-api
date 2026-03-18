@@ -14,6 +14,10 @@ export declare class GenerationInputImageDto {
     referenceType?: string;
     url?: string;
 }
+export declare class GenerationFolderDto {
+    id: string;
+    name: string;
+}
 export declare class GenerationResponseDto {
     id: string;
     type: GenerationType;
@@ -32,6 +36,7 @@ export declare class GenerationResponseDto {
     processingTimeMs?: number;
     errorMessage?: string;
     errorCode?: string;
+    folder?: GenerationFolderDto;
     isFavorited: boolean;
     createdAt: Date;
     completedAt?: Date;

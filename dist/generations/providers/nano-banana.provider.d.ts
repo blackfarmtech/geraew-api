@@ -22,5 +22,6 @@ export declare class NanoBananaProvider {
     generateImage(input: NanoBananaImageInput): Promise<GenerationResult>;
     private pollTaskStatus;
     private downloadAndUpload;
+    private fetchWithTimeout;
     private headers;
 }

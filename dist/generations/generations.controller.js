@@ -35,10 +35,14 @@ let GenerationsController = class GenerationsController {
         this.generationEvents = generationEvents;
     }
     sseAll(userId) {
-        return this.generationEvents.subscribe(userId).pipe((0, rxjs_1.map)((event) => ({ data: event })));
+        const events$ = this.generationEvents.subscribe(userId).pipe((0, rxjs_1.map)((event) => ({ data: event })));
+        const heartbeat$ = (0, rxjs_1.interval)(20_000).pipe((0, rxjs_1.map)(() => ({ data: { type: 'heartbeat' } })));
+        return (0, rxjs_1.merge)(events$, heartbeat$);
     }
     sseOne(userId, id) {
-        return this.generationEvents.subscribeToGeneration(userId, id).pipe((0, rxjs_1.map)((event) => ({ data: event })));
+        const events$ = this.generationEvents.subscribeToGeneration(userId, id).pipe((0, rxjs_1.map)((event) => ({ data: event })));
+        const heartbeat$ = (0, rxjs_1.interval)(20_000).pipe((0, rxjs_1.map)(() => ({ data: { type: 'heartbeat' } })));
+        return (0, rxjs_1.merge)(events$, heartbeat$);
     }
     async generateImage(userId, dto) {
         return this.generationsService.generateImage(userId, dto);

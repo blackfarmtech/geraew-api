@@ -38,6 +38,14 @@ export class GenerationInputImageDto {
   url?: string;
 }
 
+export class GenerationFolderDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+}
+
 export class GenerationResponseDto {
   @ApiProperty()
   id: string;
@@ -89,6 +97,9 @@ export class GenerationResponseDto {
 
   @ApiPropertyOptional()
   errorCode?: string;
+
+  @ApiPropertyOptional({ type: GenerationFolderDto, description: 'Pasta onde a geração está, se houver' })
+  folder?: GenerationFolderDto;
 
   @ApiProperty()
   isFavorited: boolean;

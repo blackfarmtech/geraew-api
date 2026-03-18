@@ -1,3 +1,4 @@
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditsService } from '../credits/credits.service';
 import { PlansService } from '../plans/plans.service';
@@ -5,9 +6,6 @@ import { GenerationFiltersDto } from './dto/generation-filters.dto';
 import { GenerationResponseDto, CreateGenerationResponseDto } from './dto/generation-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { UploadsService } from '../uploads/uploads.service';
-import { GeraewProvider } from './providers/geraew.provider';
-import { NanoBananaProvider } from './providers/nano-banana.provider';
-import { GenerationEventsService } from './generation-events.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
@@ -18,27 +16,18 @@ export declare class GenerationsService {
     private readonly creditsService;
     private readonly plansService;
     private readonly uploadsService;
-    private readonly geraewProvider;
-    private readonly nanoBananaProvider;
-    private readonly generationEvents;
+    private readonly generationQueue;
     private readonly logger;
-    constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, generationEvents: GenerationEventsService);
+    constructor(prisma: PrismaService, creditsService: CreditsService, plansService: PlansService, uploadsService: UploadsService, generationQueue: Queue);
     generateImage(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
     generateImageWithFallback(userId: string, dto: GenerateImageDto): Promise<CreateGenerationResponseDto>;
     generateImageNanoBanana(userId: string, dto: GenerateImageNanoBananaDto): Promise<CreateGenerationResponseDto>;
     generateTextToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     generateImageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     generateVideoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
-    private processImageGeneration;
-    private processImageWithFallback;
-    private processNanoBananaImageGeneration;
-    private processTextToVideoGeneration;
-    private processImageToVideoGeneration;
-    private processReferenceVideoGeneration;
+    private checkConcurrentLimit;
     private ensureSufficientBalance;
     private debitCredits;
-    private completeGeneration;
-    private handleFailure;
     findById(userId: string, generationId: string): Promise<GenerationResponseDto>;
     findFolders(userId: string, generationId: string): Promise<{
         id: string;
@@ -53,5 +42,4 @@ export declare class GenerationsService {
     toggleFavorite(userId: string, generationId: string, isFavorited: boolean): Promise<void>;
     private toResponseDto;
     private uploadBase64Image;
-    private resolveFileUrl;
 }

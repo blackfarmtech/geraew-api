@@ -54,11 +54,11 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
                 ...(input.imageUrls?.length && { image_input: input.imageUrls }),
             },
         };
-        const createResponse = await fetch(`${this.baseUrl}/api/v1/jobs/createTask`, {
+        const createResponse = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/jobs/createTask`, {
             method: 'POST',
             headers: this.headers(),
             body: JSON.stringify(body),
-        });
+        }, 60_000);
         if (!createResponse.ok) {
             const errorText = await createResponse.text();
             throw new Error(`Nano Banana createTask error (${createResponse.status}): ${errorText}`);
@@ -86,7 +86,7 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
             if (attempt > 0) {
                 await new Promise((resolve) => setTimeout(resolve, intervalMs));
             }
-            const response = await fetch(`${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`, { headers: this.headers() });
+            const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`, { headers: this.headers() }, 30_000);
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`Nano Banana recordInfo error (${response.status}): ${errorText}`);
@@ -113,7 +113,7 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
         throw new Error('Nano Banana generation timed out.');
     }
     async downloadAndUpload(sourceUrl, generationId, index, format) {
-        const response = await fetch(sourceUrl);
+        const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
         if (!response.ok) {
             throw new Error(`Failed to download image from Nano Banana (${response.status}): ${sourceUrl}`);
         }
@@ -121,6 +121,16 @@ let NanoBananaProvider = NanoBananaProvider_1 = class NanoBananaProvider {
         const ext = format === 'jpg' ? 'jpg' : 'png';
         const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
         return this.uploadsService.uploadBuffer(buffer, `generations/${generationId}`, `output_${index}.${ext}`, mimeType);
+    }
+    async fetchWithTimeout(url, options, timeoutMs) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        }
+        finally {
+            clearTimeout(timeout);
+        }
     }
     headers() {
         return {

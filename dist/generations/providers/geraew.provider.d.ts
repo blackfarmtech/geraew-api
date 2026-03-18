@@ -55,5 +55,6 @@ export declare class GeraewProvider {
     private startAndPollVideo;
     private pollVideoStatus;
     private downloadFromGcs;
+    private fetchWithTimeout;
     private headers;
 }

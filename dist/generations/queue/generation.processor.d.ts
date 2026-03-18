@@ -1,0 +1,31 @@
+import { WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreditsService } from '../../credits/credits.service';
+import { UploadsService } from '../../uploads/uploads.service';
+import { GeraewProvider } from '../providers/geraew.provider';
+import { NanoBananaProvider } from '../providers/nano-banana.provider';
+import { GenerationEventsService } from '../generation-events.service';
+export declare class GenerationProcessor extends WorkerHost {
+    private readonly prisma;
+    private readonly creditsService;
+    private readonly uploadsService;
+    private readonly geraewProvider;
+    private readonly nanoBananaProvider;
+    private readonly generationEvents;
+    private readonly logger;
+    constructor(prisma: PrismaService, creditsService: CreditsService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, generationEvents: GenerationEventsService);
+    process(job: Job): Promise<void>;
+    private processImage;
+    private processImageWithFallback;
+    private processNanoBanana;
+    private processTextToVideo;
+    private processImageToVideo;
+    private processReferenceVideo;
+    private markProcessingStarted;
+    private completeGeneration;
+    onFailed(job: Job, error: Error): Promise<void>;
+    private handleFailure;
+    private loadInputImagesAsBase64;
+    private downloadToBase64;
+}

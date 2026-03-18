@@ -44,6 +44,10 @@ let GalleryService = class GalleryService {
                 include: {
                     outputs: { orderBy: { order: 'asc' } },
                     inputImages: { orderBy: { order: 'asc' } },
+                    generationFolders: {
+                        take: 1,
+                        include: { folder: { select: { id: true, name: true } } },
+                    },
                 },
             }),
             this.prisma.generation.count({ where }),
@@ -74,6 +78,9 @@ let GalleryService = class GalleryService {
                 referenceType: img.referenceType ?? undefined,
                 url: img.url ?? undefined,
             })),
+            folder: gen.generationFolders?.[0]?.folder
+                ? { id: gen.generationFolders[0].folder.id, name: gen.generationFolders[0].folder.name }
+                : undefined,
             hasWatermark: gen.hasWatermark,
             creditsConsumed: gen.creditsConsumed,
             processingTimeMs: gen.processingTimeMs ?? undefined,

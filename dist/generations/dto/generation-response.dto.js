@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateGenerationResponseDto = exports.GenerationResponseDto = exports.GenerationInputImageDto = exports.GenerationOutputDto = void 0;
+exports.CreateGenerationResponseDto = exports.GenerationResponseDto = exports.GenerationFolderDto = exports.GenerationInputImageDto = exports.GenerationOutputDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const client_1 = require("@prisma/client");
 class GenerationOutputDto {
@@ -73,6 +73,19 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'S3 URL da imagem, se disponivel' }),
     __metadata("design:type", String)
 ], GenerationInputImageDto.prototype, "url", void 0);
+class GenerationFolderDto {
+    id;
+    name;
+}
+exports.GenerationFolderDto = GenerationFolderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], GenerationFolderDto.prototype, "id", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], GenerationFolderDto.prototype, "name", void 0);
 class GenerationResponseDto {
     id;
     type;
@@ -91,6 +104,7 @@ class GenerationResponseDto {
     processingTimeMs;
     errorMessage;
     errorCode;
+    folder;
     isFavorited;
     createdAt;
     completedAt;
@@ -164,6 +178,10 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     __metadata("design:type", String)
 ], GenerationResponseDto.prototype, "errorCode", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ type: GenerationFolderDto, description: 'Pasta onde a geração está, se houver' }),
+    __metadata("design:type", GenerationFolderDto)
+], GenerationResponseDto.prototype, "folder", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)
