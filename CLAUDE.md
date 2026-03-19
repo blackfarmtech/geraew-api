@@ -18,9 +18,69 @@ MicroSaaS de geração de imagens e vídeos com IA, similar ao Higgsfield. Públ
 
 | Operação | Créditos | Custo API (USD) | Receita (R$) | Margem |
 |---|---|---|---|---|
+
+Nossos custos
+
+
+supabase
+
+$25 / mes
+
+
+hostinger 
+
+R$ 98,00
+
+
+Google storage
+
+R$: ????
+
+Vertex 
+
+R$200 volta R$1700 reais em creditos
+R$50 volta R$1700 reais em creditos
+Cria e volta R$1700 reais em creditos
+
+Compras de conta google
+
+R$ 9,99 - C/CONTA
+
+
+
+Custo de imagem
+
+NANO BANANA 2 
+
+| Imagem 1K | 10 | $0.04 - 30 REAIS / 142 IMAGENS
+| Imagem 2K | 15 | $0.06 - 30 REAIS / 96 IMAGENS
+| Imagem 4K | 22 | $0.09 - 30 REAIS / 63 IMAGENS
+
+
+NANO BANANA PRO 
+| Imagem 1K | 10 | $0.09 - 30 REAIS / 63 IMAGENS
+| Imagem 2K | 15 | $0.09 - 30 REAIS / 63 IMAGENS
+| Imagem 4K | 22 | $0.12 - 30 REAIS / 47 IMAGENS
+
+
+
+
+
+
+
+
+
+|---|---|---|---|---|
+NANO BANANA 2 
 | Imagem 1K | 10 | $0.04 | 0,30 | 30% |
 | Imagem 2K | 15 | $0.06 | 0,45 | 29% |
 | Imagem 4K | 22 | $0.09 | 0,66 | 27% |
+
+NANO BANANA PRO
+| Imagem 1K | 10 | $0.04 | 0,30 | 30% |
+| Imagem 2K | 15 | $0.06 | 0,45 | 29% |
+| Imagem 4K | 22 | $0.09 | 0,66 | 27% |
+
 | Motion Control 720p (por segundo) | 7 | $0.03 | 0,21 | 24% |
 | Motion Control 1080p (por segundo) | 11 | $0.045 | 0,33 | 27% |
 | Vídeo 1080p (por segundo) | 48 | $0.20 | 1,44 | 25% |
