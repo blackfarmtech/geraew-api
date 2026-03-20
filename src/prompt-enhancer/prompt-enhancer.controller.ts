@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { PromptEnhancerService } from './prompt-enhancer.service';
 import { EnhancePromptDto } from './dto/enhance-prompt.dto';
+import { EnhanceInfluencerDto } from './dto/enhance-influencer.dto';
 
 @Controller('api/v1/prompt-enhancer')
 export class PromptEnhancerController {
@@ -10,5 +11,12 @@ export class PromptEnhancerController {
   async enhance(@Body() dto: EnhancePromptDto) {
     const enhanced = await this.promptEnhancerService.enhance(dto.prompt);
     return { enhancedPrompt: enhanced };
+  }
+
+  @Post('enhance-influencer')
+  async enhanceInfluencer(@Body() dto: EnhanceInfluencerDto) {
+    const enhancedPrompt =
+      await this.promptEnhancerService.enhanceInfluencer(dto);
+    return { enhancedPrompt };
   }
 }
