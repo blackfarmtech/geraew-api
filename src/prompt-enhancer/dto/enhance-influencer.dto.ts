@@ -77,6 +77,10 @@ export class EnhanceInfluencerDto {
 
   @IsString()
   @IsOptional()
+  hairColor?: string;
+
+  @IsString()
+  @IsOptional()
   accessories?: string;
 
   @IsString()

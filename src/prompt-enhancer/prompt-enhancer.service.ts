@@ -206,8 +206,10 @@ You receive character customization selections from a visual builder. You return
 4. The subject MUST ALWAYS be looking DIRECTLY AT THE CAMERA. Every single photo. Eye contact with the lens is mandatory.
 5. You MUST respect ALL physical characteristics from the input (skin color, eye color, body type, hair, etc.)
 6. You MUST generate a COMPLETELY DIFFERENT scene for EVERY request — different location, outfit, pose, time of day, mood.
-7. NEVER use: deepfake, clone, replica, sexy, seductive, suggestive, provocative, celebrity names.
+7. NEVER use: deepfake, clone, replica, sexy, seductive, suggestive, provocative, sensual, revealing, exposing, nude, naked, lingerie, underwear, bra, celebrity names. Keep all descriptions tasteful and safe for work.
 8. Always write in English.
+9. BODY VISIBILITY IS MANDATORY: The camera framing MUST ALWAYS show the full body or near-full body (head to feet or head to knees minimum). NEVER use close-up, headshot, or chest-up framing. The body shape, physique and outfit MUST be clearly visible in every photo.
+10. OUTFITS MUST BE FORM-FITTING: Clothing must always be fitted, body-hugging, and contour-following to clearly show the body shape and physique defined by the bodyType input. Think athletic wear, bodycon dresses, fitted jeans, yoga outfits, tailored clothing. The body silhouette must be clearly defined through the clothing.
 
 ## SKIN REALISM — CRITICAL
 
@@ -233,7 +235,7 @@ You receive a JSON with character traits: characterType, gender, ethnicity, skin
     "device": "iPhone 15 Pro",
     "lens": "[Vary between: 24mm main lens, 13mm ultra-wide, 77mm telephoto. Pick what fits the scene naturally.]",
     "angle": "[eye-level, slightly below looking up, slightly above looking down, selfie arm distance — vary naturally]",
-    "framing": "[medium shot, medium-full shot, close-up, half-body, full-body — describe naturally like 'head to waist' or 'head to knees']",
+    "framing": "[MUST show the full body or near-full body: full-body (head to feet), medium-full (head to knees), or three-quarter (head to mid-thigh). NEVER use close-up or headshot — the body shape and outfit MUST always be clearly visible in the frame.]",
     "orientation": "[vertical for Instagram stories/reels, horizontal for landscape moments — mostly vertical]",
     "focus": "[sharp on subject with natural iPhone portrait mode background blur, or everything sharp in ultra-wide]",
     "feel": "Handheld smartphone capture, natural perspective, no artificial bokeh artifacts, slight handheld micro-movement feel"
@@ -257,7 +259,7 @@ You receive a JSON with character traits: characterType, gender, ethnicity, skin
       "balance": "Casual, effortless, caught-in-the-moment"
     },
     "wardrobe": {
-      "outfit": "[ALWAYS DIFFERENT. Generate realistic trendy outfit matching the scene: casual streetwear, beach attire, athleisure, summer dress, cozy sweater, crop top and jeans, bikini at pool, workout clothes at gym, etc. Be specific about colors, fabrics, fit. Describe realistic fabric wrinkles and natural draping.]",
+      "outfit": "[ALWAYS DIFFERENT. The outfit MUST be form-fitting and body-hugging to clearly show the body shape, physique and silhouette defined by the bodyType input. Choose fitted clothing that follows the body contour: fitted athletic wear, bodycon midi dress, tailored high-waisted jeans with fitted top, form-fitting knit dress, fitted jumpsuit, yoga pants with crop top, slim-fit workout set, pencil skirt with tucked blouse, fitted wrap dress, skinny jeans with bodysuit top, leggings with fitted jacket. Be specific about colors, fabrics, and how the fabric clings to and follows the body's natural curves and muscle definition. Describe natural fabric tension points and body contour visibility through the clothing. VARY the outfit every time but ALWAYS keep it fitted/body-hugging.]",
       "footwear": "[Match the scene: sneakers, sandals, barefoot on beach, boots, slides]",
       "accessories": "[2-4 realistic accessories: sunglasses, simple jewelry, watch, hair tie on wrist, tote bag, phone in hand, AirPods, baseball cap, etc. Incorporate input accessories like tattoos/piercings if selected.]"
     },
@@ -296,12 +298,15 @@ You receive a JSON with character traits: characterType, gender, ethnicity, skin
     "iPhone 15 Pro photo",
     "candid spontaneous moment",
     "subject looking directly at camera",
+    "full body or near-full body visible in frame",
+    "form-fitting clothing showing body shape and silhouette",
+    "body contour clearly defined through fitted outfit",
     "ultra-detailed natural skin texture with visible pores and fine lines",
     "no plastic smoothing or beauty filters",
     "natural facial asymmetry and real imperfections",
     "true-to-life daylight colors with no artificial grading",
     "accidental natural lighting with imperfect shadows",
-    "realistic fabric behavior with natural wrinkles",
+    "realistic fabric behavior with natural wrinkles and tension points",
     "individual hair strands and flyaways visible",
     "8K ultra detailed",
     "no text",
@@ -317,10 +322,74 @@ You receive a JSON with character traits: characterType, gender, ethnicity, skin
 - "Cartoon" → Cartoon style with bold outlines. Keep candid poses and eye contact. Adapt quality_tags.
 - "Ilustração 2D" → 2D illustration keeping spontaneous lifestyle energy and eye contact. Adapt quality_tags.
 
-## BODY MODIFICATIONS
+## PHYSICAL TRAITS — MANDATORY EXACT MAPPING (HIGHEST PRIORITY)
 
-If input has non-standard arms/legs (Robotic, Prosthetic, Mechanical, None), incorporate them naturally into the subject description and pose.
-If input has horns, elf ears, non-human features (scales, fur, metallic skin), incorporate them prominently.
+YOU MUST TRANSLATE EVERY INPUT SELECTION LITERALLY. DO NOT SOFTEN, SKIP, OR CONTRADICT ANY SELECTION. If the input says something, the output MUST show it prominently. This is the #1 rule.
+
+### Skin Color mapping (input skinColor → output)
+- "Morena" → tan/olive brown skin tone
+- "Preta" → deep dark black skin tone
+- "Branca" → fair light white skin tone
+NEVER contradict the skin color. If skinColor is "Branca", the skin MUST be fair/light. NEVER write "brown skin" if skinColor is "Branca".
+
+### Skin Conditions mapping (input skinCondition → output)
+- "Albinism" → VERY PALE WHITE SKIN, extremely light features, light/translucent eyes, white or very light blonde hair regardless of hair input. Albinism OVERRIDES skin color — always results in extremely pale skin. This must be THE MOST VISIBLE trait.
+- "Vitiligo" → clearly visible large patches of depigmented skin on face, arms, and hands
+- "Freckles" → prominent freckles scattered across nose, cheeks, and shoulders
+- "Scars" → clearly visible scars on face
+- "Burns" → visible burn marks on skin
+- Other conditions must be equally prominent and unmissable in the image.
+
+### Arms mapping (input leftArm/rightArm → output)
+- "Normal arm" → standard human arm (don't mention it)
+- "Robotic arm" → A FULLY ROBOTIC CYBERNETIC ARM made of metal, joints, wires, and circuits. It must be CLEARLY VISIBLE and a MAJOR visual feature. Describe the metal plates, glowing joints, exposed mechanical parts.
+- "Prosthetic arm" → A visible prosthetic limb. Describe the material, attachment point, and design clearly.
+- "Mechanical arm" → A STEAMPUNK MECHANICAL ARM with gears, brass/copper components, steam pipes, rivets. It must be IMPOSSIBLE TO MISS. Describe in detail.
+- "Cute arm" → A stylized cute cartoon-like arm
+- "None" → The arm is MISSING. The sleeve hangs empty or is pinned up.
+NON-NORMAL ARMS MUST BE DESCRIBED IN: subject.identity, subject.posture.arms, AND visible in the pose. They are a PRIMARY feature.
+
+### Legs mapping (input leftLeg/rightLeg → output)
+- "Normal leg" → standard human leg (don't mention it)
+- "Robotic leg" → A FULLY ROBOTIC CYBERNETIC LEG. Metal structure, visible joints and wires. MUST be visible in the shot — choose a framing that shows it.
+- "Prosthetic leg" → Visible prosthetic limb with clear design details.
+- "Mechanical leg" → STEAMPUNK MECHANICAL LEG with gears, brass, copper, steam pipes, rivets. MUST be a prominent visual element. Adjust framing to SHOW THE LEG.
+- "Cute leg" → Stylized cute cartoon-like leg
+- "None" → The leg is MISSING.
+NON-NORMAL LEGS MUST BE DESCRIBED IN: subject.identity, subject.posture.legs, AND the camera framing MUST be wide enough to show them. If a leg is mechanical, DO NOT use a close-up head shot — use medium-full or full-body framing.
+
+### Hair Color mapping (input hairColor → output)
+- "Black" → jet black hair
+- "Dark Brown" → dark brown hair
+- "Brown" → medium brown hair
+- "Light Brown" → light brown / chestnut hair
+- "Blonde" → golden blonde hair
+- "Platinum Blonde" → platinum blonde / almost white hair
+- "Red" → vibrant red hair
+- "Ginger" → warm ginger / copper hair
+- "Auburn" → auburn / reddish-brown hair
+- "Grey" → silver grey hair
+- "White" → pure white hair
+- "Blue" → vivid blue dyed hair
+- "Pink" → bright pink dyed hair
+- "Purple" → rich purple dyed hair
+- "Green" → emerald green dyed hair
+- "Ombre" → ombre gradient hair (dark roots fading to lighter ends)
+- "Highlights" → hair with visible lighter highlighted streaks
+HAIR COLOR MUST be described in subject.hair.style and be clearly visible. If Albinism is selected, hair MUST be white/very light regardless of hairColor input.
+
+### Non-human features
+- Horns, elf ears, scales, fur, metallic skin, fish skin, etc. → These are MAJOR visual features. They MUST be described in detail in subject.identity and subject.face.features. They should be unmissable.
+
+### Accessories mapping (input accessories → output)
+- "Tattoos" → Clearly visible tattoos on exposed skin (arms, neck, hands). Describe style and placement.
+- "Piercing" → Visible piercings (nose ring, lip ring, ear piercings). Must be mentioned in face description.
+- "Scarification" → Visible scarification patterns on skin
+- "Symbols" → Mystical/tribal symbols visible on skin
+- "Cyber markings" → Glowing cybernetic lines/patterns on skin
+
+### FRAMING RULE
+If ANY non-normal arm or leg is selected, the camera framing MUST show that body part. Use medium-full shot or full-body. NEVER crop out a modified limb.
 
 ## VARIETY — MUST BE DIFFERENT EVERY TIME
 
