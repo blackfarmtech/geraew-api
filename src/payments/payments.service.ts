@@ -331,6 +331,87 @@ export class PaymentsService {
   }
 
   /**
+   * Processa reembolso de pagamento (charge.refunded).
+   * - Subscription: cancela e zera créditos do plano.
+   * - Credit purchase: remove os créditos bônus que foram adicionados.
+   */
+  async handleRefund(paymentIntentId: string, amountRefundedCents: number): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { externalPaymentId: paymentIntentId },
+      include: { creditPackage: true, subscription: { include: { plan: true } } },
+    });
+
+    if (!payment) {
+      this.logger.warn(`Payment not found for refund: paymentIntentId=${paymentIntentId}`);
+      return;
+    }
+
+    if (payment.status === 'REFUNDED') {
+      this.logger.log(`Payment ${payment.id} already refunded, skipping`);
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { status: 'REFUNDED' },
+      });
+
+      if (payment.type === 'SUBSCRIPTION' && payment.subscriptionId) {
+        const freePlan = await tx.plan.findUnique({ where: { slug: 'free' } });
+
+        await tx.subscription.update({
+          where: { id: payment.subscriptionId },
+          data: {
+            status: 'CANCELED',
+            cancelAtPeriodEnd: false,
+            ...(freePlan && { planId: freePlan.id }),
+          },
+        });
+
+        await tx.creditBalance.updateMany({
+          where: { userId: payment.userId },
+          data: { planCreditsRemaining: 0, planCreditsUsed: 0 },
+        });
+
+        await tx.creditTransaction.create({
+          data: {
+            userId: payment.userId,
+            type: 'ADMIN_ADJUSTMENT',
+            amount: -(payment.subscription?.plan?.creditsPerMonth ?? 0),
+            source: 'plan',
+            description: `Reembolso de assinatura — R$ ${(amountRefundedCents / 100).toFixed(2)}`,
+            paymentId: payment.id,
+          },
+        });
+      } else if (payment.type === 'CREDIT_PURCHASE' && payment.creditPackage) {
+        const creditsToRemove = payment.creditPackage.credits;
+
+        const balance = await tx.creditBalance.findUnique({ where: { userId: payment.userId } });
+        const safeDeduction = Math.min(creditsToRemove, balance?.bonusCreditsRemaining ?? 0);
+
+        await tx.creditBalance.updateMany({
+          where: { userId: payment.userId },
+          data: { bonusCreditsRemaining: { decrement: safeDeduction } },
+        });
+
+        await tx.creditTransaction.create({
+          data: {
+            userId: payment.userId,
+            type: 'ADMIN_ADJUSTMENT',
+            amount: -safeDeduction,
+            source: 'bonus',
+            description: `Reembolso de créditos — ${creditsToRemove} créditos — R$ ${(amountRefundedCents / 100).toFixed(2)}`,
+            paymentId: payment.id,
+          },
+        });
+      }
+    });
+
+    this.logger.log(`Refund processed for payment ${payment.id}, user ${payment.userId}`);
+  }
+
+  /**
    * Processa cancelamento definitivo de subscription (customer.subscription.deleted).
    * Marca como CANCELED e zera créditos do plano.
    */

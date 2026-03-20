@@ -80,6 +80,9 @@ export class StripeWebhookService {
       case 'customer.subscription.deleted':
         await this.handleSubscriptionDeleted(event);
         break;
+      case 'charge.refunded':
+        await this.handleChargeRefunded(event);
+        break;
       default:
         this.logger.log(`Unhandled Stripe event type: ${eventType}`);
     }
@@ -215,6 +218,24 @@ export class StripeWebhookService {
     const subscription = event.data.object as Stripe.Subscription;
 
     await this.paymentsService.handleSubscriptionDeleted(subscription.id);
+  }
+
+  /**
+   * Reembolso emitido — revoga acesso e remove créditos correspondentes.
+   */
+  private async handleChargeRefunded(event: Stripe.Event): Promise<void> {
+    const charge = event.data.object as Stripe.Charge;
+
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      this.logger.warn(`charge.refunded without payment_intent: ${charge.id}`);
+      return;
+    }
+
+    await this.paymentsService.handleRefund(paymentIntentId, charge.amount_refunded);
   }
 
   /**
