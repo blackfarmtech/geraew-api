@@ -82,7 +82,7 @@ export class GenerationsService {
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
-  ) {}
+  ) { }
 
   // ─── Image generation (text-to-image / image-to-image) ────
 
@@ -442,14 +442,14 @@ export class GenerationsService {
       order: number;
       url: string;
     }> = [
-      {
-        generationId: generation.id,
-        role: GenerationImageRole.FIRST_FRAME,
-        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
-        order: 0,
-        url: firstFrameUrl,
-      },
-    ];
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.FIRST_FRAME,
+          mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+          order: 0,
+          url: firstFrameUrl,
+        },
+      ];
     if (dto.last_frame) {
       const lastFrameUrl = await this.uploadBase64Image(
         dto.last_frame,
@@ -658,7 +658,6 @@ export class GenerationsService {
 
     await this.debitCredits(userId, creditsRequired, generation.id, type, Resolution.RES_720P);
 
-    // Pass public URLs to the Wan API (it needs clean, publicly accessible URLs)
     await this.generationQueue.add(
       GenerationJobName.MOTION_CONTROL,
       {
