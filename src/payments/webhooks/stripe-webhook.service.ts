@@ -228,14 +228,18 @@ export class StripeWebhookService {
 
     const paymentIntentId = typeof charge.payment_intent === 'string'
       ? charge.payment_intent
-      : charge.payment_intent?.id;
+      : (charge.payment_intent as Stripe.PaymentIntent)?.id ?? null;
 
-    if (!paymentIntentId) {
-      this.logger.warn(`charge.refunded without payment_intent: ${charge.id}`);
+    const invoiceId = typeof charge.invoice === 'string'
+      ? charge.invoice
+      : (charge.invoice as Stripe.Invoice)?.id ?? null;
+
+    if (!paymentIntentId && !invoiceId) {
+      this.logger.warn(`charge.refunded without payment_intent or invoice: ${charge.id}`);
       return;
     }
 
-    await this.paymentsService.handleRefund(paymentIntentId, charge.amount_refunded);
+    await this.paymentsService.handleRefund(paymentIntentId, invoiceId, charge.amount_refunded);
   }
 
   /**

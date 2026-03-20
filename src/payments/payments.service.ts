@@ -335,14 +335,16 @@ export class PaymentsService {
    * - Subscription: cancela e zera créditos do plano.
    * - Credit purchase: remove os créditos bônus que foram adicionados.
    */
-  async handleRefund(paymentIntentId: string, amountRefundedCents: number): Promise<void> {
+  async handleRefund(paymentIntentId: string | null, invoiceId: string | null, amountRefundedCents: number): Promise<void> {
+    const lookup = [paymentIntentId, invoiceId].filter(Boolean) as string[];
+
     const payment = await this.prisma.payment.findFirst({
-      where: { externalPaymentId: paymentIntentId },
+      where: { externalPaymentId: { in: lookup } },
       include: { creditPackage: true, subscription: { include: { plan: true } } },
     });
 
     if (!payment) {
-      this.logger.warn(`Payment not found for refund: paymentIntentId=${paymentIntentId}`);
+      this.logger.warn(`Payment not found for refund: paymentIntentId=${paymentIntentId}, invoiceId=${invoiceId}`);
       return;
     }
 
