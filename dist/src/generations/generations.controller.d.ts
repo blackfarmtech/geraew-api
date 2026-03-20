@@ -10,6 +10,7 @@ import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
+import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 export declare class GenerationsController {
     private readonly generationsService;
     private readonly generationEvents;
@@ -22,6 +23,7 @@ export declare class GenerationsController {
     textToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     imageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     videoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
+    motionControl(userId: string, dto: GenerateMotionControlDto): Promise<CreateGenerationResponseDto>;
     findAll(userId: string, filters: GenerationFiltersDto): Promise<PaginatedResponseDto<GenerationResponseDto>>;
     findById(userId: string, id: string): Promise<GenerationResponseDto>;
     findFolders(userId: string, id: string): Promise<FolderResponseDto[]>;

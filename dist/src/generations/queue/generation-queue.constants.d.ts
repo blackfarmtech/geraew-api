@@ -5,7 +5,8 @@ export declare enum GenerationJobName {
     IMAGE_NANO_BANANA = "image-nano-banana",
     TEXT_TO_VIDEO = "text-to-video",
     IMAGE_TO_VIDEO = "image-to-video",
-    REFERENCE_VIDEO = "reference-video"
+    REFERENCE_VIDEO = "reference-video",
+    MOTION_CONTROL = "motion-control"
 }
 interface BaseJobData {
     generationId: string;
@@ -45,7 +46,12 @@ export interface ImageToVideoJobData extends TextToVideoJobData {
 export interface ReferenceVideoJobData extends TextToVideoJobData {
     resolvedModel: string;
 }
-export type GenerationJobData = ImageJobData | ImageNanoBananaJobData | TextToVideoJobData | ImageToVideoJobData | ReferenceVideoJobData;
+export interface MotionControlJobData extends BaseJobData {
+    videoUrl: string;
+    imageUrl: string;
+    wanResolution: string;
+}
+export type GenerationJobData = ImageJobData | ImageNanoBananaJobData | TextToVideoJobData | ImageToVideoJobData | ReferenceVideoJobData | MotionControlJobData;
 export declare const IMAGE_JOB_TIMEOUT: number;
 export declare const VIDEO_JOB_TIMEOUT: number;
 export {};

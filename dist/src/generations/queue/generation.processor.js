@@ -19,6 +19,7 @@ const credits_service_1 = require("../../credits/credits.service");
 const uploads_service_1 = require("../../uploads/uploads.service");
 const geraew_provider_1 = require("../providers/geraew.provider");
 const nano_banana_provider_1 = require("../providers/nano-banana.provider");
+const wan_provider_1 = require("../providers/wan.provider");
 const generation_events_service_1 = require("../generation-events.service");
 const client_1 = require("@prisma/client");
 const generation_queue_constants_1 = require("./generation-queue.constants");
@@ -28,15 +29,17 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
     uploadsService;
     geraewProvider;
     nanoBananaProvider;
+    wanProvider;
     generationEvents;
     logger = new common_1.Logger(GenerationProcessor_1.name);
-    constructor(prisma, creditsService, uploadsService, geraewProvider, nanoBananaProvider, generationEvents) {
+    constructor(prisma, creditsService, uploadsService, geraewProvider, nanoBananaProvider, wanProvider, generationEvents) {
         super();
         this.prisma = prisma;
         this.creditsService = creditsService;
         this.uploadsService = uploadsService;
         this.geraewProvider = geraewProvider;
         this.nanoBananaProvider = nanoBananaProvider;
+        this.wanProvider = wanProvider;
         this.generationEvents = generationEvents;
     }
     async process(job) {
@@ -54,6 +57,8 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
                 return this.processImageToVideo(job.data);
             case generation_queue_constants_1.GenerationJobName.REFERENCE_VIDEO:
                 return this.processReferenceVideo(job.data);
+            case generation_queue_constants_1.GenerationJobName.MOTION_CONTROL:
+                return this.processMotionControl(job.data);
             default:
                 throw new Error(`Unknown job name: ${job.name}`);
         }
@@ -204,6 +209,17 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
             sampleCount: data.sampleCount,
             negativePrompt: data.negativePrompt,
             referenceImages,
+        });
+        await this.completeGeneration(data.generationId, result, startTime);
+    }
+    async processMotionControl(data) {
+        const startTime = Date.now();
+        await this.markProcessingStarted(data.generationId);
+        const result = await this.wanProvider.generateAnimateReplace({
+            id: data.generationId,
+            videoUrl: data.videoUrl,
+            imageUrl: data.imageUrl,
+            resolution: data.wanResolution,
         });
         await this.completeGeneration(data.generationId, result, startTime);
     }
@@ -378,6 +394,7 @@ exports.GenerationProcessor = GenerationProcessor = GenerationProcessor_1 = __de
         uploads_service_1.UploadsService,
         geraew_provider_1.GeraewProvider,
         nano_banana_provider_1.NanoBananaProvider,
+        wan_provider_1.WanProvider,
         generation_events_service_1.GenerationEventsService])
 ], GenerationProcessor);
 //# sourceMappingURL=generation.processor.js.map

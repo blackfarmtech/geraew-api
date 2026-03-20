@@ -35,6 +35,7 @@ import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
+import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -140,6 +141,17 @@ export class GenerationsController {
     @Body() dto: GenerateVideoWithReferencesDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateVideoWithReferences(userId, dto);
+  }
+
+  @Post('motion-control')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Motion Control — Wan Animate Replace (vídeo + imagem → vídeo)' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async motionControl(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateMotionControlDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateMotionControl(userId, dto);
   }
 
   @Get()

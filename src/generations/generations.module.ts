@@ -11,6 +11,7 @@ import { PlansModule } from '../plans/plans.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { GeraewProvider } from './providers/geraew.provider';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
+import { WanProvider } from './providers/wan.provider';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NanoBananaProvider } from './providers/nano-banana.provider';
     GenerationProcessor,
     GeraewProvider,
     NanoBananaProvider,
+    WanProvider,
   ],
   exports: [GenerationsService],
 })

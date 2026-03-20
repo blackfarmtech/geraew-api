@@ -223,6 +223,46 @@ export class UploadsService {
   }
 
   /**
+   * Uploads raw buffer to S3 and returns both a public URL (for external APIs)
+   * and a signed URL (for internal use / display).
+   * Requires S3_PUBLIC_URL env to be configured for public URLs.
+   * Falls back to signed URL if S3_PUBLIC_URL is not set.
+   */
+  async uploadBufferPublic(
+    buffer: Buffer,
+    folder: string,
+    filename: string,
+    contentType: string,
+  ): Promise<{ publicUrl: string; signedUrl: string }> {
+    const fileKey = `${folder}/${randomUUID()}/${filename}`;
+
+    if (!this.s3Client) {
+      const mockUrl = `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+      return { publicUrl: mockUrl, signedUrl: mockUrl };
+    }
+
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileKey,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: 'public-read',
+      }),
+    );
+
+    this.logger.log(`Uploaded (public) ${fileKey} (${buffer.length} bytes)`);
+
+    const signedUrl = await this.getSignedReadUrl(fileKey);
+    const publicBase = this.configService.get<string>('S3_PUBLIC_URL');
+    const publicUrl = publicBase
+      ? `${publicBase.replace(/\/$/, '')}/${fileKey}`
+      : signedUrl;
+
+    return { publicUrl, signedUrl };
+  }
+
+  /**
    * Generates a signed read URL for an S3 object (valid for 7 days).
    */
   async getSignedReadUrl(fileKey: string): Promise<string> {

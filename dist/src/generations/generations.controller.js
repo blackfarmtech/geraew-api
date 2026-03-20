@@ -27,6 +27,7 @@ const generate_image_nano_banana_dto_1 = require("./dto/generate-image-nano-bana
 const generate_video_text_to_video_dto_1 = require("./dto/videos/generate-video-text-to-video.dto");
 const generate_video_image_to_video_dto_1 = require("./dto/videos/generate-video-image-to-video.dto");
 const generate_video_with_references_dto_1 = require("./dto/videos/generate-video-with-references.dto");
+const generate_motion_control_dto_1 = require("./dto/videos/generate-motion-control.dto");
 let GenerationsController = class GenerationsController {
     generationsService;
     generationEvents;
@@ -61,6 +62,9 @@ let GenerationsController = class GenerationsController {
     }
     async videoWithReferences(userId, dto) {
         return this.generationsService.generateVideoWithReferences(userId, dto);
+    }
+    async motionControl(userId, dto) {
+        return this.generationsService.generateMotionControl(userId, dto);
     }
     async findAll(userId, filters) {
         return this.generationsService.findAll(userId, filters);
@@ -168,6 +172,17 @@ __decorate([
     __metadata("design:paramtypes", [String, generate_video_with_references_dto_1.GenerateVideoWithReferencesDto]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "videoWithReferences", null);
+__decorate([
+    (0, common_1.Post)('motion-control'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Motion Control — Wan Animate Replace (vídeo + imagem → vídeo)' }),
+    (0, swagger_1.ApiResponse)({ status: 201, type: generation_response_dto_1.CreateGenerationResponseDto }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, generate_motion_control_dto_1.GenerateMotionControlDto]),
+    __metadata("design:returntype", Promise)
+], GenerationsController.prototype, "motionControl", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

@@ -364,6 +364,67 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             creditsConsumed: creditsRequired,
         };
     }
+    async generateMotionControl(userId, dto) {
+        const type = client_1.GenerationType.MOTION_CONTROL;
+        const wanResolution = dto.resolution ?? '480p';
+        const durationSeconds = 5;
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, client_1.Resolution.RES_720P, durationSeconds, false);
+        await this.checkConcurrentLimit(userId);
+        await this.ensureSufficientBalance(userId, creditsRequired);
+        const generation = await this.prisma.generation.create({
+            data: {
+                userId,
+                type,
+                status: client_1.GenerationStatus.PROCESSING,
+                modelUsed: 'wan/2-2-animate-replace',
+                resolution: client_1.Resolution.RES_720P,
+                durationSeconds,
+                hasAudio: false,
+                creditsConsumed: creditsRequired,
+                parameters: { wanResolution },
+            },
+        });
+        const videoMime = dto.video_mime_type ?? 'video/mp4';
+        const videoExt = videoMime === 'video/quicktime' ? 'mov' : videoMime === 'video/x-matroska' ? 'mkv' : 'mp4';
+        const videoBuffer = Buffer.from(dto.video, 'base64');
+        const { publicUrl: videoPublicUrl, signedUrl: videoSignedUrl } = await this.uploadsService.uploadBufferPublic(videoBuffer, `inputs/${generation.id}`, `input_video.${videoExt}`, videoMime);
+        const imageMime = dto.image_mime_type ?? 'image/jpeg';
+        const imageExt = imageMime === 'image/png' ? 'png' : imageMime === 'image/webp' ? 'webp' : 'jpg';
+        const imageBuffer = Buffer.from(dto.image, 'base64');
+        const { publicUrl: imagePublicUrl, signedUrl: imageSignedUrl } = await this.uploadsService.uploadBufferPublic(imageBuffer, `inputs/${generation.id}`, `input_image.${imageExt}`, imageMime);
+        await this.prisma.generationInputImage.createMany({
+            data: [
+                {
+                    generationId: generation.id,
+                    role: client_1.GenerationImageRole.REFERENCE,
+                    mimeType: videoMime,
+                    order: 0,
+                    url: videoSignedUrl,
+                },
+                {
+                    generationId: generation.id,
+                    role: client_1.GenerationImageRole.REFERENCE,
+                    mimeType: imageMime,
+                    order: 1,
+                    url: imageSignedUrl,
+                },
+            ],
+        });
+        await this.debitCredits(userId, creditsRequired, generation.id, type, client_1.Resolution.RES_720P);
+        await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.MOTION_CONTROL, {
+            generationId: generation.id,
+            userId,
+            creditsConsumed: creditsRequired,
+            videoUrl: videoPublicUrl,
+            imageUrl: imagePublicUrl,
+            wanResolution,
+        });
+        return {
+            id: generation.id,
+            status: client_1.GenerationStatus.PROCESSING,
+            creditsConsumed: creditsRequired,
+        };
+    }
     async checkConcurrentLimit(userId) {
         const [processingCount, subscription] = await Promise.all([
             this.prisma.generation.count({

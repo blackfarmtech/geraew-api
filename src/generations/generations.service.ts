@@ -28,6 +28,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
+import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import {
@@ -38,6 +39,7 @@ import {
   TextToVideoJobData,
   ImageToVideoJobData,
   ReferenceVideoJobData,
+  MotionControlJobData,
 } from './queue/generation-queue.constants';
 
 type GenerationWithRelations = {
@@ -567,6 +569,106 @@ export class GenerationsService {
         negativePrompt: dto.negative_prompt,
         resolvedModel: model,
       } satisfies ReferenceVideoJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Motion Control (Wan Animate Replace) ────────────────
+
+  async generateMotionControl(
+    userId: string,
+    dto: GenerateMotionControlDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.MOTION_CONTROL;
+    const wanResolution = dto.resolution ?? '480p';
+    const durationSeconds = 5; // fixed estimate for credit calculation
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      Resolution.RES_720P,
+      durationSeconds,
+      false,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        modelUsed: 'wan/2-2-animate-replace',
+        resolution: Resolution.RES_720P,
+        durationSeconds,
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: { wanResolution },
+      },
+    });
+
+    // Upload video to S3 — public URL for Wan API, signed URL for internal display
+    const videoMime = dto.video_mime_type ?? 'video/mp4';
+    const videoExt = videoMime === 'video/quicktime' ? 'mov' : videoMime === 'video/x-matroska' ? 'mkv' : 'mp4';
+    const videoBuffer = Buffer.from(dto.video, 'base64');
+    const { publicUrl: videoPublicUrl, signedUrl: videoSignedUrl } =
+      await this.uploadsService.uploadBufferPublic(
+        videoBuffer,
+        `inputs/${generation.id}`,
+        `input_video.${videoExt}`,
+        videoMime,
+      );
+
+    // Upload image to S3 — public URL for Wan API, signed URL for internal display
+    const imageMime = dto.image_mime_type ?? 'image/jpeg';
+    const imageExt = imageMime === 'image/png' ? 'png' : imageMime === 'image/webp' ? 'webp' : 'jpg';
+    const imageBuffer = Buffer.from(dto.image, 'base64');
+    const { publicUrl: imagePublicUrl, signedUrl: imageSignedUrl } =
+      await this.uploadsService.uploadBufferPublic(
+        imageBuffer,
+        `inputs/${generation.id}`,
+        `input_image.${imageExt}`,
+        imageMime,
+      );
+
+    // Save input images for reference (signed URLs for internal display)
+    await this.prisma.generationInputImage.createMany({
+      data: [
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: videoMime,
+          order: 0,
+          url: videoSignedUrl,
+        },
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: imageMime,
+          order: 1,
+          url: imageSignedUrl,
+        },
+      ],
+    });
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, Resolution.RES_720P);
+
+    // Pass public URLs to the Wan API (it needs clean, publicly accessible URLs)
+    await this.generationQueue.add(
+      GenerationJobName.MOTION_CONTROL,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        videoUrl: videoPublicUrl,
+        imageUrl: imagePublicUrl,
+        wanResolution,
+      } satisfies MotionControlJobData,
     );
 
     return {

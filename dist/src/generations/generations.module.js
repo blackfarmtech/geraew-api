@@ -20,6 +20,7 @@ const plans_module_1 = require("../plans/plans.module");
 const uploads_module_1 = require("../uploads/uploads.module");
 const geraew_provider_1 = require("./providers/geraew.provider");
 const nano_banana_provider_1 = require("./providers/nano-banana.provider");
+const wan_provider_1 = require("./providers/wan.provider");
 let GenerationsModule = class GenerationsModule {
 };
 exports.GenerationsModule = GenerationsModule;
@@ -47,6 +48,7 @@ exports.GenerationsModule = GenerationsModule = __decorate([
             generation_processor_1.GenerationProcessor,
             geraew_provider_1.GeraewProvider,
             nano_banana_provider_1.NanoBananaProvider,
+            wan_provider_1.WanProvider,
         ],
         exports: [generations_service_1.GenerationsService],
     })

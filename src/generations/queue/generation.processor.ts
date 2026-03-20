@@ -9,6 +9,7 @@ import {
   NanoBananaProvider,
   mapGeminiToNanoBanana,
 } from '../providers/nano-banana.provider';
+import { WanProvider } from '../providers/wan.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import {
   GenerationStatus,
@@ -23,6 +24,7 @@ import {
   TextToVideoJobData,
   ImageToVideoJobData,
   ReferenceVideoJobData,
+  MotionControlJobData,
 } from './generation-queue.constants';
 
 @Processor(GENERATION_QUEUE, {
@@ -38,6 +40,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly uploadsService: UploadsService,
     private readonly geraewProvider: GeraewProvider,
     private readonly nanoBananaProvider: NanoBananaProvider,
+    private readonly wanProvider: WanProvider,
     private readonly generationEvents: GenerationEventsService,
   ) {
     super();
@@ -61,6 +64,8 @@ export class GenerationProcessor extends WorkerHost {
         return this.processImageToVideo(job.data as ImageToVideoJobData);
       case GenerationJobName.REFERENCE_VIDEO:
         return this.processReferenceVideo(job.data as ReferenceVideoJobData);
+      case GenerationJobName.MOTION_CONTROL:
+        return this.processMotionControl(job.data as MotionControlJobData);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
@@ -260,6 +265,22 @@ export class GenerationProcessor extends WorkerHost {
       sampleCount: data.sampleCount,
       negativePrompt: data.negativePrompt,
       referenceImages,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processMotionControl(
+    data: MotionControlJobData,
+  ): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    const result = await this.wanProvider.generateAnimateReplace({
+      id: data.generationId,
+      videoUrl: data.videoUrl,
+      imageUrl: data.imageUrl,
+      resolution: data.wanResolution,
     });
 
     await this.completeGeneration(data.generationId, result, startTime);

@@ -5,6 +5,7 @@ import { CreditsService } from '../../credits/credits.service';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GeraewProvider } from '../providers/geraew.provider';
 import { NanoBananaProvider } from '../providers/nano-banana.provider';
+import { WanProvider } from '../providers/wan.provider';
 import { GenerationEventsService } from '../generation-events.service';
 export declare class GenerationProcessor extends WorkerHost {
     private readonly prisma;
@@ -12,9 +13,10 @@ export declare class GenerationProcessor extends WorkerHost {
     private readonly uploadsService;
     private readonly geraewProvider;
     private readonly nanoBananaProvider;
+    private readonly wanProvider;
     private readonly generationEvents;
     private readonly logger;
-    constructor(prisma: PrismaService, creditsService: CreditsService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, generationEvents: GenerationEventsService);
+    constructor(prisma: PrismaService, creditsService: CreditsService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, wanProvider: WanProvider, generationEvents: GenerationEventsService);
     process(job: Job): Promise<void>;
     private processImage;
     private processImageWithFallback;
@@ -22,6 +24,7 @@ export declare class GenerationProcessor extends WorkerHost {
     private processTextToVideo;
     private processImageToVideo;
     private processReferenceVideo;
+    private processMotionControl;
     private markProcessingStarted;
     private completeGeneration;
     onFailed(job: Job, error: Error): Promise<void>;

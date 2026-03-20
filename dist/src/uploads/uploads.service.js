@@ -147,6 +147,27 @@ let UploadsService = UploadsService_1 = class UploadsService {
         this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
         return this.getSignedReadUrl(fileKey);
     }
+    async uploadBufferPublic(buffer, folder, filename, contentType) {
+        const fileKey = `${folder}/${(0, crypto_1.randomUUID)()}/${filename}`;
+        if (!this.s3Client) {
+            const mockUrl = `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+            return { publicUrl: mockUrl, signedUrl: mockUrl };
+        }
+        await this.s3Client.send(new client_s3_1.PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: fileKey,
+            Body: buffer,
+            ContentType: contentType,
+            ACL: 'public-read',
+        }));
+        this.logger.log(`Uploaded (public) ${fileKey} (${buffer.length} bytes)`);
+        const signedUrl = await this.getSignedReadUrl(fileKey);
+        const publicBase = this.configService.get('S3_PUBLIC_URL');
+        const publicUrl = publicBase
+            ? `${publicBase.replace(/\/$/, '')}/${fileKey}`
+            : signedUrl;
+        return { publicUrl, signedUrl };
+    }
     async getSignedReadUrl(fileKey) {
         if (!this.s3Client) {
             return `https://mock-s3.local/${this.bucketName}/${fileKey}`;

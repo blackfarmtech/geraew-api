@@ -7,6 +7,7 @@ export enum GenerationJobName {
   TEXT_TO_VIDEO = 'text-to-video',
   IMAGE_TO_VIDEO = 'image-to-video',
   REFERENCE_VIDEO = 'reference-video',
+  MOTION_CONTROL = 'motion-control',
 }
 
 interface BaseJobData {
@@ -53,12 +54,19 @@ export interface ReferenceVideoJobData extends TextToVideoJobData {
   resolvedModel: string;
 }
 
+export interface MotionControlJobData extends BaseJobData {
+  videoUrl: string;
+  imageUrl: string;
+  wanResolution: string;
+}
+
 export type GenerationJobData =
   | ImageJobData
   | ImageNanoBananaJobData
   | TextToVideoJobData
   | ImageToVideoJobData
-  | ReferenceVideoJobData;
+  | ReferenceVideoJobData
+  | MotionControlJobData;
 
 export const IMAGE_JOB_TIMEOUT = 5 * 60 * 1000; // 5 min
 export const VIDEO_JOB_TIMEOUT = 12 * 60 * 1000; // 12 min

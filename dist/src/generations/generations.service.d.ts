@@ -9,6 +9,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
+import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 export declare class GenerationsService {
@@ -25,6 +26,7 @@ export declare class GenerationsService {
     generateTextToVideo(userId: string, dto: GenerateVideoTextToVideoDto): Promise<CreateGenerationResponseDto>;
     generateImageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     generateVideoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
+    generateMotionControl(userId: string, dto: GenerateMotionControlDto): Promise<CreateGenerationResponseDto>;
     private checkConcurrentLimit;
     private ensureSufficientBalance;
     private debitCredits;
