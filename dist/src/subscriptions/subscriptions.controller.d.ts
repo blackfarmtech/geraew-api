@@ -8,7 +8,7 @@ export declare class SubscriptionsController {
     create(userId: string, dto: CreateSubscriptionDto): Promise<{
         checkoutUrl: string;
     }>;
-    upgrade(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto | {
+    upgrade(userId: string, dto: CreateSubscriptionDto): Promise<{
         checkoutUrl: string;
     }>;
     downgrade(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;

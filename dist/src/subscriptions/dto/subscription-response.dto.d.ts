@@ -9,6 +9,13 @@ export declare class SubscriptionPlanDto {
     galleryRetentionDays: number | null;
     hasApiAccess: boolean;
 }
+export declare class ScheduledPlanDto {
+    id: string;
+    slug: string;
+    name: string;
+    priceCents: number;
+    creditsPerMonth: number;
+}
 export declare class SubscriptionResponseDto {
     id: string;
     status: string;
@@ -19,4 +26,5 @@ export declare class SubscriptionResponseDto {
     paymentRetryCount: number;
     createdAt: Date;
     plan: SubscriptionPlanDto;
+    scheduledPlan?: ScheduledPlanDto;
 }

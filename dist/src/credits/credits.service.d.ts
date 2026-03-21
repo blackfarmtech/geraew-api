@@ -15,8 +15,8 @@ export declare class CreditsService {
     getPackages(): Promise<{
         name: string;
         id: string;
-        createdAt: Date;
         isActive: boolean;
+        createdAt: Date;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;

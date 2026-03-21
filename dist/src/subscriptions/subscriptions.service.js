@@ -71,33 +71,17 @@ let SubscriptionsService = class SubscriptionsService {
             orderBy: { createdAt: 'desc' },
             include: { plan: true },
         });
-        if (!current) {
-            throw new common_1.NotFoundException('Nenhuma assinatura ativa encontrada');
-        }
         const newPlan = await this.plansService.findPlanBySlug(planSlug);
-        const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
-        const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
-        if (newIdx <= currentIdx) {
-            throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não é superior ao plano atual "${current.plan.slug}". Use downgrade.`);
-        }
-        if (current.plan.slug === 'free' || !current.externalSubscriptionId) {
-            return this.createSubscription(userId, planSlug);
-        }
-        if (!newPlan.stripePriceId) {
-            throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não possui preço configurado no Stripe.`);
-        }
-        const user = await this.prisma.user.findUniqueOrThrow({
-            where: { id: userId },
-            select: { stripeCustomerId: true },
-        });
-        if (!user.stripeCustomerId) {
-            throw new common_1.BadRequestException('Usuário não possui customer no Stripe.');
-        }
-        let stripeResult;
-        try {
-            stripeResult = await this.stripeService.upgradeSubscription(user.stripeCustomerId, current.externalSubscriptionId, newPlan.stripePriceId, newPlan.name, current.plan.priceCents, userId, newPlan.slug);
-        }
-        catch {
+        let discountAmountCents = 0;
+        if (current) {
+            const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
+            const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
+            if (newIdx === currentIdx) {
+                throw new common_1.BadRequestException('Você já está neste plano.');
+            }
+            if (newIdx > currentIdx && current.plan.slug !== 'free') {
+                discountAmountCents = current.plan.priceCents;
+            }
             if (current.externalSubscriptionId) {
                 await this.stripeService.cancelSubscription(current.externalSubscriptionId).catch(() => { });
             }
@@ -105,74 +89,9 @@ let SubscriptionsService = class SubscriptionsService {
                 where: { id: current.id },
                 data: { cancelAtPeriodEnd: true },
             });
-            const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug);
-            return { checkoutUrl };
         }
-        const now = new Date();
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
-        const diffCents = newPlan.priceCents - current.plan.priceCents;
-        const subscription = await this.prisma.$transaction(async (tx) => {
-            const sub = await tx.subscription.update({
-                where: { id: current.id },
-                data: {
-                    planId: newPlan.id,
-                    externalSubscriptionId: stripeResult.stripeSubscriptionId,
-                    currentPeriodStart: now,
-                    currentPeriodEnd: periodEnd,
-                    cancelAtPeriodEnd: false,
-                    paymentRetryCount: 0,
-                },
-                include: { plan: true },
-            });
-            await tx.creditBalance.upsert({
-                where: { userId },
-                create: {
-                    userId,
-                    planCreditsRemaining: newPlan.creditsPerMonth,
-                    bonusCreditsRemaining: 0,
-                    planCreditsUsed: 0,
-                    periodStart: now,
-                    periodEnd: periodEnd,
-                },
-                update: {
-                    planCreditsRemaining: newPlan.creditsPerMonth,
-                    planCreditsUsed: 0,
-                    periodStart: now,
-                    periodEnd: periodEnd,
-                },
-            });
-            const payment = await tx.payment.create({
-                data: {
-                    userId,
-                    type: 'SUBSCRIPTION',
-                    amountCents: diffCents,
-                    currency: 'BRL',
-                    status: 'COMPLETED',
-                    provider: 'stripe',
-                    externalPaymentId: stripeResult.invoiceId ??
-                        stripeResult.stripeSubscriptionId,
-                    subscriptionId: current.id,
-                    metadata: {
-                        type: 'subscription_upgrade',
-                        fromPlan: current.plan.slug,
-                        toPlan: newPlan.slug,
-                    },
-                },
-            });
-            await tx.creditTransaction.create({
-                data: {
-                    userId,
-                    type: 'SUBSCRIPTION_RENEWAL',
-                    amount: newPlan.creditsPerMonth,
-                    source: 'plan',
-                    description: `Upgrade de ${current.plan.name} para ${newPlan.name} — ${newPlan.creditsPerMonth} créditos`,
-                    paymentId: payment.id,
-                },
-            });
-            return sub;
-        });
-        return this.toResponseDto(subscription);
+        const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents);
+        return { checkoutUrl };
     }
     async downgrade(userId, planSlug) {
         const current = await this.prisma.subscription.findFirst({
@@ -188,15 +107,37 @@ let SubscriptionsService = class SubscriptionsService {
         const newPlan = await this.plansService.findPlanBySlug(planSlug);
         const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
         const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
-        if (newIdx >= currentIdx) {
-            throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não é inferior ao plano atual "${current.plan.slug}". Use upgrade.`);
+        if (newIdx === currentIdx) {
+            throw new common_1.BadRequestException('Você já está neste plano.');
         }
+        if (newIdx > currentIdx) {
+            throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não é inferior ao atual. Use upgrade.`);
+        }
+        if (newPlan.slug === 'free') {
+            if (current.externalSubscriptionId) {
+                await this.stripeService.cancelSubscription(current.externalSubscriptionId);
+            }
+            const subscription = await this.prisma.subscription.update({
+                where: { id: current.id },
+                data: {
+                    cancelAtPeriodEnd: true,
+                    scheduledPlanId: newPlan.id,
+                },
+                include: { plan: true, scheduledPlan: true },
+            });
+            return this.toResponseDto(subscription);
+        }
+        if (!current.externalSubscriptionId) {
+            throw new common_1.BadRequestException('Assinatura sem vínculo com Stripe');
+        }
+        if (!newPlan.stripePriceId) {
+            throw new common_1.BadRequestException('Plano de destino sem price ID no Stripe');
+        }
+        await this.stripeService.scheduleSubscriptionPlanChange(current.externalSubscriptionId, newPlan.stripePriceId);
         const subscription = await this.prisma.subscription.update({
             where: { id: current.id },
-            data: {
-                cancelAtPeriodEnd: true,
-            },
-            include: { plan: true },
+            data: { scheduledPlanId: newPlan.id },
+            include: { plan: true, scheduledPlan: true },
         });
         return this.toResponseDto(subscription);
     }
@@ -246,17 +187,17 @@ let SubscriptionsService = class SubscriptionsService {
         });
         return this.toResponseDto(subscription);
     }
-    async buildCheckoutForPlan(userId, planSlug) {
+    async buildCheckoutForPlan(userId, planSlug, discountAmountCents = 0) {
         const plan = await this.plansService.findPlanBySlug(planSlug);
         const user = await this.prisma.user.findUniqueOrThrow({
             where: { id: userId },
             select: { email: true, name: true },
         });
         const customerId = await this.stripeService.getOrCreateCustomer(userId, user.email, user.name);
-        return this.stripeService.createSubscriptionCheckout(customerId, plan.slug, plan.name, plan.priceCents, userId, plan.stripePriceId);
+        return this.stripeService.createSubscriptionCheckout(customerId, plan.slug, plan.name, plan.priceCents, userId, plan.stripePriceId, discountAmountCents > 0 ? discountAmountCents : undefined);
     }
     toResponseDto(subscription) {
-        return {
+        const dto = {
             id: subscription.id,
             status: subscription.status,
             currentPeriodStart: subscription.currentPeriodStart,
@@ -277,6 +218,16 @@ let SubscriptionsService = class SubscriptionsService {
                 hasApiAccess: subscription.plan.hasApiAccess,
             },
         };
+        if (subscription.scheduledPlan) {
+            dto.scheduledPlan = {
+                id: subscription.scheduledPlan.id,
+                slug: subscription.scheduledPlan.slug,
+                name: subscription.scheduledPlan.name,
+                priceCents: subscription.scheduledPlan.priceCents,
+                creditsPerMonth: subscription.scheduledPlan.creditsPerMonth,
+            };
+        }
+        return dto;
     }
 };
 exports.SubscriptionsService = SubscriptionsService;

@@ -70,6 +70,18 @@ export class PaymentsService {
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     await this.prisma.$transaction(async (tx) => {
+      // Cancelar subscriptions anteriores do usuário
+      await tx.subscription.updateMany({
+        where: {
+          userId,
+          status: { in: ['ACTIVE', 'TRIALING', 'PAST_DUE'] },
+        },
+        data: {
+          status: 'CANCELED',
+          cancelAtPeriodEnd: false,
+        },
+      });
+
       // Criar subscription local
       const subscription = await tx.subscription.create({
         data: {
@@ -221,8 +233,21 @@ export class PaymentsService {
       return;
     }
 
+    // Se tem downgrade agendado, aplicar o novo plano
+    const hasScheduledPlan = !!subscription.scheduledPlanId;
+    let activePlan = subscription.plan;
+
+    if (hasScheduledPlan) {
+      const scheduled = await this.prisma.plan.findUnique({
+        where: { id: subscription.scheduledPlanId! },
+      });
+      if (scheduled) {
+        activePlan = scheduled;
+      }
+    }
+
     await this.prisma.$transaction(async (tx) => {
-      // Atualizar período da subscription
+      // Atualizar período da subscription (e aplicar plano agendado se houver)
       await tx.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -230,22 +255,26 @@ export class PaymentsService {
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           paymentRetryCount: 0,
+          ...(hasScheduledPlan && {
+            planId: activePlan.id,
+            scheduledPlanId: null,
+          }),
         },
       });
 
-      // Resetar créditos do plano
+      // Resetar créditos do plano (usa o plano ativo, que pode ser o novo após downgrade)
       await tx.creditBalance.upsert({
         where: { userId: subscription.userId },
         create: {
           userId: subscription.userId,
-          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsRemaining: activePlan.creditsPerMonth,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart,
           periodEnd,
         },
         update: {
-          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsRemaining: activePlan.creditsPerMonth,
           planCreditsUsed: 0,
           periodStart,
           periodEnd,
@@ -269,16 +298,18 @@ export class PaymentsService {
         data: {
           userId: subscription.userId,
           type: 'SUBSCRIPTION_RENEWAL',
-          amount: subscription.plan.creditsPerMonth,
+          amount: activePlan.creditsPerMonth,
           source: 'plan',
-          description: `Renovação mensal — plano ${subscription.plan.name}`,
+          description: hasScheduledPlan
+            ? `Downgrade aplicado — plano ${activePlan.name}`
+            : `Renovação mensal — plano ${activePlan.name}`,
           paymentId: payment.id,
         },
       });
     });
 
     this.logger.log(
-      `Processed subscription renewal for user ${subscription.userId}`,
+      `Processed subscription renewal for user ${subscription.userId}${hasScheduledPlan ? ` (downgrade to ${activePlan.slug})` : ''}`,
     );
   }
 
@@ -440,19 +471,30 @@ export class PaymentsService {
         },
       });
 
-      // Zerar créditos do plano (bonus permanecem)
-      const balance = await tx.creditBalance.findUnique({
-        where: { userId: subscription.userId },
+      // Só zerar créditos se NÃO existir outra subscription ativa mais recente
+      // (evita zerar créditos do Pro quando a sub antiga do Starter expira)
+      const newerActiveSub = await tx.subscription.findFirst({
+        where: {
+          userId: subscription.userId,
+          status: { in: ['ACTIVE', 'TRIALING'] },
+          id: { not: subscription.id },
+        },
       });
 
-      if (balance) {
-        await tx.creditBalance.update({
+      if (!newerActiveSub) {
+        const balance = await tx.creditBalance.findUnique({
           where: { userId: subscription.userId },
-          data: {
-            planCreditsRemaining: 0,
-            planCreditsUsed: 0,
-          },
         });
+
+        if (balance) {
+          await tx.creditBalance.update({
+            where: { userId: subscription.userId },
+            data: {
+              planCreditsRemaining: 0,
+              planCreditsUsed: 0,
+            },
+          });
+        }
       }
     });
 

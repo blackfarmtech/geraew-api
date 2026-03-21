@@ -65,27 +65,26 @@ export class SubscriptionsController {
 
   @Patch('upgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Upgrade de plano. Free → Paid retorna checkoutUrl; Paid → Paid retorna a subscription atualizada.' })
+  @ApiOperation({ summary: 'Upgrade de plano — sempre redireciona para Stripe Checkout' })
   @ApiResponse({
     status: 200,
-    description: 'Upgrade realizado com sucesso (paid → paid) ou URL de checkout retornada (free → paid)',
+    description: 'URL de checkout retornada',
   })
   @ApiResponse({ status: 400, description: 'Plano não é superior ao atual' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
-  @ApiResponse({ status: 404, description: 'Nenhuma assinatura ativa' })
   async upgrade(
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
-  ): Promise<SubscriptionResponseDto | { checkoutUrl: string }> {
+  ): Promise<{ checkoutUrl: string }> {
     return this.subscriptionsService.upgrade(userId, dto.planSlug);
   }
 
   @Patch('downgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Downgrade de plano (efetivo próximo ciclo)' })
+  @ApiOperation({ summary: 'Downgrade de plano — agenda troca para próximo ciclo' })
   @ApiResponse({
     status: 200,
-    description: 'Downgrade agendado para o próximo ciclo',
+    description: 'Downgrade agendado com sucesso',
     type: SubscriptionResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Plano não é inferior ao atual' })

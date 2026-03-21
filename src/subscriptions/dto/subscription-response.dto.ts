@@ -12,6 +12,14 @@ export class SubscriptionPlanDto {
   @ApiProperty() hasApiAccess: boolean;
 }
 
+export class ScheduledPlanDto {
+  @ApiProperty() id: string;
+  @ApiProperty() slug: string;
+  @ApiProperty() name: string;
+  @ApiProperty() priceCents: number;
+  @ApiProperty() creditsPerMonth: number;
+}
+
 export class SubscriptionResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() status: string;
@@ -22,4 +30,5 @@ export class SubscriptionResponseDto {
   @ApiProperty() paymentRetryCount: number;
   @ApiProperty() createdAt: Date;
   @ApiProperty() plan: SubscriptionPlanDto;
+  @ApiPropertyOptional() scheduledPlan?: ScheduledPlanDto;
 }

@@ -56,6 +56,16 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
         await this.prisma.$transaction(async (tx) => {
+            await tx.subscription.updateMany({
+                where: {
+                    userId,
+                    status: { in: ['ACTIVE', 'TRIALING', 'PAST_DUE'] },
+                },
+                data: {
+                    status: 'CANCELED',
+                    cancelAtPeriodEnd: false,
+                },
+            });
             const subscription = await tx.subscription.create({
                 data: {
                     userId,
@@ -165,6 +175,16 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
             this.logger.warn(`Subscription not found for Stripe ID ${stripeSubscriptionId}`);
             return;
         }
+        const hasScheduledPlan = !!subscription.scheduledPlanId;
+        let activePlan = subscription.plan;
+        if (hasScheduledPlan) {
+            const scheduled = await this.prisma.plan.findUnique({
+                where: { id: subscription.scheduledPlanId },
+            });
+            if (scheduled) {
+                activePlan = scheduled;
+            }
+        }
         await this.prisma.$transaction(async (tx) => {
             await tx.subscription.update({
                 where: { id: subscription.id },
@@ -173,20 +193,24 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
                     currentPeriodStart: periodStart,
                     currentPeriodEnd: periodEnd,
                     paymentRetryCount: 0,
+                    ...(hasScheduledPlan && {
+                        planId: activePlan.id,
+                        scheduledPlanId: null,
+                    }),
                 },
             });
             await tx.creditBalance.upsert({
                 where: { userId: subscription.userId },
                 create: {
                     userId: subscription.userId,
-                    planCreditsRemaining: subscription.plan.creditsPerMonth,
+                    planCreditsRemaining: activePlan.creditsPerMonth,
                     bonusCreditsRemaining: 0,
                     planCreditsUsed: 0,
                     periodStart,
                     periodEnd,
                 },
                 update: {
-                    planCreditsRemaining: subscription.plan.creditsPerMonth,
+                    planCreditsRemaining: activePlan.creditsPerMonth,
                     planCreditsUsed: 0,
                     periodStart,
                     periodEnd,
@@ -208,14 +232,16 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
                 data: {
                     userId: subscription.userId,
                     type: 'SUBSCRIPTION_RENEWAL',
-                    amount: subscription.plan.creditsPerMonth,
+                    amount: activePlan.creditsPerMonth,
                     source: 'plan',
-                    description: `Renovação mensal — plano ${subscription.plan.name}`,
+                    description: hasScheduledPlan
+                        ? `Downgrade aplicado — plano ${activePlan.name}`
+                        : `Renovação mensal — plano ${activePlan.name}`,
                     paymentId: payment.id,
                 },
             });
         });
-        this.logger.log(`Processed subscription renewal for user ${subscription.userId}`);
+        this.logger.log(`Processed subscription renewal for user ${subscription.userId}${hasScheduledPlan ? ` (downgrade to ${activePlan.slug})` : ''}`);
     }
     async handlePaymentFailed(stripeSubscriptionId, amountCents, externalPaymentId) {
         const subscription = await this.prisma.subscription.findFirst({
@@ -330,17 +356,26 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
                     cancelAtPeriodEnd: false,
                 },
             });
-            const balance = await tx.creditBalance.findUnique({
-                where: { userId: subscription.userId },
+            const newerActiveSub = await tx.subscription.findFirst({
+                where: {
+                    userId: subscription.userId,
+                    status: { in: ['ACTIVE', 'TRIALING'] },
+                    id: { not: subscription.id },
+                },
             });
-            if (balance) {
-                await tx.creditBalance.update({
+            if (!newerActiveSub) {
+                const balance = await tx.creditBalance.findUnique({
                     where: { userId: subscription.userId },
-                    data: {
-                        planCreditsRemaining: 0,
-                        planCreditsUsed: 0,
-                    },
                 });
+                if (balance) {
+                    await tx.creditBalance.update({
+                        where: { userId: subscription.userId },
+                        data: {
+                            planCreditsRemaining: 0,
+                            planCreditsUsed: 0,
+                        },
+                    });
+                }
             }
         });
         this.logger.log(`Subscription ${subscription.id} deleted for user ${subscription.userId}`);

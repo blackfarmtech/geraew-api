@@ -141,7 +141,8 @@ model Plan {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  subscriptions Subscription[]
+  subscriptions          Subscription[] @relation("currentPlan")
+  scheduledSubscriptions Subscription[] @relation("scheduledPlan")
 
   @@map("plans")
 }
@@ -190,14 +191,16 @@ model Subscription {
   paymentProvider        String?            @map("payment_provider")
   externalSubscriptionId String?            @map("external_subscription_id")
   paymentRetryCount      Int                @default(0) @map("payment_retry_count")
+  scheduledPlanId        String?            @map("scheduled_plan_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan     Plan      @relation(fields: [planId], references: [id])
-  payments Payment[]
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          Plan      @relation("currentPlan", fields: [planId], references: [id])
+  scheduledPlan Plan?     @relation("scheduledPlan", fields: [scheduledPlanId], references: [id])
+  payments      Payment[]
 
   @@index([userId])
   @@index([status])

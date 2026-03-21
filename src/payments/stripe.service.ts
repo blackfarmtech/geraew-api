@@ -67,6 +67,7 @@ export class StripeService {
     priceCents: number,
     userId: string,
     stripePriceId?: string | null,
+    discountAmountCents?: number,
   ): Promise<string> {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
@@ -83,15 +84,32 @@ export class StripeService {
           quantity: 1,
         };
 
+    // Se tem desconto (upgrade), criar cupom one-time para cobrar só a diferença
+    let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
+    let couponId: string | undefined;
+    if (discountAmountCents && discountAmountCents > 0) {
+      const coupon = await this.stripe.coupons.create({
+        amount_off: discountAmountCents,
+        currency: 'brl',
+        duration: 'once',
+        name: `Upgrade para ${planName}`,
+        metadata: { userId, type: 'subscription_upgrade' },
+      });
+      couponId = coupon.id;
+      discounts = [{ coupon: coupon.id }];
+    }
+
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [lineItem],
+      ...(discounts ? { discounts } : {}),
       metadata: {
         userId,
         planSlug,
         type: 'subscription',
+        ...(couponId ? { upgradeCouponId: couponId } : {}),
       },
       subscription_data: {
         metadata: {
@@ -236,6 +254,32 @@ export class StripeService {
       await this.stripe.coupons.del(coupon.id).catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Agenda troca de plano (downgrade) para o próximo ciclo.
+   * Altera o price da subscription sem gerar proration.
+   */
+  async scheduleSubscriptionPlanChange(
+    externalSubscriptionId: string,
+    newStripePriceId: string,
+  ): Promise<void> {
+    const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
+    const itemId = sub.items.data[0]?.id;
+
+    if (!itemId) {
+      throw new Error('Subscription has no items');
+    }
+
+    await this.stripe.subscriptions.update(externalSubscriptionId, {
+      items: [{ id: itemId, price: newStripePriceId }],
+      proration_behavior: 'none',
+      cancel_at_period_end: false,
+    });
+
+    this.logger.log(
+      `Scheduled plan change for subscription ${externalSubscriptionId} to price ${newStripePriceId}`,
+    );
   }
 
   /**

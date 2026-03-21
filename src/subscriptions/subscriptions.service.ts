@@ -95,7 +95,7 @@ export class SubscriptionsService {
   async upgrade(
     userId: string,
     planSlug: string,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<{ checkoutUrl: string }> {
     const current = await this.prisma.subscription.findFirst({
       where: {
         userId,
@@ -105,64 +105,24 @@ export class SubscriptionsService {
       include: { plan: true },
     });
 
-    if (!current) {
-      throw new NotFoundException('Nenhuma assinatura ativa encontrada');
-    }
-
     const newPlan = await this.plansService.findPlanBySlug(planSlug);
+    let discountAmountCents = 0;
 
-    const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
-    const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
+    if (current) {
+      const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
+      const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
 
-    if (newIdx <= currentIdx) {
-      throw new BadRequestException(
-        `O plano "${newPlan.slug}" não é superior ao plano atual "${current.plan.slug}". Use downgrade.`,
-      );
-    }
+      if (newIdx === currentIdx) {
+        throw new BadRequestException('Você já está neste plano.');
+      }
 
-    // Free → paid: delegar para o fluxo de checkout (precisa coletar método de pagamento)
-    if (current.plan.slug === 'free' || !current.externalSubscriptionId) {
-      return this.createSubscription(userId, planSlug) as unknown as SubscriptionResponseDto;
-    }
+      // Desconto = valor do plano atual (cobrar só a diferença na primeira invoice)
+      // Aplica desconto somente se o plano novo é superior ao atual e o atual é pago
+      if (newIdx > currentIdx && current.plan.slug !== 'free') {
+        discountAmountCents = current.plan.priceCents;
+      }
 
-    if (!newPlan.stripePriceId) {
-      throw new BadRequestException(
-        `O plano "${newPlan.slug}" não possui preço configurado no Stripe.`,
-      );
-    }
-
-    // Buscar stripeCustomerId do usuário
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { stripeCustomerId: true },
-    });
-
-    if (!user.stripeCustomerId) {
-      throw new BadRequestException(
-        'Usuário não possui customer no Stripe.',
-      );
-    }
-
-    // Chamar Stripe: cria nova sub com cupom (cobra diferença) e cancela antiga.
-    // Se falhar (ex: cartão recusado), nada muda localmente.
-    let stripeResult: {
-      stripeSubscriptionId: string;
-      invoiceId: string | null;
-    };
-
-    try {
-      stripeResult = await this.stripeService.upgradeSubscription(
-        user.stripeCustomerId,
-        current.externalSubscriptionId,
-        newPlan.stripePriceId,
-        newPlan.name,
-        current.plan.priceCents,
-        userId,
-        newPlan.slug,
-      );
-    } catch {
-      // Sem método de pagamento padrão ou pagamento recusado:
-      // cancelar sub antiga no Stripe e redirecionar para Checkout
+      // Cancelar assinatura antiga no Stripe (soft cancel)
       if (current.externalSubscriptionId) {
         await this.stripeService.cancelSubscription(
           current.externalSubscriptionId,
@@ -172,88 +132,11 @@ export class SubscriptionsService {
         where: { id: current.id },
         data: { cancelAtPeriodEnd: true },
       });
-      const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug);
-      return { checkoutUrl } as unknown as SubscriptionResponseDto;
     }
 
-    // Atualizar banco local em transação atômica
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-    const diffCents = newPlan.priceCents - current.plan.priceCents;
-
-    const subscription = await this.prisma.$transaction(async (tx) => {
-      // Atualizar subscription: novo plano, novo Stripe ID, resetar ciclo
-      const sub = await tx.subscription.update({
-        where: { id: current.id },
-        data: {
-          planId: newPlan.id,
-          externalSubscriptionId: stripeResult.stripeSubscriptionId,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-          cancelAtPeriodEnd: false,
-          paymentRetryCount: 0,
-        },
-        include: { plan: true },
-      });
-
-      // Créditos cheios do novo plano, preservando bonus
-      await tx.creditBalance.upsert({
-        where: { userId },
-        create: {
-          userId,
-          planCreditsRemaining: newPlan.creditsPerMonth,
-          bonusCreditsRemaining: 0,
-          planCreditsUsed: 0,
-          periodStart: now,
-          periodEnd: periodEnd,
-        },
-        update: {
-          planCreditsRemaining: newPlan.creditsPerMonth,
-          planCreditsUsed: 0,
-          periodStart: now,
-          periodEnd: periodEnd,
-        },
-      });
-
-      // Registrar pagamento
-      const payment = await tx.payment.create({
-        data: {
-          userId,
-          type: 'SUBSCRIPTION',
-          amountCents: diffCents,
-          currency: 'BRL',
-          status: 'COMPLETED',
-          provider: 'stripe',
-          externalPaymentId:
-            stripeResult.invoiceId ??
-            stripeResult.stripeSubscriptionId,
-          subscriptionId: current.id,
-          metadata: {
-            type: 'subscription_upgrade',
-            fromPlan: current.plan.slug,
-            toPlan: newPlan.slug,
-          },
-        },
-      });
-
-      // Registrar transação de créditos
-      await tx.creditTransaction.create({
-        data: {
-          userId,
-          type: 'SUBSCRIPTION_RENEWAL',
-          amount: newPlan.creditsPerMonth,
-          source: 'plan',
-          description: `Upgrade de ${current.plan.name} para ${newPlan.name} — ${newPlan.creditsPerMonth} créditos`,
-          paymentId: payment.id,
-        },
-      });
-
-      return sub;
-    });
-
-    return this.toResponseDto(subscription);
+    // Redirecionar para Stripe Checkout (com desconto se upgrade de plano pago)
+    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents);
+    return { checkoutUrl };
   }
 
   async downgrade(
@@ -277,18 +160,52 @@ export class SubscriptionsService {
     const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
     const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
 
-    if (newIdx >= currentIdx) {
+    if (newIdx === currentIdx) {
+      throw new BadRequestException('Você já está neste plano.');
+    }
+
+    if (newIdx > currentIdx) {
       throw new BadRequestException(
-        `O plano "${newPlan.slug}" não é inferior ao plano atual "${current.plan.slug}". Use upgrade.`,
+        `O plano "${newPlan.slug}" não é inferior ao atual. Use upgrade.`,
       );
     }
 
+    // Downgrade para Free = cancelar no fim do período
+    if (newPlan.slug === 'free') {
+      if (current.externalSubscriptionId) {
+        await this.stripeService.cancelSubscription(
+          current.externalSubscriptionId,
+        );
+      }
+      const subscription = await this.prisma.subscription.update({
+        where: { id: current.id },
+        data: {
+          cancelAtPeriodEnd: true,
+          scheduledPlanId: newPlan.id,
+        },
+        include: { plan: true, scheduledPlan: true },
+      });
+      return this.toResponseDto(subscription);
+    }
+
+    // Downgrade para plano pago inferior: atualizar price no Stripe (sem proration)
+    if (!current.externalSubscriptionId) {
+      throw new BadRequestException('Assinatura sem vínculo com Stripe');
+    }
+
+    if (!newPlan.stripePriceId) {
+      throw new BadRequestException('Plano de destino sem price ID no Stripe');
+    }
+
+    await this.stripeService.scheduleSubscriptionPlanChange(
+      current.externalSubscriptionId,
+      newPlan.stripePriceId,
+    );
+
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
-      data: {
-        cancelAtPeriodEnd: true,
-      },
-      include: { plan: true },
+      data: { scheduledPlanId: newPlan.id },
+      include: { plan: true, scheduledPlan: true },
     });
 
     return this.toResponseDto(subscription);
@@ -362,6 +279,7 @@ export class SubscriptionsService {
   private async buildCheckoutForPlan(
     userId: string,
     planSlug: string,
+    discountAmountCents = 0,
   ): Promise<string> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -380,13 +298,14 @@ export class SubscriptionsService {
       plan.priceCents,
       userId,
       plan.stripePriceId,
+      discountAmountCents > 0 ? discountAmountCents : undefined,
     );
   }
 
   private toResponseDto(
     subscription: any,
   ): SubscriptionResponseDto {
-    return {
+    const dto: SubscriptionResponseDto = {
       id: subscription.id,
       status: subscription.status,
       currentPeriodStart: subscription.currentPeriodStart,
@@ -407,5 +326,17 @@ export class SubscriptionsService {
         hasApiAccess: subscription.plan.hasApiAccess,
       },
     };
+
+    if (subscription.scheduledPlan) {
+      dto.scheduledPlan = {
+        id: subscription.scheduledPlan.id,
+        slug: subscription.scheduledPlan.slug,
+        name: subscription.scheduledPlan.name,
+        priceCents: subscription.scheduledPlan.priceCents,
+        creditsPerMonth: subscription.scheduledPlan.creditsPerMonth,
+      };
+    }
+
+    return dto;
   }
 }

@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SubscriptionResponseDto = exports.SubscriptionPlanDto = void 0;
+exports.SubscriptionResponseDto = exports.ScheduledPlanDto = exports.SubscriptionPlanDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class SubscriptionPlanDto {
     id;
@@ -59,6 +59,34 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)
 ], SubscriptionPlanDto.prototype, "hasApiAccess", void 0);
+class ScheduledPlanDto {
+    id;
+    slug;
+    name;
+    priceCents;
+    creditsPerMonth;
+}
+exports.ScheduledPlanDto = ScheduledPlanDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], ScheduledPlanDto.prototype, "id", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], ScheduledPlanDto.prototype, "slug", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", String)
+], ScheduledPlanDto.prototype, "name", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Number)
+], ScheduledPlanDto.prototype, "priceCents", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Number)
+], ScheduledPlanDto.prototype, "creditsPerMonth", void 0);
 class SubscriptionResponseDto {
     id;
     status;
@@ -69,6 +97,7 @@ class SubscriptionResponseDto {
     paymentRetryCount;
     createdAt;
     plan;
+    scheduledPlan;
 }
 exports.SubscriptionResponseDto = SubscriptionResponseDto;
 __decorate([
@@ -107,4 +136,8 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", SubscriptionPlanDto)
 ], SubscriptionResponseDto.prototype, "plan", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    __metadata("design:type", ScheduledPlanDto)
+], SubscriptionResponseDto.prototype, "scheduledPlan", void 0);
 //# sourceMappingURL=subscription-response.dto.js.map

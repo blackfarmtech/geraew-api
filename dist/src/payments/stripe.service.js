@@ -48,7 +48,7 @@ let StripeService = StripeService_1 = class StripeService {
         this.logger.log(`Created Stripe customer ${customer.id} for user ${userId}`);
         return customer.id;
     }
-    async createSubscriptionCheckout(customerId, planSlug, planName, priceCents, userId, stripePriceId) {
+    async createSubscriptionCheckout(customerId, planSlug, planName, priceCents, userId, stripePriceId, discountAmountCents) {
         const lineItem = stripePriceId
             ? { price: stripePriceId, quantity: 1 }
             : {
@@ -63,15 +63,30 @@ let StripeService = StripeService_1 = class StripeService {
                 },
                 quantity: 1,
             };
+        let discounts;
+        let couponId;
+        if (discountAmountCents && discountAmountCents > 0) {
+            const coupon = await this.stripe.coupons.create({
+                amount_off: discountAmountCents,
+                currency: 'brl',
+                duration: 'once',
+                name: `Upgrade para ${planName}`,
+                metadata: { userId, type: 'subscription_upgrade' },
+            });
+            couponId = coupon.id;
+            discounts = [{ coupon: coupon.id }];
+        }
         const session = await this.stripe.checkout.sessions.create({
             customer: customerId,
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [lineItem],
+            ...(discounts ? { discounts } : {}),
             metadata: {
                 userId,
                 planSlug,
                 type: 'subscription',
+                ...(couponId ? { upgradeCouponId: couponId } : {}),
             },
             subscription_data: {
                 metadata: {
@@ -159,6 +174,19 @@ let StripeService = StripeService_1 = class StripeService {
             await this.stripe.coupons.del(coupon.id).catch(() => { });
             throw error;
         }
+    }
+    async scheduleSubscriptionPlanChange(externalSubscriptionId, newStripePriceId) {
+        const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
+        const itemId = sub.items.data[0]?.id;
+        if (!itemId) {
+            throw new Error('Subscription has no items');
+        }
+        await this.stripe.subscriptions.update(externalSubscriptionId, {
+            items: [{ id: itemId, price: newStripePriceId }],
+            proration_behavior: 'none',
+            cancel_at_period_end: false,
+        });
+        this.logger.log(`Scheduled plan change for subscription ${externalSubscriptionId} to price ${newStripePriceId}`);
     }
     async cancelSubscription(externalSubscriptionId) {
         await this.stripe.subscriptions.update(externalSubscriptionId, {

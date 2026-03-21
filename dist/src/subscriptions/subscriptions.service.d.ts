@@ -11,7 +11,9 @@ export declare class SubscriptionsService {
     createSubscription(userId: string, planSlug: string): Promise<{
         checkoutUrl: string;
     }>;
-    upgrade(userId: string, planSlug: string): Promise<SubscriptionResponseDto>;
+    upgrade(userId: string, planSlug: string): Promise<{
+        checkoutUrl: string;
+    }>;
     downgrade(userId: string, planSlug: string): Promise<SubscriptionResponseDto>;
     cancel(userId: string): Promise<SubscriptionResponseDto>;
     reactivate(userId: string): Promise<SubscriptionResponseDto>;

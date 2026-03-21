@@ -79,14 +79,13 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('upgrade'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Upgrade de plano. Free → Paid retorna checkoutUrl; Paid → Paid retorna a subscription atualizada.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Upgrade de plano — sempre redireciona para Stripe Checkout' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Upgrade realizado com sucesso (paid → paid) ou URL de checkout retornada (free → paid)',
+        description: 'URL de checkout retornada',
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Plano não é superior ao atual' }),
     (0, swagger_1.ApiResponse)({ status: 401, description: 'Não autenticado' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Nenhuma assinatura ativa' }),
     __param(0, (0, decorators_1.CurrentUser)('sub')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -96,10 +95,10 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('downgrade'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Downgrade de plano (efetivo próximo ciclo)' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Downgrade de plano — agenda troca para próximo ciclo' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Downgrade agendado para o próximo ciclo',
+        description: 'Downgrade agendado com sucesso',
         type: subscription_response_dto_1.SubscriptionResponseDto,
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Plano não é inferior ao atual' }),
