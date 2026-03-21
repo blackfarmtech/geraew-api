@@ -8,6 +8,7 @@ export interface WanAnimateReplaceInput {
   videoUrl: string;
   imageUrl: string;
   resolution: string;
+  prompt?: string;
 }
 
 interface CreateTaskResponse {
@@ -50,16 +51,17 @@ export class WanProvider {
     input: WanAnimateReplaceInput,
   ): Promise<GenerationResult> {
     this.logger.log(
-      `Creating Wan Animate Replace task — resolution ${input.resolution}`,
+      `Creating Kling 2.6 Motion Control task — mode ${input.resolution}`,
     );
 
-    const body = {
-      model: 'wan/2-2-animate-replace',
+    const body: Record<string, unknown> = {
+      model: 'kling-2.6/motion-control',
       input: {
-        video_url: input.videoUrl,
-        image_url: input.imageUrl,
-        resolution: input.resolution,
-        nsfw_checker: false,
+        input_urls: [input.imageUrl],
+        video_urls: [input.videoUrl],
+        character_orientation: 'video',
+        mode: input.resolution,
+        ...(input.prompt ? { prompt: input.prompt } : {}),
       },
     };
 
@@ -76,19 +78,19 @@ export class WanProvider {
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
       throw new Error(
-        `Wan createTask error (${createResponse.status}): ${errorText}`,
+        `Kling createTask error (${createResponse.status}): ${errorText}`,
       );
     }
 
     const createData = (await createResponse.json()) as CreateTaskResponse;
     if (createData.code !== 200) {
       throw new Error(
-        `Wan createTask failed: ${createData.msg} (code ${createData.code})`,
+        `Kling createTask failed: ${createData.msg} (code ${createData.code})`,
       );
     }
 
     const taskId = createData.data.taskId;
-    this.logger.log(`Wan task created: ${taskId}`);
+    this.logger.log(`Kling task created: ${taskId}`);
 
     const resultUrls = await this.pollTaskStatus(taskId);
 
@@ -99,11 +101,11 @@ export class WanProvider {
     }
 
     if (!outputUrls.length) {
-      throw new Error('Wan Animate Replace returned no videos.');
+      throw new Error('Kling Motion Control returned no videos.');
     }
 
     this.logger.log(`${outputUrls.length} video(s) uploaded to S3`);
-    return { outputUrls, modelUsed: 'wan/2-2-animate-replace' };
+    return { outputUrls, modelUsed: 'kling-2.6/motion-control' };
   }
 
   private async pollTaskStatus(
@@ -125,7 +127,7 @@ export class WanProvider {
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `Wan recordInfo error (${response.status}): ${errorText}`,
+          `Kling recordInfo error (${response.status}): ${errorText}`,
         );
       }
 
@@ -133,32 +135,32 @@ export class WanProvider {
 
       if (data.data.state === 'waiting') {
         this.logger.debug(
-          `Wan task still processing... (attempt ${attempt + 1}/${maxAttempts})`,
+          `Kling task still processing... (attempt ${attempt + 1}/${maxAttempts})`,
         );
         continue;
       }
 
       if (data.data.state === 'fail') {
         throw new Error(
-          `Wan generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`,
+          `Kling generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`,
         );
       }
 
       if (data.data.state === 'success') {
         if (!data.data.resultJson) {
-          throw new Error('Wan succeeded but returned no resultJson.');
+          throw new Error('Kling succeeded but returned no resultJson.');
         }
         const result = JSON.parse(data.data.resultJson) as {
           resultUrls?: string[];
         };
         if (!result.resultUrls?.length) {
-          throw new Error('Wan succeeded but returned no video URLs.');
+          throw new Error('Kling succeeded but returned no video URLs.');
         }
         return result.resultUrls;
       }
     }
 
-    throw new Error('Wan generation timed out.');
+    throw new Error('Kling generation timed out.');
   }
 
   private async downloadAndUpload(
@@ -169,7 +171,7 @@ export class WanProvider {
     const response = await this.fetchWithTimeout(sourceUrl, {}, 120_000);
     if (!response.ok) {
       throw new Error(
-        `Failed to download video from Wan (${response.status}): ${sourceUrl}`,
+        `Failed to download video from Kling (${response.status}): ${sourceUrl}`,
       );
     }
     const buffer = Buffer.from(await response.arrayBuffer());

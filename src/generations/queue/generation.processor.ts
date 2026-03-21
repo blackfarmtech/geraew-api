@@ -280,7 +280,7 @@ export class GenerationProcessor extends WorkerHost {
       id: data.generationId,
       videoUrl: data.videoUrl,
       imageUrl: data.imageUrl,
-      resolution: data.wanResolution,
+      resolution: data.resolution,
     });
 
     await this.completeGeneration(data.generationId, result, startTime);

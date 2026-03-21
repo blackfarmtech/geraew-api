@@ -57,7 +57,7 @@ export interface ReferenceVideoJobData extends TextToVideoJobData {
 export interface MotionControlJobData extends BaseJobData {
   videoUrl: string;
   imageUrl: string;
-  wanResolution: string;
+  resolution: string;
 }
 
 export type GenerationJobData =

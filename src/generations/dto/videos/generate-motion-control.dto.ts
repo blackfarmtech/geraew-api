@@ -32,11 +32,11 @@ export class GenerateMotionControlDto {
 
   @ApiPropertyOptional({
     description: 'Resolução do vídeo gerado',
-    enum: ['480p', '580p', '720p'],
-    default: '480p',
+    enum: ['720p', '1080p'],
+    default: '720p',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['480p', '580p', '720p'])
+  @IsIn(['720p', '1080p'])
   resolution?: string;
 }

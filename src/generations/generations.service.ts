@@ -29,6 +29,7 @@ import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
 import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
+import { getVideoDurationSeconds } from './utils/video-duration.util';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import {
@@ -578,19 +579,22 @@ export class GenerationsService {
     };
   }
 
-  // ─── Motion Control (Wan Animate Replace) ────────────────
+  // ─── Motion Control (Kling 2.6) ───────────────────────────
 
   async generateMotionControl(
     userId: string,
     dto: GenerateMotionControlDto,
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.MOTION_CONTROL;
-    const wanResolution = dto.resolution ?? '480p';
-    const durationSeconds = 5; // fixed estimate for credit calculation
+    const resolution = dto.resolution ?? '720p';
+    const dbResolution = resolution === '1080p' ? Resolution.RES_1080P : Resolution.RES_720P;
+
+    const videoBuffer = Buffer.from(dto.video, 'base64');
+    const durationSeconds = getVideoDurationSeconds(videoBuffer);
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
-      Resolution.RES_720P,
+      dbResolution,
       durationSeconds,
       false,
     );
@@ -603,12 +607,12 @@ export class GenerationsService {
         userId,
         type,
         status: GenerationStatus.PROCESSING,
-        modelUsed: 'wan/2-2-animate-replace',
-        resolution: Resolution.RES_720P,
+        modelUsed: 'kling-2.6/motion-control',
+        resolution: dbResolution,
         durationSeconds,
         hasAudio: false,
         creditsConsumed: creditsRequired,
-        parameters: { wanResolution },
+        parameters: { resolution },
       },
     });
 
@@ -656,7 +660,7 @@ export class GenerationsService {
       ],
     });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, Resolution.RES_720P);
+    await this.debitCredits(userId, creditsRequired, generation.id, type, dbResolution);
 
     await this.generationQueue.add(
       GenerationJobName.MOTION_CONTROL,
@@ -666,7 +670,7 @@ export class GenerationsService {
         creditsConsumed: creditsRequired,
         videoUrl: videoPublicUrl,
         imageUrl: imagePublicUrl,
-        wanResolution,
+        resolution,
       } satisfies MotionControlJobData,
     );
 
