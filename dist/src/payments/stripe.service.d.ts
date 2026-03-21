@@ -12,6 +12,10 @@ export declare class StripeService {
     createSubscriptionCheckout(customerId: string, planSlug: string, planName: string, priceCents: number, userId: string, stripePriceId?: string | null): Promise<string>;
     createCreditPurchaseCheckout(customerId: string, packageId: string, packageName: string, credits: number, priceCents: number, userId: string, stripePriceId?: string | null): Promise<string>;
     constructWebhookEvent(payload: Buffer, signature: string): Stripe.Event;
+    upgradeSubscription(customerId: string, oldSubscriptionId: string, newStripePriceId: string, newPlanName: string, currentPlanPriceCents: number, userId: string, newPlanSlug: string): Promise<{
+        stripeSubscriptionId: string;
+        invoiceId: string | null;
+    }>;
     cancelSubscription(externalSubscriptionId: string): Promise<void>;
     reactivateSubscription(externalSubscriptionId: string): Promise<void>;
 }

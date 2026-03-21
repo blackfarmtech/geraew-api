@@ -120,6 +120,41 @@ let StripeService = StripeService_1 = class StripeService {
     constructWebhookEvent(payload, signature) {
         return this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
     }
+    async upgradeSubscription(customerId, oldSubscriptionId, newStripePriceId, newPlanName, currentPlanPriceCents, userId, newPlanSlug) {
+        const coupon = await this.stripe.coupons.create({
+            amount_off: currentPlanPriceCents,
+            currency: 'brl',
+            duration: 'once',
+            name: `Upgrade para ${newPlanName}`,
+            metadata: { userId, type: 'subscription_upgrade' },
+        });
+        try {
+            const subscription = await this.stripe.subscriptions.create({
+                customer: customerId,
+                items: [{ price: newStripePriceId }],
+                discounts: [{ coupon: coupon.id }],
+                payment_behavior: 'error_if_incomplete',
+                metadata: {
+                    userId,
+                    planSlug: newPlanSlug,
+                    type: 'subscription_upgrade',
+                },
+            });
+            await this.stripe.subscriptions.cancel(oldSubscriptionId);
+            await this.stripe.coupons.del(coupon.id).catch((err) => {
+                this.logger.warn(`Failed to delete upgrade coupon ${coupon.id}: ${err instanceof Error ? err.message : err}`);
+            });
+            const invoiceId = typeof subscription.latest_invoice === 'string'
+                ? subscription.latest_invoice
+                : subscription.latest_invoice?.id ?? null;
+            this.logger.log(`Upgraded subscription for user ${userId}: old=${oldSubscriptionId}, new=${subscription.id}`);
+            return { stripeSubscriptionId: subscription.id, invoiceId };
+        }
+        catch (error) {
+            await this.stripe.coupons.del(coupon.id).catch(() => { });
+            throw error;
+        }
+    }
     async cancelSubscription(externalSubscriptionId) {
         await this.stripe.subscriptions.update(externalSubscriptionId, {
             cancel_at_period_end: true,

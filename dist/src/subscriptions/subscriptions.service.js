@@ -68,6 +68,7 @@ let SubscriptionsService = class SubscriptionsService {
                 userId,
                 status: { in: ['ACTIVE', 'TRIALING'] },
             },
+            orderBy: { createdAt: 'desc' },
             include: { plan: true },
         });
         if (!current) {
@@ -79,51 +80,89 @@ let SubscriptionsService = class SubscriptionsService {
         if (newIdx <= currentIdx) {
             throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não é superior ao plano atual "${current.plan.slug}". Use downgrade.`);
         }
+        if (current.plan.slug === 'free' || !current.externalSubscriptionId) {
+            return this.createSubscription(userId, planSlug);
+        }
+        if (!newPlan.stripePriceId) {
+            throw new common_1.BadRequestException(`O plano "${newPlan.slug}" não possui preço configurado no Stripe.`);
+        }
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { stripeCustomerId: true },
+        });
+        if (!user.stripeCustomerId) {
+            throw new common_1.BadRequestException('Usuário não possui customer no Stripe.');
+        }
+        let stripeResult;
+        try {
+            stripeResult = await this.stripeService.upgradeSubscription(user.stripeCustomerId, current.externalSubscriptionId, newPlan.stripePriceId, newPlan.name, current.plan.priceCents, userId, newPlan.slug);
+        }
+        catch (error) {
+            const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+            throw new common_1.BadRequestException(`Falha ao processar pagamento do upgrade: ${msg}`);
+        }
         const now = new Date();
-        const periodTotal = current.currentPeriodEnd.getTime() -
-            current.currentPeriodStart.getTime();
-        const periodRemaining = current.currentPeriodEnd.getTime() - now.getTime();
-        const remainingRatio = Math.max(0, periodRemaining / periodTotal);
-        const proRataCredits = Math.floor(newPlan.creditsPerMonth * remainingRatio);
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        const diffCents = newPlan.priceCents - current.plan.priceCents;
         const subscription = await this.prisma.$transaction(async (tx) => {
             const sub = await tx.subscription.update({
                 where: { id: current.id },
                 data: {
                     planId: newPlan.id,
+                    externalSubscriptionId: stripeResult.stripeSubscriptionId,
+                    currentPeriodStart: now,
+                    currentPeriodEnd: periodEnd,
                     cancelAtPeriodEnd: false,
+                    paymentRetryCount: 0,
                 },
                 include: { plan: true },
             });
-            const balance = await tx.creditBalance.findUnique({
-                where: { userId },
-            });
-            const currentPlanRemaining = balance?.planCreditsRemaining ?? 0;
             await tx.creditBalance.upsert({
                 where: { userId },
                 create: {
                     userId,
-                    planCreditsRemaining: proRataCredits,
+                    planCreditsRemaining: newPlan.creditsPerMonth,
                     bonusCreditsRemaining: 0,
                     planCreditsUsed: 0,
-                    periodStart: current.currentPeriodStart,
-                    periodEnd: current.currentPeriodEnd,
+                    periodStart: now,
+                    periodEnd: periodEnd,
                 },
                 update: {
-                    planCreditsRemaining: proRataCredits,
+                    planCreditsRemaining: newPlan.creditsPerMonth,
+                    planCreditsUsed: 0,
+                    periodStart: now,
+                    periodEnd: periodEnd,
                 },
             });
-            const creditsDiff = proRataCredits - currentPlanRemaining;
-            if (creditsDiff !== 0) {
-                await tx.creditTransaction.create({
-                    data: {
-                        userId,
-                        type: 'SUBSCRIPTION_RENEWAL',
-                        amount: creditsDiff,
-                        source: 'plan',
-                        description: `Upgrade para ${newPlan.name} — ajuste pro-rata de créditos`,
+            const payment = await tx.payment.create({
+                data: {
+                    userId,
+                    type: 'SUBSCRIPTION',
+                    amountCents: diffCents,
+                    currency: 'BRL',
+                    status: 'COMPLETED',
+                    provider: 'stripe',
+                    externalPaymentId: stripeResult.invoiceId ??
+                        stripeResult.stripeSubscriptionId,
+                    subscriptionId: current.id,
+                    metadata: {
+                        type: 'subscription_upgrade',
+                        fromPlan: current.plan.slug,
+                        toPlan: newPlan.slug,
                     },
-                });
-            }
+                },
+            });
+            await tx.creditTransaction.create({
+                data: {
+                    userId,
+                    type: 'SUBSCRIPTION_RENEWAL',
+                    amount: newPlan.creditsPerMonth,
+                    source: 'plan',
+                    description: `Upgrade de ${current.plan.name} para ${newPlan.name} — ${newPlan.creditsPerMonth} créditos`,
+                    paymentId: payment.id,
+                },
+            });
             return sub;
         });
         return this.toResponseDto(subscription);

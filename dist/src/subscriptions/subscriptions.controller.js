@@ -79,11 +79,10 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('upgrade'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
-    (0, swagger_1.ApiOperation)({ summary: 'Upgrade de plano' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Upgrade de plano. Free → Paid retorna checkoutUrl; Paid → Paid retorna a subscription atualizada.' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Upgrade realizado com sucesso',
-        type: subscription_response_dto_1.SubscriptionResponseDto,
+        description: 'Upgrade realizado com sucesso (paid → paid) ou URL de checkout retornada (free → paid)',
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Plano não é superior ao atual' }),
     (0, swagger_1.ApiResponse)({ status: 401, description: 'Não autenticado' }),
