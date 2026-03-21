@@ -15,5 +15,6 @@ export declare class SubscriptionsService {
     downgrade(userId: string, planSlug: string): Promise<SubscriptionResponseDto>;
     cancel(userId: string): Promise<SubscriptionResponseDto>;
     reactivate(userId: string): Promise<SubscriptionResponseDto>;
+    private buildCheckoutForPlan;
     private toResponseDto;
 }

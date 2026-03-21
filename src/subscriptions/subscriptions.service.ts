@@ -160,12 +160,20 @@ export class SubscriptionsService {
         userId,
         newPlan.slug,
       );
-    } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : 'Erro desconhecido';
-      throw new BadRequestException(
-        `Falha ao processar pagamento do upgrade: ${msg}`,
-      );
+    } catch {
+      // Sem método de pagamento padrão ou pagamento recusado:
+      // cancelar sub antiga no Stripe e redirecionar para Checkout
+      if (current.externalSubscriptionId) {
+        await this.stripeService.cancelSubscription(
+          current.externalSubscriptionId,
+        ).catch(() => {});
+      }
+      await this.prisma.subscription.update({
+        where: { id: current.id },
+        data: { cancelAtPeriodEnd: true },
+      });
+      const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug);
+      return { checkoutUrl } as unknown as SubscriptionResponseDto;
     }
 
     // Atualizar banco local em transação atômica
@@ -349,6 +357,30 @@ export class SubscriptionsService {
     });
 
     return this.toResponseDto(subscription);
+  }
+
+  private async buildCheckoutForPlan(
+    userId: string,
+    planSlug: string,
+  ): Promise<string> {
+    const plan = await this.plansService.findPlanBySlug(planSlug);
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    const customerId = await this.stripeService.getOrCreateCustomer(
+      userId,
+      user.email,
+      user.name,
+    );
+    return this.stripeService.createSubscriptionCheckout(
+      customerId,
+      plan.slug,
+      plan.name,
+      plan.priceCents,
+      userId,
+      plan.stripePriceId,
+    );
   }
 
   private toResponseDto(

@@ -129,10 +129,15 @@ let StripeService = StripeService_1 = class StripeService {
             metadata: { userId, type: 'subscription_upgrade' },
         });
         try {
+            const oldSub = await this.stripe.subscriptions.retrieve(oldSubscriptionId);
+            const defaultPaymentMethod = typeof oldSub.default_payment_method === 'string'
+                ? oldSub.default_payment_method
+                : oldSub.default_payment_method?.id ?? undefined;
             const subscription = await this.stripe.subscriptions.create({
                 customer: customerId,
                 items: [{ price: newStripePriceId }],
                 discounts: [{ coupon: coupon.id }],
+                default_payment_method: defaultPaymentMethod,
                 payment_behavior: 'error_if_incomplete',
                 metadata: {
                     userId,

@@ -189,12 +189,20 @@ export class StripeService {
     });
 
     try {
-      // 2. Criar nova subscription com cupom
+      // 2. Buscar payment method da subscription existente
+      const oldSub = await this.stripe.subscriptions.retrieve(oldSubscriptionId);
+      const defaultPaymentMethod =
+        typeof oldSub.default_payment_method === 'string'
+          ? oldSub.default_payment_method
+          : (oldSub.default_payment_method as Stripe.PaymentMethod)?.id ?? undefined;
+
+      // 3. Criar nova subscription com cupom e payment method explícito
       //    Invoice = newPlanPrice - coupon = diferença
       const subscription = await this.stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: newStripePriceId }],
         discounts: [{ coupon: coupon.id }],
+        default_payment_method: defaultPaymentMethod,
         payment_behavior: 'error_if_incomplete',
         metadata: {
           userId,
@@ -203,10 +211,10 @@ export class StripeService {
         },
       });
 
-      // 3. Cancelar subscription antiga imediatamente
+      // 4. Cancelar subscription antiga imediatamente
       await this.stripe.subscriptions.cancel(oldSubscriptionId);
 
-      // 4. Cleanup: deletar cupom (já usado, evita reuso)
+      // 5. Cleanup: deletar cupom (já usado, evita reuso)
       await this.stripe.coupons.del(coupon.id).catch((err) => {
         this.logger.warn(
           `Failed to delete upgrade coupon ${coupon.id}: ${err instanceof Error ? err.message : err}`,
