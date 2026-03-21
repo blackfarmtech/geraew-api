@@ -17,14 +17,14 @@ export declare class CreditsController {
     getBalance(userId: string): Promise<CreditBalanceResponseDto>;
     getTransactions(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<CreditTransactionResponseDto>>;
     getPackages(): Promise<{
-        id: string;
         name: string;
-        credits: number;
-        priceCents: number;
+        id: string;
+        createdAt: Date;
         isActive: boolean;
+        priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;
-        createdAt: Date;
+        credits: number;
     }[]>;
     purchaseCredits(userId: string, dto: PurchaseCreditsDto): Promise<{
         checkoutUrl: string;

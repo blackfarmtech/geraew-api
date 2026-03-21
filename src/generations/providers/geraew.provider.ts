@@ -130,7 +130,7 @@ export class GeraewProvider {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(body),
-      }, 600_000);
+      }, 120_000); // 2 min — images are fast; keeps fallback within CRON threshold
     } catch (error) {
       this.logger.error(`[IMAGE] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);
       throw error;

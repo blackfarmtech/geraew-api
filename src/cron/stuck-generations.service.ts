@@ -7,7 +7,7 @@ import {
   GenerationStatus,
 } from '@prisma/client';
 
-const STUCK_THRESHOLD_MINUTES = 10;
+const STUCK_THRESHOLD_MINUTES = 25;
 
 @Injectable()
 export class StuckGenerationsService {

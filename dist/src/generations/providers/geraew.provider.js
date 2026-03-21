@@ -61,7 +61,7 @@ let GeraewProvider = GeraewProvider_1 = class GeraewProvider {
                 method: 'POST',
                 headers: this.headers(),
                 body: JSON.stringify(body),
-            }, 600_000);
+            }, 120_000);
         }
         catch (error) {
             this.logger.error(`[IMAGE] Fetch failed to ${url}: ${error.message}`, error.cause ? JSON.stringify(error.cause) : undefined);

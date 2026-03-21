@@ -5,12 +5,12 @@ export declare class PlansService {
     constructor(prisma: PrismaService);
     findAllPlans(): Promise<{
         name: string;
+        description: string | null;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         updatedAt: Date;
         slug: string;
-        description: string | null;
         priceCents: number;
         creditsPerMonth: number;
         maxConcurrentGenerations: number;
@@ -22,12 +22,12 @@ export declare class PlansService {
     }[]>;
     findPlanBySlug(slug: string): Promise<{
         name: string;
+        description: string | null;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         updatedAt: Date;
         slug: string;
-        description: string | null;
         priceCents: number;
         creditsPerMonth: number;
         maxConcurrentGenerations: number;
@@ -39,12 +39,12 @@ export declare class PlansService {
     }>;
     findPlanById(id: string): Promise<{
         name: string;
+        description: string | null;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         updatedAt: Date;
         slug: string;
-        description: string | null;
         priceCents: number;
         creditsPerMonth: number;
         maxConcurrentGenerations: number;
@@ -56,8 +56,8 @@ export declare class PlansService {
     }>;
     getCreditCost(generationType: GenerationType, resolution: Resolution, hasAudio: boolean): Promise<{
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         updatedAt: Date;
         generationType: import(".prisma/client").$Enums.GenerationType;
         resolution: import(".prisma/client").$Enums.Resolution;
@@ -69,8 +69,8 @@ export declare class PlansService {
     findAllPackages(): Promise<{
         name: string;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;
@@ -79,8 +79,8 @@ export declare class PlansService {
     findPackageById(id: string): Promise<{
         name: string;
         id: string;
-        isActive: boolean;
         createdAt: Date;
+        isActive: boolean;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;

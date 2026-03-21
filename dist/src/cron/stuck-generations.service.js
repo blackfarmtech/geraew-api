@@ -15,7 +15,7 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const prisma_service_1 = require("../prisma/prisma.service");
 const client_1 = require("@prisma/client");
-const STUCK_THRESHOLD_MINUTES = 10;
+const STUCK_THRESHOLD_MINUTES = 25;
 let StuckGenerationsService = StuckGenerationsService_1 = class StuckGenerationsService {
     prisma;
     logger = new common_1.Logger(StuckGenerationsService_1.name);

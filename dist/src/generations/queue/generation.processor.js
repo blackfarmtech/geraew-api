@@ -100,6 +100,15 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
         }
         catch (geraewError) {
             this.logger.warn(`Geraew failed for ${data.generationId}, falling back to Nano Banana: ${geraewError.message}`);
+            const preCheck = await this.prisma.generation.findUnique({
+                where: { id: data.generationId },
+                select: { status: true },
+            });
+            if (preCheck?.status === client_1.GenerationStatus.FAILED ||
+                preCheck?.status === client_1.GenerationStatus.COMPLETED) {
+                this.logger.warn(`Generation ${data.generationId} already ${preCheck.status} before Nano Banana fallback — aborting to save KIE costs`);
+                return;
+            }
             const inputImages = await this.prisma.generationInputImage.findMany({
                 where: { generationId: data.generationId },
             });

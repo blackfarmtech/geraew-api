@@ -124,6 +124,21 @@ export class GenerationProcessor extends WorkerHost {
         `Geraew failed for ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
       );
 
+      // Check if CRON already marked this generation as FAILED — skip KIE to avoid paying for nothing
+      const preCheck = await this.prisma.generation.findUnique({
+        where: { id: data.generationId },
+        select: { status: true },
+      });
+      if (
+        preCheck?.status === GenerationStatus.FAILED ||
+        preCheck?.status === GenerationStatus.COMPLETED
+      ) {
+        this.logger.warn(
+          `Generation ${data.generationId} already ${preCheck.status} before Nano Banana fallback — aborting to save KIE costs`,
+        );
+        return;
+      }
+
       const inputImages = await this.prisma.generationInputImage.findMany({
         where: { generationId: data.generationId },
       });

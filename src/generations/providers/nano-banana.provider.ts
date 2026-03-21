@@ -144,24 +144,47 @@ export class NanoBananaProvider {
     maxAttempts = 120,
     intervalMs = 5_000,
   ): Promise<string[]> {
+    const maxNetworkRetries = 5;
+    let networkFailures = 0;
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
 
-      const response = await this.fetchWithTimeout(
-        `${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`,
-        { headers: this.headers() },
-        30_000,
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Nano Banana recordInfo error (${response.status}): ${errorText}`,
+      let response: Response;
+      try {
+        response = await this.fetchWithTimeout(
+          `${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`,
+          { headers: this.headers() },
+          30_000,
         );
+      } catch (error) {
+        networkFailures++;
+        this.logger.warn(
+          `Nano Banana poll fetch failed (${networkFailures}/${maxNetworkRetries}): ${(error as Error).message}`,
+        );
+        if (networkFailures >= maxNetworkRetries) {
+          throw error;
+        }
+        continue;
       }
 
+      if (!response.ok) {
+        networkFailures++;
+        const errorText = await response.text();
+        this.logger.warn(
+          `Nano Banana poll HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
+        );
+        if (networkFailures >= maxNetworkRetries) {
+          throw new Error(
+            `Nano Banana recordInfo error (${response.status}): ${errorText}`,
+          );
+        }
+        continue;
+      }
+
+      networkFailures = 0;
       const data = (await response.json()) as RecordInfoResponse;
 
       if (data.data.state === 'waiting') {
@@ -200,22 +223,40 @@ export class NanoBananaProvider {
     index: number,
     format: string,
   ): Promise<string> {
-    const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download image from Nano Banana (${response.status}): ${sourceUrl}`,
-      );
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const ext = format === 'jpg' ? 'jpg' : 'png';
-    const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const maxRetries = 3;
+    let lastError: Error | undefined;
 
-    return this.uploadsService.uploadBuffer(
-      buffer,
-      `generations/${generationId}`,
-      `output_${index}.${ext}`,
-      mimeType,
-    );
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          this.logger.warn(
+            `Retrying downloadAndUpload (${attempt + 1}/${maxRetries}) for ${generationId}`,
+          );
+        }
+
+        const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to download image from Nano Banana (${response.status}): ${sourceUrl}`,
+          );
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const ext = format === 'jpg' ? 'jpg' : 'png';
+        const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+
+        return await this.uploadsService.uploadBuffer(
+          buffer,
+          `generations/${generationId}`,
+          `output_${index}.${ext}`,
+          mimeType,
+        );
+      } catch (error) {
+        lastError = error as Error;
+      }
+    }
+
+    throw lastError!;
   }
 
   private async fetchWithTimeout(

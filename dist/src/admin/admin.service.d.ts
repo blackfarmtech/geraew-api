@@ -65,8 +65,8 @@ export declare class AdminService {
     getGenerations(pagination: PaginationDto): Promise<PaginatedResponseDto<{
         id: string;
         user: {
-            email: string;
             name: string;
+            email: string;
             id: string;
         };
         type: import(".prisma/client").$Enums.GenerationType;
