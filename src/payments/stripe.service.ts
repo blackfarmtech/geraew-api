@@ -166,6 +166,71 @@ export class StripeService {
   }
 
   /**
+   * Faz upgrade de subscription: cria nova sub com cupom (cobra só a diferença)
+   * e cancela a antiga. Cria a nova ANTES de cancelar a antiga para segurança.
+   */
+  async upgradeSubscription(
+    customerId: string,
+    oldSubscriptionId: string,
+    newStripePriceId: string,
+    newPlanName: string,
+    currentPlanPriceCents: number,
+    userId: string,
+    newPlanSlug: string,
+  ): Promise<{ stripeSubscriptionId: string; invoiceId: string | null }> {
+    // 1. Criar cupom one-time com o valor do plano atual
+    //    Ex: Starter R$29,90 → cupom de R$29,90 off na primeira invoice do Pro
+    const coupon = await this.stripe.coupons.create({
+      amount_off: currentPlanPriceCents,
+      currency: 'brl',
+      duration: 'once',
+      name: `Upgrade para ${newPlanName}`,
+      metadata: { userId, type: 'subscription_upgrade' },
+    });
+
+    try {
+      // 2. Criar nova subscription com cupom
+      //    Invoice = newPlanPrice - coupon = diferença
+      const subscription = await this.stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: newStripePriceId }],
+        discounts: [{ coupon: coupon.id }],
+        payment_behavior: 'error_if_incomplete',
+        metadata: {
+          userId,
+          planSlug: newPlanSlug,
+          type: 'subscription_upgrade',
+        },
+      });
+
+      // 3. Cancelar subscription antiga imediatamente
+      await this.stripe.subscriptions.cancel(oldSubscriptionId);
+
+      // 4. Cleanup: deletar cupom (já usado, evita reuso)
+      await this.stripe.coupons.del(coupon.id).catch((err) => {
+        this.logger.warn(
+          `Failed to delete upgrade coupon ${coupon.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      });
+
+      const invoiceId =
+        typeof subscription.latest_invoice === 'string'
+          ? subscription.latest_invoice
+          : (subscription.latest_invoice as Stripe.Invoice)?.id ?? null;
+
+      this.logger.log(
+        `Upgraded subscription for user ${userId}: old=${oldSubscriptionId}, new=${subscription.id}`,
+      );
+
+      return { stripeSubscriptionId: subscription.id, invoiceId };
+    } catch (error) {
+      // Se a criação da nova sub falhar, deletar o cupom
+      await this.stripe.coupons.del(coupon.id).catch(() => {});
+      throw error;
+    }
+  }
+
+  /**
    * Cancela subscription no Stripe ao final do período.
    */
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
