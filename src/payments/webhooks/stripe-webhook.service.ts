@@ -230,9 +230,10 @@ export class StripeWebhookService {
       ? charge.payment_intent
       : (charge.payment_intent as Stripe.PaymentIntent)?.id ?? null;
 
-    const invoiceId = typeof charge.invoice === 'string'
-      ? charge.invoice
-      : (charge.invoice as Stripe.Invoice)?.id ?? null;
+    const chargeAny = charge as any;
+    const invoiceId = typeof chargeAny.invoice === 'string'
+      ? chargeAny.invoice
+      : (chargeAny.invoice as Stripe.Invoice)?.id ?? null;
 
     if (!paymentIntentId && !invoiceId) {
       this.logger.warn(`charge.refunded without payment_intent or invoice: ${charge.id}`);

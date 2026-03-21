@@ -248,6 +248,72 @@ let PaymentsService = PaymentsService_1 = class PaymentsService {
         });
         this.logger.warn(`Payment failed for subscription ${subscription.id}, retry count: ${subscription.paymentRetryCount + 1}`);
     }
+    async handleRefund(paymentIntentId, invoiceId, amountRefundedCents) {
+        const lookup = [paymentIntentId, invoiceId].filter(Boolean);
+        const payment = await this.prisma.payment.findFirst({
+            where: { externalPaymentId: { in: lookup } },
+            include: { creditPackage: true, subscription: { include: { plan: true } } },
+        });
+        if (!payment) {
+            this.logger.warn(`Payment not found for refund: paymentIntentId=${paymentIntentId}, invoiceId=${invoiceId}`);
+            return;
+        }
+        if (payment.status === 'REFUNDED') {
+            this.logger.log(`Payment ${payment.id} already refunded, skipping`);
+            return;
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.payment.update({
+                where: { id: payment.id },
+                data: { status: 'REFUNDED' },
+            });
+            if (payment.type === 'SUBSCRIPTION' && payment.subscriptionId) {
+                const freePlan = await tx.plan.findUnique({ where: { slug: 'free' } });
+                await tx.subscription.update({
+                    where: { id: payment.subscriptionId },
+                    data: {
+                        status: 'CANCELED',
+                        cancelAtPeriodEnd: false,
+                        ...(freePlan && { planId: freePlan.id }),
+                    },
+                });
+                await tx.creditBalance.updateMany({
+                    where: { userId: payment.userId },
+                    data: { planCreditsRemaining: 0, planCreditsUsed: 0 },
+                });
+                await tx.creditTransaction.create({
+                    data: {
+                        userId: payment.userId,
+                        type: 'ADMIN_ADJUSTMENT',
+                        amount: -(payment.subscription?.plan?.creditsPerMonth ?? 0),
+                        source: 'plan',
+                        description: `Reembolso de assinatura — R$ ${(amountRefundedCents / 100).toFixed(2)}`,
+                        paymentId: payment.id,
+                    },
+                });
+            }
+            else if (payment.type === 'CREDIT_PURCHASE' && payment.creditPackage) {
+                const creditsToRemove = payment.creditPackage.credits;
+                const balance = await tx.creditBalance.findUnique({ where: { userId: payment.userId } });
+                const safeDeduction = Math.min(creditsToRemove, balance?.bonusCreditsRemaining ?? 0);
+                await tx.creditBalance.updateMany({
+                    where: { userId: payment.userId },
+                    data: { bonusCreditsRemaining: { decrement: safeDeduction } },
+                });
+                await tx.creditTransaction.create({
+                    data: {
+                        userId: payment.userId,
+                        type: 'ADMIN_ADJUSTMENT',
+                        amount: -safeDeduction,
+                        source: 'bonus',
+                        description: `Reembolso de créditos — ${creditsToRemove} créditos — R$ ${(amountRefundedCents / 100).toFixed(2)}`,
+                        paymentId: payment.id,
+                    },
+                });
+            }
+        });
+        this.logger.log(`Refund processed for payment ${payment.id}, user ${payment.userId}`);
+    }
     async handleSubscriptionDeleted(stripeSubscriptionId) {
         const subscription = await this.prisma.subscription.findFirst({
             where: { externalSubscriptionId: stripeSubscriptionId },

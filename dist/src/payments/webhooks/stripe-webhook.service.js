@@ -67,6 +67,9 @@ let StripeWebhookService = StripeWebhookService_1 = class StripeWebhookService {
             case 'customer.subscription.deleted':
                 await this.handleSubscriptionDeleted(event);
                 break;
+            case 'charge.refunded':
+                await this.handleChargeRefunded(event);
+                break;
             default:
                 this.logger.log(`Unhandled Stripe event type: ${eventType}`);
         }
@@ -132,6 +135,21 @@ let StripeWebhookService = StripeWebhookService_1 = class StripeWebhookService {
     async handleSubscriptionDeleted(event) {
         const subscription = event.data.object;
         await this.paymentsService.handleSubscriptionDeleted(subscription.id);
+    }
+    async handleChargeRefunded(event) {
+        const charge = event.data.object;
+        const paymentIntentId = typeof charge.payment_intent === 'string'
+            ? charge.payment_intent
+            : charge.payment_intent?.id ?? null;
+        const chargeAny = charge;
+        const invoiceId = typeof chargeAny.invoice === 'string'
+            ? chargeAny.invoice
+            : chargeAny.invoice?.id ?? null;
+        if (!paymentIntentId && !invoiceId) {
+            this.logger.warn(`charge.refunded without payment_intent or invoice: ${charge.id}`);
+            return;
+        }
+        await this.paymentsService.handleRefund(paymentIntentId, invoiceId, charge.amount_refunded);
     }
     extractSubscriptionId(invoice) {
         const sub = invoice.parent?.subscription_details?.subscription;

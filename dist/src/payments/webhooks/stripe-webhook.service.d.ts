@@ -13,5 +13,6 @@ export declare class StripeWebhookService {
     private handleInvoicePaymentSucceeded;
     private handleInvoicePaymentFailed;
     private handleSubscriptionDeleted;
+    private handleChargeRefunded;
     private extractSubscriptionId;
 }

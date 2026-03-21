@@ -23,6 +23,7 @@ const plans_service_1 = require("../plans/plans.service");
 const client_1 = require("@prisma/client");
 const paginated_response_dto_1 = require("../common/dto/paginated-response.dto");
 const uploads_service_1 = require("../uploads/uploads.service");
+const video_duration_util_1 = require("./utils/video-duration.util");
 const generation_queue_constants_1 = require("./queue/generation-queue.constants");
 let GenerationsService = GenerationsService_1 = class GenerationsService {
     prisma;
@@ -366,9 +367,11 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
     }
     async generateMotionControl(userId, dto) {
         const type = client_1.GenerationType.MOTION_CONTROL;
-        const wanResolution = dto.resolution ?? '480p';
-        const durationSeconds = 5;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, client_1.Resolution.RES_720P, durationSeconds, false);
+        const resolution = dto.resolution ?? '720p';
+        const dbResolution = resolution === '1080p' ? client_1.Resolution.RES_1080P : client_1.Resolution.RES_720P;
+        const videoBuffer = Buffer.from(dto.video, 'base64');
+        const durationSeconds = (0, video_duration_util_1.getVideoDurationSeconds)(videoBuffer);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dbResolution, durationSeconds, false);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -376,17 +379,16 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 userId,
                 type,
                 status: client_1.GenerationStatus.PROCESSING,
-                modelUsed: 'wan/2-2-animate-replace',
-                resolution: client_1.Resolution.RES_720P,
+                modelUsed: 'kling-2.6/motion-control',
+                resolution: dbResolution,
                 durationSeconds,
                 hasAudio: false,
                 creditsConsumed: creditsRequired,
-                parameters: { wanResolution },
+                parameters: { resolution },
             },
         });
         const videoMime = dto.video_mime_type ?? 'video/mp4';
         const videoExt = videoMime === 'video/quicktime' ? 'mov' : videoMime === 'video/x-matroska' ? 'mkv' : 'mp4';
-        const videoBuffer = Buffer.from(dto.video, 'base64');
         const { publicUrl: videoPublicUrl, signedUrl: videoSignedUrl } = await this.uploadsService.uploadBufferPublic(videoBuffer, `inputs/${generation.id}`, `input_video.${videoExt}`, videoMime);
         const imageMime = dto.image_mime_type ?? 'image/jpeg';
         const imageExt = imageMime === 'image/png' ? 'png' : imageMime === 'image/webp' ? 'webp' : 'jpg';
@@ -410,14 +412,14 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 },
             ],
         });
-        await this.debitCredits(userId, creditsRequired, generation.id, type, client_1.Resolution.RES_720P);
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dbResolution);
         await this.generationQueue.add(generation_queue_constants_1.GenerationJobName.MOTION_CONTROL, {
             generationId: generation.id,
             userId,
             creditsConsumed: creditsRequired,
             videoUrl: videoPublicUrl,
             imageUrl: imagePublicUrl,
-            wanResolution,
+            resolution,
         });
         return {
             id: generation.id,

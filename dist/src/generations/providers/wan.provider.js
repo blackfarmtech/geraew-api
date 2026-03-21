@@ -27,14 +27,15 @@ let WanProvider = WanProvider_1 = class WanProvider {
         this.apiKey = this.configService.get('NANO_BANANA_API_KEY', '');
     }
     async generateAnimateReplace(input) {
-        this.logger.log(`Creating Wan Animate Replace task — resolution ${input.resolution}`);
+        this.logger.log(`Creating Kling 2.6 Motion Control task — mode ${input.resolution}`);
         const body = {
-            model: 'wan/2-2-animate-replace',
+            model: 'kling-2.6/motion-control',
             input: {
-                video_url: input.videoUrl,
-                image_url: input.imageUrl,
-                resolution: input.resolution,
-                nsfw_checker: false,
+                input_urls: [input.imageUrl],
+                video_urls: [input.videoUrl],
+                character_orientation: 'video',
+                mode: input.resolution,
+                ...(input.prompt ? { prompt: input.prompt } : {}),
             },
         };
         const createResponse = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/jobs/createTask`, {
@@ -44,14 +45,14 @@ let WanProvider = WanProvider_1 = class WanProvider {
         }, 60_000);
         if (!createResponse.ok) {
             const errorText = await createResponse.text();
-            throw new Error(`Wan createTask error (${createResponse.status}): ${errorText}`);
+            throw new Error(`Kling createTask error (${createResponse.status}): ${errorText}`);
         }
         const createData = (await createResponse.json());
         if (createData.code !== 200) {
-            throw new Error(`Wan createTask failed: ${createData.msg} (code ${createData.code})`);
+            throw new Error(`Kling createTask failed: ${createData.msg} (code ${createData.code})`);
         }
         const taskId = createData.data.taskId;
-        this.logger.log(`Wan task created: ${taskId}`);
+        this.logger.log(`Kling task created: ${taskId}`);
         const resultUrls = await this.pollTaskStatus(taskId);
         const outputUrls = [];
         for (let i = 0; i < resultUrls.length; i++) {
@@ -59,10 +60,10 @@ let WanProvider = WanProvider_1 = class WanProvider {
             outputUrls.push(url);
         }
         if (!outputUrls.length) {
-            throw new Error('Wan Animate Replace returned no videos.');
+            throw new Error('Kling Motion Control returned no videos.');
         }
         this.logger.log(`${outputUrls.length} video(s) uploaded to S3`);
-        return { outputUrls, modelUsed: 'wan/2-2-animate-replace' };
+        return { outputUrls, modelUsed: 'kling-2.6/motion-control' };
     }
     async pollTaskStatus(taskId, maxAttempts = 120, intervalMs = 5_000) {
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -72,33 +73,33 @@ let WanProvider = WanProvider_1 = class WanProvider {
             const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`, { headers: this.headers() }, 30_000);
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Wan recordInfo error (${response.status}): ${errorText}`);
+                throw new Error(`Kling recordInfo error (${response.status}): ${errorText}`);
             }
             const data = (await response.json());
             if (data.data.state === 'waiting') {
-                this.logger.debug(`Wan task still processing... (attempt ${attempt + 1}/${maxAttempts})`);
+                this.logger.debug(`Kling task still processing... (attempt ${attempt + 1}/${maxAttempts})`);
                 continue;
             }
             if (data.data.state === 'fail') {
-                throw new Error(`Wan generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`);
+                throw new Error(`Kling generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`);
             }
             if (data.data.state === 'success') {
                 if (!data.data.resultJson) {
-                    throw new Error('Wan succeeded but returned no resultJson.');
+                    throw new Error('Kling succeeded but returned no resultJson.');
                 }
                 const result = JSON.parse(data.data.resultJson);
                 if (!result.resultUrls?.length) {
-                    throw new Error('Wan succeeded but returned no video URLs.');
+                    throw new Error('Kling succeeded but returned no video URLs.');
                 }
                 return result.resultUrls;
             }
         }
-        throw new Error('Wan generation timed out.');
+        throw new Error('Kling generation timed out.');
     }
     async downloadAndUpload(sourceUrl, generationId, index) {
         const response = await this.fetchWithTimeout(sourceUrl, {}, 120_000);
         if (!response.ok) {
-            throw new Error(`Failed to download video from Wan (${response.status}): ${sourceUrl}`);
+            throw new Error(`Failed to download video from Kling (${response.status}): ${sourceUrl}`);
         }
         const buffer = Buffer.from(await response.arrayBuffer());
         return this.uploadsService.uploadBuffer(buffer, `generations/${generationId}`, `output_${index}.mp4`, 'video/mp4');

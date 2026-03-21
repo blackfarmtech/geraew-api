@@ -619,7 +619,6 @@ export class GenerationsService {
     // Upload video to S3 — public URL for Wan API, signed URL for internal display
     const videoMime = dto.video_mime_type ?? 'video/mp4';
     const videoExt = videoMime === 'video/quicktime' ? 'mov' : videoMime === 'video/x-matroska' ? 'mkv' : 'mp4';
-    const videoBuffer = Buffer.from(dto.video, 'base64');
     const { publicUrl: videoPublicUrl, signedUrl: videoSignedUrl } =
       await this.uploadsService.uploadBufferPublic(
         videoBuffer,

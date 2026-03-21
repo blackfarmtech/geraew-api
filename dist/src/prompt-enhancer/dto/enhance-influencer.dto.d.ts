@@ -19,6 +19,7 @@ export declare class EnhanceInfluencerDto {
     leftLeg?: string;
     rightLeg?: string;
     hair?: string;
+    hairColor?: string;
     accessories?: string;
     renderingStyle?: string;
 }

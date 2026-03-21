@@ -56,5 +56,6 @@ export declare class PaymentsService {
     processCreditPurchase(userId: string, packageId: string, amountCents: number, externalPaymentId: string): Promise<void>;
     handleSubscriptionRenewal(stripeSubscriptionId: string, periodStart: Date, periodEnd: Date, amountCents: number, externalPaymentId: string): Promise<void>;
     handlePaymentFailed(stripeSubscriptionId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    handleRefund(paymentIntentId: string | null, invoiceId: string | null, amountRefundedCents: number): Promise<void>;
     handleSubscriptionDeleted(stripeSubscriptionId: string): Promise<void>;
 }

@@ -55,12 +55,12 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Resolução do vídeo gerado',
-        enum: ['480p', '580p', '720p'],
-        default: '480p',
+        enum: ['720p', '1080p'],
+        default: '720p',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsIn)(['480p', '580p', '720p']),
+    (0, class_validator_1.IsIn)(['720p', '1080p']),
     __metadata("design:type", String)
 ], GenerateMotionControlDto.prototype, "resolution", void 0);
 //# sourceMappingURL=generate-motion-control.dto.js.map

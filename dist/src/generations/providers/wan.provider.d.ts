@@ -6,6 +6,7 @@ export interface WanAnimateReplaceInput {
     videoUrl: string;
     imageUrl: string;
     resolution: string;
+    prompt?: string;
 }
 export declare class WanProvider {
     private readonly configService;
