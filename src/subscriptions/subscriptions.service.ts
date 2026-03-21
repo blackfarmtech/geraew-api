@@ -119,11 +119,9 @@ export class SubscriptionsService {
       );
     }
 
-    // Upgrade paid → paid via Stripe. Free → paid deve usar createSubscription (checkout).
+    // Free → paid: delegar para o fluxo de checkout (precisa coletar método de pagamento)
     if (current.plan.slug === 'free' || !current.externalSubscriptionId) {
-      throw new BadRequestException(
-        'Para sair do plano Free, crie uma nova assinatura via checkout.',
-      );
+      return this.createSubscription(userId, planSlug) as unknown as SubscriptionResponseDto;
     }
 
     if (!newPlan.stripePriceId) {

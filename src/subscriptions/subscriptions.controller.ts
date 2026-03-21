@@ -65,11 +65,10 @@ export class SubscriptionsController {
 
   @Patch('upgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Upgrade de plano' })
+  @ApiOperation({ summary: 'Upgrade de plano. Free → Paid retorna checkoutUrl; Paid → Paid retorna a subscription atualizada.' })
   @ApiResponse({
     status: 200,
-    description: 'Upgrade realizado com sucesso',
-    type: SubscriptionResponseDto,
+    description: 'Upgrade realizado com sucesso (paid → paid) ou URL de checkout retornada (free → paid)',
   })
   @ApiResponse({ status: 400, description: 'Plano não é superior ao atual' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
@@ -77,7 +76,7 @@ export class SubscriptionsController {
   async upgrade(
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<SubscriptionResponseDto | { checkoutUrl: string }> {
     return this.subscriptionsService.upgrade(userId, dto.planSlug);
   }
 
