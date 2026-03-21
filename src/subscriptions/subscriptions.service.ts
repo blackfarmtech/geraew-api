@@ -101,6 +101,7 @@ export class SubscriptionsService {
         userId,
         status: { in: ['ACTIVE', 'TRIALING'] },
       },
+      orderBy: { createdAt: 'desc' },
       include: { plan: true },
     });
 
