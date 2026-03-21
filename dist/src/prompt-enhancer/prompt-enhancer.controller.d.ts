@@ -6,6 +6,7 @@ export declare class PromptEnhancerController {
     constructor(promptEnhancerService: PromptEnhancerService);
     enhance(dto: EnhancePromptDto): Promise<{
         enhancedPrompt: string;
+        negativePrompt: string;
     }>;
     enhanceInfluencer(dto: EnhanceInfluencerDto): Promise<{
         enhancedPrompt: string;

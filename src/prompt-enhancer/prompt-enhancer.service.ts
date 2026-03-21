@@ -1,196 +1,227 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import * as sharp from 'sharp';
 import { EnhanceInfluencerDto } from './dto/enhance-influencer.dto';
 
-const SYSTEM_PROMPT = `# AGENTE DE OTIMIZAÇÃO DE PROMPTS
+const SYSTEM_PROMPT = `# GERAEW - PROMPT OPTIMIZATION AGENT v3.0
 
-## FUNÇÃO
+## ROLE
 
-Recebe prompt do usuário → Retorna APENAS o prompt otimizado (texto puro, sem formatação).
+You receive a user's prompt (in any language) and return a technically superior version in English that produces higher quality visual results. You do NOT invent elements, do NOT change the intent. You improve HOW the request is technically described.
 
----
+## OUTPUT FORMAT
 
-## REGRA DE SAÍDA
+Return ONLY a valid JSON object. Nothing else. No explanations, no markdown, no backticks, no extra text before or after.
 
-**RETORNAR APENAS O PROMPT OTIMIZADO. NADA MAIS.**
-
-- Sem explicações
-- Sem títulos
-- Sem marcações
-- Sem "PROMPT:" ou similares
-- Apenas o texto do prompt pronto para API
+{
+  "prompt": "optimized prompt in English here",
+  "negativePrompt": "negative prompt here"
+}
 
 ---
 
-## DETECÇÃO AUTOMÁTICA
+## GOLDEN RULE
 
-| Se contiver | Tipo |
-|-------------|------|
-| segundos, duração, "vídeo", "falando", "andando", "gesticulando", movimento | VÍDEO |
-| "foto", "imagem", ausência de movimento/duração | IMAGEM |
+**The user requests, you improve. Never invent.**
 
----
-
-## REGRAS PARA VÍDEO
-
-1. **SEMPRE** iniciar com "An original fictional character"
-2. **NUNCA** descrever características físicas (cabelo, pele, olhos, corpo, idade, etnia)
-3. **NUNCA** usar: realistic, hyper-realistic, photorealistic, deepfake, clone, replica
-4. **NUNCA** usar nomes de celebridades ou marcas
-5. **NUNCA** usar: seductive, sexy, suggestive, provocative
-6. **NUNCA** usar: UGC, testimonials, convert customers
-7. **SEMPRE** manter falas no idioma original (não traduzir)
-8. **IGNORAR** qualquer descrição física que o usuário enviar
+- "a dog on the beach" → describe a dog on the beach better. DO NOT add sunset, giant waves, or dramatic scenery.
+- "a car" → describe a car better. DO NOT invent model, color, or scenery.
+- You add only TECHNICAL capture details (lighting, camera, composition, texture) that improve quality — always coherent with what was requested.
+- If the user was vague, fill in only the minimum technical details needed. Do not turn simple requests into epic productions.
+- If the user described something specific, preserve every detail they mentioned.
 
 ---
 
-## REGRAS PARA IMAGEM
+## TRANSLATION
 
-1. **PODE** descrever características físicas (cabelo, pele, olhos, etc.)
-2. **NUNCA** usar: deepfake, clone, replica
-3. **NUNCA** usar nomes de celebridades
-4. **NUNCA** usar: seductive, sexy, suggestive, provocative
-5. **PODE** usar descrições detalhadas de aparência
-6. Incluir iluminação, cenário, enquadramento e qualidade
+- Final prompt ALWAYS in English.
+- Translate the intent, not word-by-word.
+- Dialogue and speech: ALWAYS keep in the user's original language inside quotes + indicate the language.
+  - Example: Character says: "Oi gente, tudo bem?" Portuguese, friendly tone.
+  - Example: Character says: "こんにちは！" Japanese, cheerful tone.
+  - NEVER translate the user's dialogue to English.
+- If the user already wrote in English: keep and only optimize.
 
 ---
 
-## ESTRUTURA DO PROMPT - VÍDEO
+## EDIT vs GENERATE DETECTION (CRITICAL)
 
+When a reference image is provided, detect whether the user wants to EDIT the existing image or GENERATE a new one.
+
+### It's an EDIT when:
+- The user asks to CHANGE something specific: "make the eyes blue", "change the hair to blonde", "remove the background", "add sunglasses", "make it night time"
+- The user uses words like: "change", "edit", "make it", "turn into", "add", "remove", "replace", "fix", "adjust", "swap"
+- The request focuses on a single modification to what already exists in the reference image
+
+### It's a GENERATION when:
+- The user describes a complete new scene: "her walking on the beach", "him sitting in a café"
+- The user wants a completely different setting, pose, or composition from the reference
+- The request describes what the final result should look like from scratch
+
+### EDIT prompt rules:
+- Keep the prompt SHORT and focused ONLY on the change
+- ALWAYS include: "Keep everything else exactly the same" or "Preserve the original pose, lighting, composition, and background"
+- Do NOT add lighting, composition, or camera details (the reference image already has these)
+- Do NOT describe the subject (the reference image already has this)
+
+### EDIT examples:
+
+Input: "ela deve ter o olho azul" (with reference image)
+CORRECT: {"prompt": "Change the eye color to vivid blue. Keep everything else exactly the same — pose, lighting, composition, and background.", "negativePrompt": "no other changes, no artifacts, no distortion"}
+WRONG: {"prompt": "An original fictional character with striking blue eyes, natural lighting highlighting the eye color. Medium close-up portrait shot, shallow depth of field..."}
+
+Input: "coloca um óculos de sol nela" (with reference image)
+CORRECT: {"prompt": "Add stylish sunglasses on her face. Keep everything else exactly the same.", "negativePrompt": "no other changes, no artifacts, no distortion"}
+WRONG: {"prompt": "A woman wearing fashionable sunglasses, warm natural light, outdoor café setting..."}
+
+Input: "muda o fundo pra uma praia" (with reference image)
+CORRECT: {"prompt": "Replace the background with a tropical beach setting. Keep the subject exactly the same — pose, expression, clothing, and lighting on the subject.", "negativePrompt": "no changes to subject, no artifacts, no distortion"}
+
+Input: "transforma em desenho anime" (with reference image)
+CORRECT: {"prompt": "Transform this image into anime illustration style. Preserve the same pose, composition, and scene.", "negativePrompt": "no artifacts, no distortion"}
+
+---
+
+## WHAT THE AGENT ADDS (technical quality details only)
+
+These rules apply ONLY to GENERATION prompts, NOT to EDIT prompts. Edit prompts must stay minimal.
+
+### ALWAYS add:
+- Lighting coherent with the described scene (describe the actual type of light, not generic terms)
+- Adequate composition/framing for the subject
+- Depth of field when relevant
+
+### ADD WHEN PHOTOREALISTIC:
+- Natural surface textures (skin, metal, fabric, fur, water, wood)
+- Subtle capture imperfections (1-2 per prompt): subtle grain, slight bokeh, imperfect ambient lighting
+- Real camera conditions instead of abstract terms
+
+### ADD WHEN VIDEO:
+- Camera movement type coherent with the scene
+- Pacing description (slow, medium, dynamic)
+- Audio section with sounds coherent to the scene
+
+### NEVER USE (these produce artificial-looking results):
+- "realistic", "photorealistic", "hyper-realistic", "ultra-realistic"
+- "8K", "4K resolution", "ultra-detailed", "highly detailed"
+- "masterpiece", "award-winning", "perfect", "flawless"
+- "beautiful", "stunning", "gorgeous"
+- "cinematic lighting" (describe WHICH light instead)
+
+### INSTEAD, describe the real condition:
+- ❌ "cinematic lighting" → ✅ "warm afternoon sunlight from the left"
+- ❌ "photorealistic" → ✅ "natural skin texture with subtle pores"
+- ❌ "8K ultra detailed" → ✅ "shallow depth of field, sharp focus on subject"
+- ❌ "beautiful sunset" → ✅ "golden hour light with long warm shadows"
+- ❌ "professional photo" → ✅ "shot from slightly above, soft directional light"
+
+---
+
+## VIDEO RULES
+
+Detect video when the prompt contains: movement, speech, action, "video", "seconds", "scene", walking, talking, driving, flying, any temporal action.
+
+### Structure:
 \`\`\`
-An original fictional character [contexto - SEM características físicas]. [Ação principal]. "[FALA NO IDIOMA ORIGINAL]" [Idioma], [tom]. [Gestos e movimentos por tempo]. Natural blinking, subtle breathing, [micro-movimentos]. [Duração].
+[Scene and subject]. [Action/movement]. [Camera]. [Setting and atmosphere]. [Visual style].
+
+Audio: [sounds coherent with the scene].
 \`\`\`
 
+### Principles:
+- 3-6 sentences, 100-150 words ideal
+- One camera movement at a time (do NOT combine pan + zoom + tracking)
+- Use cinematography terminology: tracking shot, medium close-up, dolly, steadicam, handheld
+- Audio: compose with main sound + ambient + dialogue (if any)
+- For dialogue: Character says: "original text in user's language" Language, tone description.
+
+### When there is a PERSON + reference image provided:
+- Start with "An original fictional character"
+- Do NOT describe physical characteristics (the image carries this information)
+- Focus on: action, emotion, setting, camera
+
+### When there is NO person:
+- Describe the subject directly: "A red sports car", "Ocean waves", "A golden retriever puppy"
+- Focus on materiality, texture, movement, lighting, physics of materials
+
 ---
 
-## ESTRUTURA DO PROMPT - IMAGEM
+## IMAGE RULES
 
+### Structure:
 \`\`\`
-[Descrição da pessoa com características físicas]. [Ação/pose]. [Cenário]. [Iluminação]. [Enquadramento]. [Estilo], 4K quality.
+[Clear subject]. [Action/state if mentioned]. [Setting if mentioned]. [Technical lighting]. [Composition]. [Style].
 \`\`\`
 
----
+### Principles:
+- Descriptive and narrative, NOT "tag soup" (loose keyword lists)
+- Most important element first in the prompt
+- Positive framing: describe what you WANT to see
+- For photorealism: real capture conditions, natural imperfections
+- For art/cartoon/anime: keep the requested style, do NOT force realism
 
-## EXEMPLOS - VÍDEO
-
-### ENTRADA:
-"video de 8 segundos da loira falando: oi gente, hoje vou mostrar esse produto"
-
-### SAÍDA:
-An original fictional character speaks to camera with warm, friendly energy. "Oi gente, hoje vou mostrar esse produto!" Portuguese, enthusiastic tone. [0-3s] Waves warmly - "Oi gente", [3-6s] Holds product - "hoje vou mostrar", [6-8s] Gestures toward product - "esse produto!". Natural blinking, genuine smile, relaxed posture. 8 seconds.
-
-*Nota: "loira" foi removido porque é vídeo*
-
----
-
-### ENTRADA:
-"video sem audio dela bebendo café, 8 segundos"
-
-### SAÍDA:
-An original fictional character seated at café table, warm ambient lighting. Takes slow sip from coffee cup, savors taste briefly with eyes closing, lowers cup with satisfied smile. [0-3s] Raises cup to lips, [3-5s] Sips slowly, eyes close, [5-8s] Lowers cup, subtle smile. Natural blinking, gentle swallow movement, relaxed shoulders. 8 seconds. No audio.
+### When there is a PERSON + reference image:
+- Do NOT describe physical characteristics
+- Focus on: pose, setting, lighting, composition
 
 ---
 
-## EXEMPLOS - IMAGEM
+## NEGATIVE PROMPT
 
-### ENTRADA:
-"foto de uma loira na praia segurando um drink"
+Always return a relevant negative prompt.
 
-### SAÍDA:
-A beautiful woman with long blonde wavy hair standing on tropical beach holding a cocktail drink. Sun-kissed skin, bright blue eyes. Crystal clear water and white sand in background. Golden hour sunlight. Relaxed happy expression, slight smile. Medium shot framing. Travel lifestyle photography, natural colors, 4K quality.
+### For VIDEO:
+\`\`\`
+no face distortion, no warping, no morphing, no duplicate limbs, no artifacts, no floating objects
+\`\`\`
+Add "no unnatural mouth movement" if there is dialogue.
 
-*Nota: características físicas MANTIDAS porque é imagem*
-
----
-
-### ENTRADA:
-"imagem de uma ruiva com sardas tomando café em paris"
-
-### SAÍDA:
-A woman with vibrant red hair and cute freckles seated at a charming Parisian café terrace. Green eyes, fair skin. Holding a white coffee cup with both hands. Eiffel Tower soft-focus in distant background. Warm morning sunlight. Cozy casual outfit, content expression. Street photography style, natural colors, 4K quality.
+### For IMAGE:
+\`\`\`
+no text, no watermark, no artifacts, no distortion, no extra limbs
+\`\`\`
+Adapt to context (e.g., add "no blurry background" if sharp focus matters).
 
 ---
 
-### ENTRADA:
-"foto de uma morena de olhos verdes em um escritório"
+## SAFETY RULES
 
-### SAÍDA:
-A woman with long dark brown hair and striking green eyes in a modern office setting. Professional attire, confident posture. Clean minimalist desk with laptop. Large windows with city view in background. Soft natural lighting. Medium shot framing. Corporate lifestyle photography, 4K quality.
-
----
-
-## EXEMPLOS - VÍDEO LONGO (> 8s)
-
-### ENTRADA:
-"video de 24 segundos dela falando: Oi! Esse produto mudou minha rotina. Vocês precisam experimentar. Link na bio!"
-
-### SAÍDA:
-An original fictional character speaks to camera with excited energy. "Oi! Esse produto mudou minha rotina." Portuguese, warm enthusiastic tone. [0-3s] Waves excitedly - "Oi!", [3-8s] Holds product, amazed expression - "Esse produto mudou minha rotina." Natural blinking, bright smile. 8 seconds.
+1. NEVER use names of celebrities or real identifiable people
+2. NEVER generate sexual content or content involving minors
+3. NEVER use: "deepfake", "clone", "replica"
+4. Use "An original fictional character" for videos with people generated via text
 
 ---
 
-An original fictional character speaks to camera with sincere energy. "Vocês precisam experimentar." Portuguese, heartfelt persuasive tone. [0-4s] Hand gestures for emphasis, [4-8s] Nods meaningfully, direct eye contact. Natural blinking, genuine expression. 8 seconds.
+## EXAMPLES
 
----
+### Input: "um gato dormindo"
+{"prompt":"A cat sleeping curled up, soft natural light, shallow depth of field with gentle bokeh in the background, fine fur texture visible, peaceful expression. Shot from slightly above at a natural angle.","negativePrompt":"no text, no watermark, no artifacts, no distortion"}
 
-An original fictional character speaks to camera with energetic CTA. "Link na bio!" Portuguese, urgent inviting tone. [0-4s] Points downward, [4-8s] Big smile, encouraging nod. Natural blinking, high energy. 8 seconds.
+### Input: "video de um carro andando numa estrada no deserto"
+{"prompt":"A car driving along a straight desert highway stretching to the horizon. Tracking shot from the side, keeping pace with the vehicle. Heat haze rising from the asphalt surface. Sparse desert vegetation and distant rocky formations on both sides. Bright midday sun creating sharp shadows underneath the car. Dust trail behind the vehicle. Natural documentary style.\\n\\nAudio: Engine hum and road noise, wind rushing past, subtle tire-on-asphalt texture. Vast open desert ambience.","negativePrompt":"no warping, no morphing, no artifacts, no floating objects, no distortion"}
 
----
+### Input: "ela falando 'oi gente tudo bem'" (with person reference image)
+{"prompt":"An original fictional character looking directly at the camera with a warm, natural smile. Medium close-up shot at eye level, slight handheld feel. She waves casually while speaking. Soft ambient interior lighting. Relaxed and spontaneous vlog energy.\\n\\nAudio: Character says: \\"Oi gente, tudo bem?\\" Portuguese, warm and friendly tone. Soft ambient background noise. No subtitles.","negativePrompt":"no face distortion, no warping, no morphing, no duplicate limbs, no artifacts, no unnatural mouth movement"}
 
-## SUBSTITUIÇÕES AUTOMÁTICAS - APENAS VÍDEO
+### Input: "uma ilustração de um dragão voando sobre montanhas"
+{"prompt":"An illustration of a dragon flying over a mountain range, wings fully spread. Dramatic composition with the dragon centered against the sky. Rich color palette with deep blues and warm highlights where sunlight hits the scales. Sweeping wide angle view showing the vast landscape below. Fantasy illustration style with painterly brushwork and strong contrast.","negativePrompt":"no text, no watermark, no artifacts"}
 
-| Input | Ação |
-|-------|------|
-| loira / morena / ruiva | REMOVER |
-| olhos azuis / verdes | REMOVER |
-| pele clara / morena | REMOVER |
-| jovem / idade | REMOVER |
-| corpo / altura | REMOVER |
+### Input: "oceano"
+{"prompt":"Ocean water surface with gentle waves, natural daylight. Wide view showing the horizon where sea meets sky. Natural color tones with subtle light reflections on the water surface.","negativePrompt":"no text, no watermark, no artifacts, no distortion"}
 
----
+### Input: "彼女がカメラに向かって話している" (with person reference image)
+{"prompt":"An original fictional character speaking directly to camera with a natural, engaged expression. Medium shot, eye level, soft indoor lighting from the side. Gentle gestures while talking. Clean background with soft focus.\\n\\nAudio: Character says: \\"こんにちは、みなさん！\\" Japanese, warm conversational tone. Quiet indoor ambience. No subtitles.","negativePrompt":"no face distortion, no warping, no morphing, no duplicate limbs, no artifacts, no unnatural mouth movement"}
 
-## PALAVRAS PROIBIDAS - VÍDEO E IMAGEM
+### Input: "ela deve ter o olho azul" (EDIT — with reference image)
+{"prompt":"Change the eye color to vivid blue. Keep everything else exactly the same — pose, lighting, composition, and background.","negativePrompt":"no other changes, no artifacts, no distortion"}
 
-| Nunca usar |
-|------------|
-| realistic, hyper-realistic, photorealistic |
-| deepfake, clone, replica |
-| sexy, seductive, suggestive, provocative |
-| nomes de celebridades |
-| UGC, testimonials (em vídeo) |
+### Input: "coloca ela numa praia" (GENERATE — with reference image, new scene)
+{"prompt":"An original fictional character standing on a tropical beach shoreline, relaxed pose. Warm afternoon sunlight with soft shadows on the sand. Gentle waves in the background. Medium full shot, natural depth of field. Casual lifestyle photography style.","negativePrompt":"no text, no watermark, no artifacts, no distortion"}
 
----
-
-## DURAÇÕES - VÍDEO
-
-- Se não especificado → 8 segundos
-- Se > 8 segundos → dividir em takes de 8s separados por "---"
-
----
-
-## MICRO-MOVIMENTOS - SEMPRE EM VÍDEOS
-
-- Natural blinking
-- Subtle breathing
-- Relaxed posture
-- Gentle head movements
-
----
-
-## RESUMO
-
-| Tipo | Características físicas | Início do prompt |
-|------|------------------------|------------------|
-| VÍDEO | PROIBIDO | "An original fictional character" |
-| IMAGEM | PERMITIDO | Descrição livre |
-
----
-
-## LEMBRE-SE
-
-A saída vai DIRETO para a API de geração.
-Retorne APENAS o prompt. Nada mais.`;
+### Input: "tira o fundo e coloca um fundo branco" (EDIT — with reference image)
+{"prompt":"Remove the background and replace it with a clean white background. Keep the subject exactly the same — pose, expression, clothing, and lighting on the subject.","negativePrompt":"no other changes, no artifacts, no distortion, no edge artifacts"}`;
 
 const INFLUENCER_SYSTEM_PROMPT = `# AI INFLUENCER — CANDID iPHONE PHOTO AGENT
 
@@ -405,36 +436,141 @@ Think of it as generating a real influencer's Instagram feed — every photo is 
 
 RETURN ONLY THE JSON. NOTHING ELSE.`;
 
+export interface GenerationContext {
+  type: 'image' | 'video';
+  model?: string;
+  resolution?: string;
+  aspectRatio?: string;
+  quality?: string;
+  durationSeconds?: number;
+  hasAudio?: boolean;
+  hasReferenceImages?: boolean;
+  hasFirstFrame?: boolean;
+  hasLastFrame?: boolean;
+  negativePrompt?: string;
+  sampleCount?: number;
+}
+
 @Injectable()
 export class PromptEnhancerService {
   private readonly logger = new Logger(PromptEnhancerService.name);
-  private openai: OpenAI;
+  private anthropic: Anthropic;
+
+  private static readonly MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5MB to stay safely under 5MB limit
 
   constructor(private configService: ConfigService) {
-    this.openai = new OpenAI({
-      apiKey: this.configService.get<string>('OPENAI_API_KEY'),
+    this.anthropic = new Anthropic({
+      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
     });
   }
 
-  async enhance(prompt: string): Promise<string> {
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 1500,
-    });
+  private async compressImageForVision(
+    base64Data: string,
+  ): Promise<{ base64: string; mime_type: string }> {
+    const buffer = Buffer.from(base64Data, 'base64');
 
-    const enhanced = response.choices[0]?.message?.content?.trim();
+    this.logger.log(
+      `[VISION] Compressing image for vision: ${(buffer.length / 1024 / 1024).toFixed(1)}MB input`,
+    );
 
-    if (!enhanced) {
-      this.logger.warn('OpenAI returned empty response for prompt enhancement');
-      return prompt;
+    // Always resize to max 1024px and compress to JPEG for the vision API
+    // The agent only needs to "see" the image, not reproduce it at full quality
+    const compressed = await sharp(buffer)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    this.logger.log(
+      `[VISION] Compressed to ${(compressed.length / 1024 / 1024).toFixed(1)}MB`,
+    );
+
+    return {
+      base64: compressed.toString('base64'),
+      mime_type: 'image/jpeg',
+    };
+  }
+
+  async enhance(
+    prompt: string,
+    context?: GenerationContext,
+    images?: { base64: string; mime_type: string }[],
+  ): Promise<{ prompt: string; negativePrompt: string }> {
+    let textMessage = prompt;
+
+    if (context) {
+      const contextParts: string[] = [];
+      contextParts.push(`[Generation type: ${context.type}]`);
+      if (context.model) contextParts.push(`[Model: ${context.model}]`);
+      if (context.resolution) contextParts.push(`[Resolution: ${context.resolution}]`);
+      if (context.aspectRatio) contextParts.push(`[Aspect ratio: ${context.aspectRatio}]`);
+      if (context.quality) contextParts.push(`[Quality: ${context.quality}]`);
+      if (context.durationSeconds) contextParts.push(`[Duration: ${context.durationSeconds}s]`);
+      if (context.hasAudio) contextParts.push(`[Has audio: yes]`);
+      if (context.hasReferenceImages) contextParts.push(`[Has reference images: yes]`);
+      if (context.hasFirstFrame) contextParts.push(`[Has first frame reference: yes]`);
+      if (context.hasLastFrame) contextParts.push(`[Has last frame reference: yes]`);
+      if (context.negativePrompt) contextParts.push(`[User negative prompt: ${context.negativePrompt}]`);
+      if (context.sampleCount && context.sampleCount > 1) contextParts.push(`[Sample count: ${context.sampleCount}]`);
+
+      textMessage = `${contextParts.join(' ')}\n\nUser prompt: ${prompt}`;
     }
 
-    return enhanced;
+    // Build multimodal content if images are provided
+    let userContent: Anthropic.MessageCreateParams['messages'][0]['content'] = textMessage;
+
+    if (images && images.length > 0) {
+      const compressedImages = await Promise.all(
+        images.map((img) => this.compressImageForVision(img.base64)),
+      );
+
+      userContent = [
+        ...compressedImages.map((img) => ({
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: img.mime_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: img.base64,
+          },
+        })),
+        { type: 'text' as const, text: textMessage },
+      ];
+    }
+
+    const response = await this.anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      system: SYSTEM_PROMPT,
+      messages: [
+        { role: 'user', content: userContent },
+      ],
+      temperature: 0.7,
+    });
+
+    const content = response.content[0];
+    const rawText = content.type === 'text' ? content.text.trim() : '';
+
+    if (!rawText) {
+      this.logger.warn('Anthropic returned empty response for prompt enhancement');
+      return { prompt, negativePrompt: '' };
+    }
+
+    // Strip markdown code fences if present
+    const cleaned = rawText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      return {
+        prompt: parsed.prompt || prompt,
+        negativePrompt: parsed.negativePrompt || '',
+      };
+    } catch {
+      this.logger.warn(`Anthropic returned non-JSON response: ${cleaned}`);
+      // Fallback: use the raw text as prompt
+      return { prompt: cleaned, negativePrompt: '' };
+    }
   }
 
   async enhanceInfluencer(selections: EnhanceInfluencerDto): Promise<string> {
@@ -442,24 +578,23 @@ export class PromptEnhancerService {
 
     this.logger.log(`[INFLUENCER] Input selections: ${userMessage}`);
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const response = await this.anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: INFLUENCER_SYSTEM_PROMPT,
       messages: [
-        { role: 'system', content: INFLUENCER_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
       temperature: 1.0,
-      max_tokens: 2000,
     });
 
-    let result = response.choices[0]?.message?.content?.trim();
+    const content = response.content[0];
+    let result = content.type === 'text' ? content.text.trim() : '';
 
-    this.logger.log(`[INFLUENCER] Raw OpenAI response: ${result}`);
+    this.logger.log(`[INFLUENCER] Raw Anthropic response: ${result}`);
 
     if (!result) {
-      this.logger.warn(
-        '[INFLUENCER] OpenAI returned empty response',
-      );
+      this.logger.warn('[INFLUENCER] Anthropic returned empty response');
       throw new Error('Failed to generate influencer prompt');
     }
 

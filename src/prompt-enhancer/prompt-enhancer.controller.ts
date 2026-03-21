@@ -9,8 +9,15 @@ export class PromptEnhancerController {
 
   @Post('enhance')
   async enhance(@Body() dto: EnhancePromptDto) {
-    const enhanced = await this.promptEnhancerService.enhance(dto.prompt);
-    return { enhancedPrompt: enhanced };
+    const result = await this.promptEnhancerService.enhance(
+      dto.prompt,
+      dto.context,
+      dto.images,
+    );
+    return {
+      enhancedPrompt: result.prompt,
+      negativePrompt: result.negativePrompt,
+    };
   }
 
   @Post('enhance-influencer')

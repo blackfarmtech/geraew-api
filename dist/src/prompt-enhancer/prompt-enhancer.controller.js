@@ -23,8 +23,11 @@ let PromptEnhancerController = class PromptEnhancerController {
         this.promptEnhancerService = promptEnhancerService;
     }
     async enhance(dto) {
-        const enhanced = await this.promptEnhancerService.enhance(dto.prompt);
-        return { enhancedPrompt: enhanced };
+        const result = await this.promptEnhancerService.enhance(dto.prompt, dto.context, dto.images);
+        return {
+            enhancedPrompt: result.prompt,
+            negativePrompt: result.negativePrompt,
+        };
     }
     async enhanceInfluencer(dto) {
         const enhancedPrompt = await this.promptEnhancerService.enhanceInfluencer(dto);
