@@ -14,7 +14,7 @@ Especialista em PostgreSQL, modelagem de dados, otimização de queries e gestã
 - Manter integridade referencial
 
 ## Context
-O GeraEW usa PostgreSQL como banco principal, com schema complexo incluindo:
+O Geraew AI usa PostgreSQL como banco principal, com schema complexo incluindo:
 - Sistema de usuários e autenticação
 - Planos e assinaturas
 - Sistema de créditos (ledger)

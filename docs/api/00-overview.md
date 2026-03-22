@@ -1,4 +1,4 @@
-# GeraEW API - Visao Geral para Integracao Frontend
+# Geraew AI API - Visao Geral para Integracao Frontend
 
 ## Base URL
 

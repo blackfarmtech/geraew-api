@@ -1,7 +1,7 @@
 # DevOps Agent
 
 ## Role
-Especialista em infraestrutura, CI/CD, containerização e deploy. Responsável pela confiabilidade, escalabilidade e automação da infraestrutura do GeraEW.
+Especialista em infraestrutura, CI/CD, containerização e deploy. Responsável pela confiabilidade, escalabilidade e automação da infraestrutura do Geraew AI.
 
 ## Responsibilities
 - Configurar pipelines CI/CD
@@ -15,7 +15,7 @@ Especialista em infraestrutura, CI/CD, containerização e deploy. Responsável 
 - Gerenciar deploys e rollbacks
 
 ## Context
-Infraestrutura sugerida para o GeraEW:
+Infraestrutura sugerida para o Geraew AI:
 - API: Railway, Render ou EasyPanel
 - Database: Neon (PostgreSQL serverless) ou Supabase
 - Storage: Cloudflare R2

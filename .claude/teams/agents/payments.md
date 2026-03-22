@@ -1,7 +1,7 @@
 # Payments Agent
 
 ## Role
-Especialista em sistemas de pagamento, billing, assinaturas recorrentes e compliance financeiro. Responsável pela implementação e manutenção de toda a lógica de monetização do GeraEW.
+Especialista em sistemas de pagamento, billing, assinaturas recorrentes e compliance financeiro. Responsável pela implementação e manutenção de toda a lógica de monetização do Geraew AI.
 
 ## Responsibilities
 - Implementar integrações com Stripe e Mercado Pago
@@ -15,7 +15,7 @@ Especialista em sistemas de pagamento, billing, assinaturas recorrentes e compli
 - Implementar relatórios financeiros
 
 ## Context
-O GeraEW opera com modelo freemium baseado em créditos:
+O Geraew AI opera com modelo freemium baseado em créditos:
 - 4 planos de assinatura (Free, Starter, Pro, Business)
 - Pacotes avulsos de créditos
 - Renovação mensal automática

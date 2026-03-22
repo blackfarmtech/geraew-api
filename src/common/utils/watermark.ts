@@ -1,11 +1,11 @@
 import sharp from 'sharp';
 
 /**
- * Applies a "GeraEW" text watermark to an image buffer using sharp SVG compositing.
+ * Applies a "Geraew AI" text watermark to an image buffer using sharp SVG compositing.
  */
 export async function applyWatermark(
   imageBuffer: Buffer,
-  watermarkText = 'GeraEW',
+  watermarkText = 'Geraew AI',
 ): Promise<Buffer> {
   const metadata = await sharp(imageBuffer).metadata();
   const width = metadata.width || 800;

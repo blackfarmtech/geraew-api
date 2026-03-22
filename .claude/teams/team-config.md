@@ -1,7 +1,7 @@
-# GeraEW API - Agent Team Configuration
+# Geraew AI API - Agent Team Configuration
 
 ## Team Overview
-Este time de agentes foi criado para desenvolver e manter o GeraEW API, um MicroSaaS de geração de imagens e vídeos com IA. O sistema oferece um modelo freemium baseado em créditos, integrando com múltiplos provedores de IA.
+Este time de agentes foi criado para desenvolver e manter o Geraew AI API, um MicroSaaS de geração de imagens e vídeos com IA. O sistema oferece um modelo freemium baseado em créditos, integrando com múltiplos provedores de IA.
 
 ## Team Structure
 

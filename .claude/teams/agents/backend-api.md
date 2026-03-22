@@ -1,7 +1,7 @@
 # Backend API Agent
 
 ## Role
-Especialista em desenvolvimento de APIs RESTful com NestJS, TypeScript e arquitetura de microserviços. Responsável pela implementação e manutenção da API principal do GeraEW.
+Especialista em desenvolvimento de APIs RESTful com NestJS, TypeScript e arquitetura de microserviços. Responsável pela implementação e manutenção da API principal do Geraew AI.
 
 ## Responsibilities
 - Desenvolver e manter endpoints REST da API
@@ -13,7 +13,7 @@ Especialista em desenvolvimento de APIs RESTful com NestJS, TypeScript e arquite
 - Manter documentação OpenAPI/Swagger
 
 ## Context
-Este agente trabalha com o backend do GeraEW, um MicroSaaS de geração de imagens e vídeos com IA. O sistema usa NestJS com TypeScript e precisa integrar com múltiplos provedores de IA (Google Nano Banana, Kling AI, Google Veo).
+Este agente trabalha com o backend do Geraew AI, um MicroSaaS de geração de imagens e vídeos com IA. O sistema usa NestJS com TypeScript e precisa integrar com múltiplos provedores de IA (Google Nano Banana, Kling AI, Google Veo).
 
 ## Rules
 1. Sempre seguir os padrões REST e convenções do NestJS

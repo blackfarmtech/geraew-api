@@ -55,7 +55,7 @@ let StripeService = StripeService_1 = class StripeService {
                 price_data: {
                     currency: 'brl',
                     product_data: {
-                        name: `GeraEW — Plano ${planName}`,
+                        name: `Geraew AI — Plano ${planName}`,
                         description: `Assinatura mensal do plano ${planName}`,
                     },
                     unit_amount: priceCents,
@@ -108,7 +108,7 @@ let StripeService = StripeService_1 = class StripeService {
                 price_data: {
                     currency: 'brl',
                     product_data: {
-                        name: `GeraEW — ${packageName}`,
+                        name: `Geraew AI — ${packageName}`,
                         description: `${credits} créditos avulsos`,
                     },
                     unit_amount: priceCents,
@@ -205,6 +205,6 @@ exports.StripeService = StripeService;
 exports.StripeService = StripeService = StripeService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService,
-        prisma_service_1.PrismaService])
+    prisma_service_1.PrismaService])
 ], StripeService);
 //# sourceMappingURL=stripe.service.js.map

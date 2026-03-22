@@ -15,7 +15,7 @@ Especialista em testes automatizados, qualidade de software e cobertura de códi
 - Implementar testes de performance
 
 ## Context
-O GeraEW tem fluxos críticos que necessitam alta confiabilidade:
+O Geraew AI tem fluxos críticos que necessitam alta confiabilidade:
 - Sistema de créditos (débito/estorno)
 - Processamento de pagamentos
 - Gerações de conteúdo com IA

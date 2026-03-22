@@ -26,7 +26,7 @@ async function bootstrap() {
 
   // Swagger configuration
   const config = new DocumentBuilder()
-    .setTitle('GeraEW API')
+    .setTitle('Geraew AI API')
     .setDescription('API para geração de imagens e vídeos com IA')
     .setVersion('1.0')
     .addBearerAuth()

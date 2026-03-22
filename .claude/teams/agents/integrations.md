@@ -15,7 +15,7 @@ Especialista em integração com APIs externas de IA, gerenciamento de webhooks,
 - Monitorar health de APIs externas
 
 ## Context
-O GeraEW integra com múltiplos provedores de IA:
+O Geraew AI integra com múltiplos provedores de IA:
 - Google Nano Banana 2: Geração de imagens
 - KuaiShou Kling AI 2.6: Motion control
 - Google Veo 3.1: Geração de vídeos

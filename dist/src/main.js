@@ -19,7 +19,7 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
     }));
     const config = new swagger_1.DocumentBuilder()
-        .setTitle('GeraEW API')
+        .setTitle('Geraew AI API')
         .setDescription('API para geração de imagens e vídeos com IA')
         .setVersion('1.0')
         .addBearerAuth()

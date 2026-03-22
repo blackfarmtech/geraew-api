@@ -72,17 +72,17 @@ export class StripeService {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
       : {
-          price_data: {
-            currency: 'brl',
-            product_data: {
-              name: `GeraEW — Plano ${planName}`,
-              description: `Assinatura mensal do plano ${planName}`,
-            },
-            unit_amount: priceCents,
-            recurring: { interval: 'month' },
+        price_data: {
+          currency: 'brl',
+          product_data: {
+            name: `Geraew AI — Plano ${planName}`,
+            description: `Assinatura mensal do plano ${planName}`,
           },
-          quantity: 1,
-        };
+          unit_amount: priceCents,
+          recurring: { interval: 'month' },
+        },
+        quantity: 1,
+      };
 
     // Se tem desconto (upgrade), criar cupom one-time para cobrar só a diferença
     let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
@@ -142,16 +142,16 @@ export class StripeService {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
       : {
-          price_data: {
-            currency: 'brl',
-            product_data: {
-              name: `GeraEW — ${packageName}`,
-              description: `${credits} créditos avulsos`,
-            },
-            unit_amount: priceCents,
+        price_data: {
+          currency: 'brl',
+          product_data: {
+            name: `Geraew AI — ${packageName}`,
+            description: `${credits} créditos avulsos`,
           },
-          quantity: 1,
-        };
+          unit_amount: priceCents,
+        },
+        quantity: 1,
+      };
 
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
@@ -251,7 +251,7 @@ export class StripeService {
       return { stripeSubscriptionId: subscription.id, invoiceId };
     } catch (error) {
       // Se a criação da nova sub falhar, deletar o cupom
-      await this.stripe.coupons.del(coupon.id).catch(() => {});
+      await this.stripe.coupons.del(coupon.id).catch(() => { });
       throw error;
     }
   }
