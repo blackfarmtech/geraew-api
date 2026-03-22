@@ -215,21 +215,42 @@ let AuthService = AuthService_1 = class AuthService {
         try {
             const { OAuth2Client } = await Promise.resolve().then(() => require('google-auth-library'));
             const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
-            const ticket = await client.verifyIdToken({
-                idToken: googleToken,
-                audience: this.configService.get('GOOGLE_CLIENT_ID'),
-            });
-            const payload = ticket.getPayload();
-            if (!payload || !payload.email) {
-                throw new common_1.UnauthorizedException('Token Google inválido');
+            try {
+                const ticket = await client.verifyIdToken({
+                    idToken: googleToken,
+                    audience: this.configService.get('GOOGLE_CLIENT_ID'),
+                });
+                const payload = ticket.getPayload();
+                if (!payload || !payload.email) {
+                    throw new Error('Invalid ID token payload');
+                }
+                return this.googleAuth({
+                    googleId: payload.sub,
+                    email: payload.email,
+                    name: payload.name || payload.email.split('@')[0],
+                    avatarUrl: payload.picture,
+                    provider: 'google',
+                });
             }
-            return this.googleAuth({
-                googleId: payload.sub,
-                email: payload.email,
-                name: payload.name || payload.email.split('@')[0],
-                avatarUrl: payload.picture,
-                provider: 'google',
-            });
+            catch {
+                const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${googleToken}` },
+                });
+                if (!response.ok) {
+                    throw new common_1.UnauthorizedException('Token Google inválido');
+                }
+                const userInfo = await response.json();
+                if (!userInfo.email) {
+                    throw new common_1.UnauthorizedException('Token Google inválido');
+                }
+                return this.googleAuth({
+                    googleId: userInfo.sub,
+                    email: userInfo.email,
+                    name: userInfo.name || userInfo.email.split('@')[0],
+                    avatarUrl: userInfo.picture,
+                    provider: 'google',
+                });
+            }
         }
         catch (error) {
             if (error instanceof common_1.UnauthorizedException)

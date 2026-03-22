@@ -27,6 +27,7 @@ export declare class GenerationsService {
     generateImageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     generateVideoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
     generateMotionControl(userId: string, dto: GenerateMotionControlDto): Promise<CreateGenerationResponseDto>;
+    private blockVeoForFreePlan;
     private checkConcurrentLimit;
     private ensureSufficientBalance;
     private debitCredits;

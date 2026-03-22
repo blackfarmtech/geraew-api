@@ -3,12 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.applyWatermark = applyWatermark;
 const sharp_1 = require("sharp");
 async function applyWatermark(imageBuffer, watermarkText = 'Geraew AI') {
-  const metadata = await (0, sharp_1.default)(imageBuffer).metadata();
-  const width = metadata.width || 800;
-  const height = metadata.height || 600;
-  const fontSize = Math.max(Math.floor(width * 0.06), 16);
-  const padding = Math.floor(fontSize * 0.5);
-  const svg = `
+    const metadata = await (0, sharp_1.default)(imageBuffer).metadata();
+    const width = metadata.width || 800;
+    const height = metadata.height || 600;
+    const fontSize = Math.max(Math.floor(width * 0.06), 16);
+    const padding = Math.floor(fontSize * 0.5);
+    const svg = `
     <svg width="${width}" height="${height}">
       <style>
         .watermark {
@@ -26,13 +26,13 @@ async function applyWatermark(imageBuffer, watermarkText = 'Geraew AI') {
       >${watermarkText}</text>
     </svg>
   `;
-  return (0, sharp_1.default)(imageBuffer)
-    .composite([
-      {
-        input: Buffer.from(svg),
-        gravity: 'southeast',
-      },
+    return (0, sharp_1.default)(imageBuffer)
+        .composite([
+        {
+            input: Buffer.from(svg),
+            gravity: 'southeast',
+        },
     ])
-    .toBuffer();
+        .toBuffer();
 }
 //# sourceMappingURL=watermark.js.map

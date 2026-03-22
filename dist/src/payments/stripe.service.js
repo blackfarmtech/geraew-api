@@ -205,6 +205,6 @@ exports.StripeService = StripeService;
 exports.StripeService = StripeService = StripeService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService,
-    prisma_service_1.PrismaService])
+        prisma_service_1.PrismaService])
 ], StripeService);
 //# sourceMappingURL=stripe.service.js.map

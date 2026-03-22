@@ -4,5 +4,6 @@ export declare class SubscriptionRenewalService {
     private readonly logger;
     constructor(prisma: PrismaService);
     handleSubscriptionRenewal(): Promise<void>;
+    handleFreePlanDailyReset(): Promise<void>;
     private renewSubscription;
 }

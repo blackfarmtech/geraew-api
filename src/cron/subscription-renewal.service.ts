@@ -70,6 +70,95 @@ export class SubscriptionRenewalService {
     }
   }
 
+  @Cron('0 0 * * *') // midnight every day
+  async handleFreePlanDailyReset() {
+    this.logger.log('Starting daily free plan credit reset...');
+
+    const freePlan = await this.prisma.plan.findUnique({
+      where: { slug: 'free' },
+    });
+
+    if (!freePlan) {
+      this.logger.warn('Free plan not found, skipping daily reset');
+      return;
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    // Find all users on free plan (users with active free subscription OR no active subscription at all)
+    const freeSubscriptions = await this.prisma.subscription.findMany({
+      where: {
+        plan: { slug: 'free' },
+        status: 'ACTIVE',
+      },
+      select: { userId: true },
+    });
+
+    const freeUserIds = freeSubscriptions.map((s) => s.userId);
+
+    // Also find users with no active subscription (they're implicitly free)
+    const usersWithActiveSubscription =
+      await this.prisma.subscription.findMany({
+        where: { status: 'ACTIVE' },
+        select: { userId: true },
+      });
+    const activeSubUserIds = new Set(
+      usersWithActiveSubscription.map((s) => s.userId),
+    );
+
+    const allUsers = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+
+    const implicitFreeUserIds = allUsers
+      .filter((u) => !activeSubUserIds.has(u.id))
+      .map((u) => u.id);
+
+    const allFreeUserIds = [
+      ...new Set([...freeUserIds, ...implicitFreeUserIds]),
+    ];
+
+    let resetCount = 0;
+
+    for (const userId of allFreeUserIds) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.creditBalance.upsert({
+            where: { userId },
+            update: {
+              planCreditsRemaining: freePlan.creditsPerMonth,
+              planCreditsUsed: 0,
+              periodStart: startOfDay,
+              periodEnd: endOfDay,
+            },
+            create: {
+              userId,
+              planCreditsRemaining: freePlan.creditsPerMonth,
+              bonusCreditsRemaining: 0,
+              planCreditsUsed: 0,
+              periodStart: startOfDay,
+              periodEnd: endOfDay,
+            },
+          });
+        });
+        resetCount++;
+      } catch (error) {
+        this.logger.error(
+          `Failed to reset credits for user ${userId}:`,
+          error,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Daily free plan reset complete: ${resetCount} users reset`,
+    );
+  }
+
   private async renewSubscription(
     subscription: Subscription & { plan: Plan },
   ) {

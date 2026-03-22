@@ -12,81 +12,34 @@ MicroSaaS de geração de imagens e vídeos com IA, similar ao Higgsfield. Públ
 
 ### Sistema de Créditos
 
-1 crédito = R$ 0,03 (base). Toda operação consome créditos proporcionais ao custo de API.
+Toda operação consome créditos fixos por geração (não por segundo).
 
 #### Tabela de Consumo de Créditos
 
-| Operação | Créditos | Custo API (USD) | Receita (R$) | Margem |
-|---|---|---|---|---|
+| Operação | Créditos | Custo API real | Base |
+|---|---|---|---|
+| NB2 1K | 5 | R$0,23 | Direto USD |
+| NB2 2K | 8 | R$0,34 | Direto USD |
+| NB2 4K | 12 | R$0,51 | Direto USD |
+| NBPro 1K/2K | 12 | R$0,51 | Direto USD |
+| NBPro 4K | 16 | R$0,68 | Direto USD |
+| Motion Control 720p (por geração) | 7 | R$0,17 | Direto USD |
+| Motion Control 1080p (por geração) | 10 | R$0,26 | Direto USD |
+| Veo Fast 720p/1080p sem áudio (8s) | 60 | R$0,13 | Vertex A |
+| Veo Fast 720p/1080p com áudio (8s) | 90 | R$0,20 | Vertex A |
+| Veo Fast 4K sem áudio (8s) | 160 | R$0,40 | Vertex A |
+| Veo Fast 4K com áudio (8s) | 180 | R$0,47 | Vertex A |
+| Veo Max 720p/1080p sem áudio (8s) | 100 | R$0,27 | Vertex A |
+| Veo Max 720p/1080p com áudio (8s) | 200 | R$0,53 | Vertex A |
+| Veo Max 4K sem áudio (8s) | 200 | R$0,53 | Vertex A |
+| Veo Max 4K com áudio (8s) | 280 | R$0,80 | Vertex A |
 
-Nossos custos
+### Custos
 
+- Custo fixo mensal: R$290 (Supabase + Hostinger + Storage)
+- Câmbio adotado: R$5,67/USD
+- Margem mínima alvo: 40%
 
-supabase
-
-$25 / mes
-
-
-hostinger 
-
-R$ 98,00
-
-
-Google storage
-
-R$: ????
-
-Vertex 
-
-R$200 volta R$1700 reais em creditos
-R$50 volta R$1700 reais em creditos
-Cria e volta R$1700 reais em creditos
-
-Compras de conta google
-
-R$ 9,99 - C/CONTA
-
-
-
-Custo de imagem
-
-NANO BANANA 2 
-
-| Imagem 1K | 10 | $0.04 - 30 REAIS / 142 IMAGENS
-| Imagem 2K | 15 | $0.06 - 30 REAIS / 96 IMAGENS
-| Imagem 4K | 22 | $0.09 - 30 REAIS / 63 IMAGENS
-
-
-NANO BANANA PRO 
-| Imagem 1K | 10 | $0.09 - 30 REAIS / 63 IMAGENS
-| Imagem 2K | 15 | $0.09 - 30 REAIS / 63 IMAGENS
-| Imagem 4K | 22 | $0.12 - 30 REAIS / 47 IMAGENS
-
-
-
-
-
-
-
-
-
-|---|---|---|---|---|
-NANO BANANA 2 
-| Imagem 1K | 10 | $0.04 | 0,30 | 30% |
-| Imagem 2K | 15 | $0.06 | 0,45 | 29% |
-| Imagem 4K | 22 | $0.09 | 0,66 | 27% |
-
-NANO BANANA PRO
-| Imagem 1K | 10 | $0.04 | 0,30 | 30% |
-| Imagem 2K | 15 | $0.06 | 0,45 | 29% |
-| Imagem 4K | 22 | $0.09 | 0,66 | 27% |
-
-| Motion Control 720p (por segundo) | 7 | $0.03 | 0,21 | 24% |
-| Motion Control 1080p (por segundo) | 11 | $0.045 | 0,33 | 27% |
-| Vídeo 1080p (por segundo) | 48 | $0.20 | 1,44 | 25% |
-| Vídeo 4K (por segundo) | 96 | $0.40 | 2,88 | 25% |
-| Vídeo + Áudio 1080p (por segundo) | 96 | $0.40 | 2,88 | 25% |
-| Vídeo + Áudio 4K (por segundo) | 144 | $0.60 | 4,32 | 25% |
 
 #### Provedores de API
 
@@ -98,31 +51,36 @@ NANO BANANA PRO
 
 ### Planos
 
-| | Free | Starter | Pro | Business |
+| | Free | Starter | Creator | Pro | Studio |
+|---|---|---|---|---|---|
+| Preço | R$ 0 | R$ 39 | R$ 89 | R$ 179 | R$ 369 |
+| Créditos | 30/dia | 400 | 1.200 | 3.000 | 8.000 |
+| R$/crédito | — | R$ 0,0975 | R$ 0,0742 | R$ 0,0597 | R$ 0,0461 |
+| Marca d'água | Sim | Não | Não | Não | Não |
+| Gerações simultâneas | 1 | 2 | 3 | 5 | 10 |
+| Retenção galeria | 30 dias | Ilimitado | Ilimitado | Ilimitado | Ilimitado |
+| API access | Não | Não | Não | Não | Sim |
+| Veo | Bloqueado | ✓ | ✓ | ✓ | ✓ |
+
+### Pacotes de Créditos Avulsos (Boost)
+
+| Pacote | Preço | Créditos | R$/crédito | vs Starter |
 |---|---|---|---|---|
-| Preço/mês | R$ 0 | R$ 29,90 | R$ 89,90 | R$ 249,90 |
-| Créditos/mês | 30 | 1.000 | 3.500 | 10.000 |
-| R$/crédito | — | R$ 0,030 | R$ 0,026 | R$ 0,025 |
-| Marca d'água | Sim | Não | Não | Não |
-| Fila prioridade | low | normal | high | high |
-| Gerações simultâneas | 1 | 2 | 5 | 10 |
-| Retenção galeria | 30 dias | Ilimitado | Ilimitado | Ilimitado |
-| API access | Não | Não | Não | Sim |
+| Boost P | R$ 14 | 70 | R$ 0,200 | +105% |
+| Boost M | R$ 26 | 170 | R$ 0,153 | +57% |
+| Boost G | R$ 36 | 320 | R$ 0,113 | +16% |
 
-### Pacotes de Créditos Avulsos
-
-| Pacote | Preço | R$/crédito |
-|---|---|---|
-| 500 créditos | R$ 17,90 | R$ 0,036 |
-| 1.000 créditos | R$ 29,90 | R$ 0,030 |
-| 5.000 créditos | R$ 129,90 | R$ 0,026 |
+Nota: Boosts são sempre mais caros por crédito que qualquer plano (por design, para incentivar compra de plano).
 
 ### Regras de Créditos
 
-- Créditos do plano mensal **expiram** no fim do ciclo (não acumulam)
-- Créditos avulsos (bonus) **NÃO expiram** enquanto a conta estiver ativa
-- Na hora do débito, consumir primeiro créditos do plano, depois os avulsos
-- Ao confirmar geração, fazer **hold** dos créditos; confirmar débito após sucesso ou **estornar** se falhar
+- Free plan: **30 créditos por dia**, não acumula, reset diário à meia-noite
+- Paid plans: créditos renovam na compra/renovação do plano
+- Créditos não acumulam ao trocar de plano — renovam na nova compra
+- Free plan: Veo Fast e Veo Max estão **bloqueados** (requer plano pago)
+- Boost packages são sempre mais caros por crédito que qualquer plano
+- Regra de ouro: Boost G (R$36/320cr) está R$3 abaixo do Starter (R$39/400cr) — UI destaca isso
+- Na hora do débito, consumir primeiro créditos do plano, depois os avulsos (bônus)
 - Gerações com status `failed` sempre devolvem créditos automaticamente
 
 ### Regras de Assinatura
@@ -184,7 +142,7 @@ CREATE INDEX idx_users_oauth ON users(oauth_provider, oauth_provider_id);
 -- ============================================
 CREATE TABLE plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    slug VARCHAR(50) UNIQUE NOT NULL, -- 'free', 'starter', 'pro', 'business'
+    slug VARCHAR(50) UNIQUE NOT NULL, -- 'free', 'starter', 'creator', 'pro', 'studio'
     name VARCHAR(100) NOT NULL,
     description TEXT,
     price_cents INTEGER NOT NULL DEFAULT 0, -- em centavos de BRL
@@ -206,8 +164,8 @@ CREATE TABLE credit_costs (
     generation_type generation_type NOT NULL,
     resolution resolution NOT NULL,
     has_audio BOOLEAN DEFAULT FALSE,
-    credits_per_unit INTEGER NOT NULL, -- por imagem ou por segundo de vídeo
-    is_per_second BOOLEAN DEFAULT FALSE, -- true para vídeo, false para imagem
+    credits_per_unit INTEGER NOT NULL, -- créditos por geração (fixo)
+    is_per_second BOOLEAN DEFAULT FALSE, -- deprecated, sempre false no v4
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -400,46 +358,55 @@ CREATE INDEX idx_webhook_logs_external ON webhook_logs(external_id);
 ### Seed dos Planos
 
 ```sql
-INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_generations, has_watermark, queue_priority, gallery_retention_days, has_api_access, sort_order) VALUES
-('free', 'Free', 0, 30, 1, true, 'low', 30, false, 0),
-('starter', 'Starter', 2990, 1000, 2, false, 'normal', null, false, 1),
-('pro', 'Pro', 8990, 3500, 5, false, 'high', null, false, 2),
-('business', 'Business', 24990, 10000, 10, false, 'high', null, true, 3);
+INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_generations, has_watermark, gallery_retention_days, has_api_access, has_veo_access, sort_order) VALUES
+('free', 'Free', 0, 30, 1, true, 30, false, false, 0),
+('starter', 'Starter', 3900, 400, 2, false, null, false, true, 1),
+('creator', 'Creator', 8900, 1200, 3, false, null, false, true, 2),
+('pro', 'Pro', 17900, 3000, 5, false, null, false, true, 3),
+('studio', 'Studio', 36900, 8000, 10, false, null, true, true, 4);
 ```
 
 ### Seed dos Custos de Crédito
 
 ```sql
 INSERT INTO credit_costs (generation_type, resolution, has_audio, credits_per_unit, is_per_second) VALUES
--- Imagens
-('text_to_image', '1k', false, 10, false),
-('text_to_image', '2k', false, 15, false),
-('text_to_image', '4k', false, 22, false),
-('image_to_image', '1k', false, 10, false),
-('image_to_image', '2k', false, 15, false),
-('image_to_image', '4k', false, 22, false),
--- Motion Control (Kling 2.6)
-('motion_control', '720p', false, 7, true),
-('motion_control', '1080p', false, 11, true),
--- Vídeo sem áudio (Veo 3.1)
-('text_to_video', '1080p', false, 48, true),
-('text_to_video', '4k', false, 96, true),
-('image_to_video', '1080p', false, 48, true),
-('image_to_video', '4k', false, 96, true),
--- Vídeo com áudio (Veo 3.1)
-('text_to_video', '1080p', true, 96, true),
-('text_to_video', '4k', true, 144, true),
-('image_to_video', '1080p', true, 96, true),
-('image_to_video', '4k', true, 144, true);
+-- Imagens NB2
+('text_to_image', '1k', false, 5, false),
+('text_to_image', '2k', false, 8, false),
+('text_to_image', '4k', false, 12, false),
+('image_to_image', '1k', false, 5, false),
+('image_to_image', '2k', false, 8, false),
+('image_to_image', '4k', false, 12, false),
+-- Imagens NBPro
+-- NBPro 1K/2K = 12 créditos, NBPro 4K = 16 créditos
+-- (diferenciação por modelo em parameters JSONB)
+-- Motion Control (Kling 2.6) — por geração
+('motion_control', '720p', false, 7, false),
+('motion_control', '1080p', false, 10, false),
+-- Veo Fast sem áudio (por geração, 8s)
+('text_to_video', '720p', false, 60, false),
+('text_to_video', '1080p', false, 60, false),
+('text_to_video', '4k', false, 160, false),
+('image_to_video', '720p', false, 60, false),
+('image_to_video', '1080p', false, 60, false),
+('image_to_video', '4k', false, 160, false),
+-- Veo Fast com áudio (por geração, 8s)
+('text_to_video', '720p', true, 90, false),
+('text_to_video', '1080p', true, 90, false),
+('text_to_video', '4k', true, 180, false),
+('image_to_video', '720p', true, 90, false),
+('image_to_video', '1080p', true, 90, false),
+('image_to_video', '4k', true, 180, false);
+-- Nota: Veo Max diferenciado por model_tier no código (100/200/280 créditos)
 ```
 
-### Seed dos Pacotes de Créditos
+### Seed dos Pacotes de Créditos (Boost)
 
 ```sql
 INSERT INTO credit_packages (name, credits, price_cents, sort_order) VALUES
-('Pacote 500', 500, 1790, 0),
-('Pacote 1.000', 1000, 2990, 1),
-('Pacote 5.000', 5000, 12990, 2);
+('Boost P', 70, 1400, 0),
+('Boost M', 170, 2600, 1),
+('Boost G', 320, 3600, 2);
 ```
 
 ---
@@ -976,8 +943,9 @@ PROMPT_TOO_LONG             → 400 — Prompt excede limite de caracteres
 ```
 Free:     30 req/min
 Starter:  60 req/min
+Creator:  90 req/min
 Pro:      120 req/min
-Business: 300 req/min
+Studio:   300 req/min
 ```
 
 ### Validações Importantes
