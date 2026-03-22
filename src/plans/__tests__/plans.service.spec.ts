@@ -64,7 +64,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
   },
   creditCost: {
-    findUnique: jest.fn(),
+    findFirst: jest.fn(),
   },
   creditPackage: {
     findMany: jest.fn(),
@@ -171,7 +171,7 @@ describe('PlansService', () => {
 
   describe('getCreditCost', () => {
     it('should return credit cost for valid params', async () => {
-      mockPrisma.creditCost.findUnique.mockResolvedValue(mockCreditCost);
+      mockPrisma.creditCost.findFirst.mockResolvedValue(mockCreditCost);
 
       const result = await service.getCreditCost(
         'TEXT_TO_IMAGE' as GenerationType,
@@ -180,19 +180,19 @@ describe('PlansService', () => {
       );
 
       expect(result).toEqual(mockCreditCost);
-      expect(mockPrisma.creditCost.findUnique).toHaveBeenCalledWith({
+      expect(mockPrisma.creditCost.findFirst).toHaveBeenCalledWith({
         where: {
-          generationType_resolution_hasAudio: {
-            generationType: 'TEXT_TO_IMAGE',
-            resolution: '_1K',
-            hasAudio: false,
-          },
+          generationType: 'TEXT_TO_IMAGE',
+          resolution: '_1K',
+          hasAudio: false,
+          modelVariant: null,
+          isActive: true,
         },
       });
     });
 
     it('should throw NotFoundException for unknown combination', async () => {
-      mockPrisma.creditCost.findUnique.mockResolvedValue(null);
+      mockPrisma.creditCost.findFirst.mockResolvedValue(null);
 
       await expect(
         service.getCreditCost(
@@ -208,7 +208,7 @@ describe('PlansService', () => {
           true,
         ),
       ).rejects.toThrow(
-        'Custo de crédito não encontrado para TEXT_TO_IMAGE _4K (audio: true)',
+        'Custo de crédito não encontrado para TEXT_TO_IMAGE _4K (audio: true, variant: default)',
       );
     });
   });
@@ -217,7 +217,7 @@ describe('PlansService', () => {
 
   describe('calculateGenerationCost', () => {
     it('should return creditsPerUnit for image (not per second)', async () => {
-      mockPrisma.creditCost.findUnique.mockResolvedValue(mockCreditCost);
+      mockPrisma.creditCost.findFirst.mockResolvedValue(mockCreditCost);
 
       const result = await service.calculateGenerationCost(
         'TEXT_TO_IMAGE' as GenerationType,
@@ -228,7 +228,7 @@ describe('PlansService', () => {
     });
 
     it('should return creditsPerUnit * durationSeconds for video (per second)', async () => {
-      mockPrisma.creditCost.findUnique.mockResolvedValue(mockVideoCreditCost);
+      mockPrisma.creditCost.findFirst.mockResolvedValue(mockVideoCreditCost);
 
       const result = await service.calculateGenerationCost(
         'TEXT_TO_VIDEO' as GenerationType,
@@ -241,7 +241,7 @@ describe('PlansService', () => {
     });
 
     it('should return creditsPerUnit when isPerSecond but no duration provided', async () => {
-      mockPrisma.creditCost.findUnique.mockResolvedValue(mockVideoCreditCost);
+      mockPrisma.creditCost.findFirst.mockResolvedValue(mockVideoCreditCost);
 
       const result = await service.calculateGenerationCost(
         'TEXT_TO_VIDEO' as GenerationType,

@@ -50,17 +50,17 @@ const mockPlanPro = {
   stripePriceId: 'price_pro_123',
 };
 
-const mockPlanBusiness = {
-  id: 'plan-business',
-  slug: 'business',
-  name: 'Business',
-  priceCents: 24990,
-  creditsPerMonth: 10000,
+const mockPlanStudio = {
+  id: 'plan-studio',
+  slug: 'studio',
+  name: 'Studio',
+  priceCents: 36900,
+  creditsPerMonth: 8000,
   maxConcurrentGenerations: 10,
   hasWatermark: false,
   galleryRetentionDays: null,
   hasApiAccess: true,
-  stripePriceId: 'price_business_123',
+  stripePriceId: 'price_studio_123',
 };
 
 const mockUser = {

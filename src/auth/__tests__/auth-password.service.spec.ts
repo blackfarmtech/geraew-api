@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TwilioVerifyService } from '../../twilio/twilio-verify.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -114,6 +115,11 @@ const mockConfigService = {
   }),
 };
 
+const mockTwilioVerify = {
+  sendVerification: jest.fn().mockResolvedValue(undefined),
+  checkVerification: jest.fn().mockResolvedValue('+5511999999999'),
+};
+
 // ── Test suite ─────────────────────────────────────────────
 
 describe('AuthService — Password Reset & Google OAuth', () => {
@@ -126,6 +132,7 @@ describe('AuthService — Password Reset & Google OAuth', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: TwilioVerifyService, useValue: mockTwilioVerify },
       ],
     }).compile();
 
@@ -595,7 +602,7 @@ describe('AuthService — Password Reset & Google OAuth', () => {
 
       await expect(
         service.googleAuthWithToken('invalid-token'),
-      ).rejects.toThrow('Token Google inválido ou expirado');
+      ).rejects.toThrow('Token Google inválido');
     });
 
     it('should throw UnauthorizedException if payload has no email', async () => {

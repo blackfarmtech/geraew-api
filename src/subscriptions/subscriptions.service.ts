@@ -9,7 +9,7 @@ import { PlansService } from '../plans/plans.service';
 import { StripeService } from '../payments/stripe.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 
-const PLAN_ORDER = ['free', 'starter', 'pro', 'business'];
+const PLAN_ORDER = ['free', 'starter', 'creator', 'pro', 'studio'];
 
 @Injectable()
 export class SubscriptionsService {

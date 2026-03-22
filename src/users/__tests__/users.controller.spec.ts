@@ -15,6 +15,7 @@ const mockProfile: UserProfileResponseDto = {
   avatarUrl: null,
   role: 'USER',
   emailVerified: false,
+  hasCompletedOnboarding: false,
   createdAt: now,
   plan: {
     slug: 'free',
