@@ -35,4 +35,23 @@ export class RegisterDto {
     },
   )
   password: string;
+
+  @ApiProperty({
+    example: '5511999998888',
+    description: 'Número de telefone com código do país',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Telefone é obrigatório' })
+  @Matches(/^\+?\d{10,15}$/, {
+    message: 'Telefone inválido. Use formato: 5511999998888',
+  })
+  phone: string;
+
+  @ApiProperty({
+    example: 'eyJhbGciOiJSUzI1NiIs...',
+    description: 'Firebase ID Token obtido após verificação do SMS',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Token de verificação é obrigatório' })
+  firebaseToken: string;
 }

@@ -31,6 +31,9 @@ let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
     }
+    async checkAvailability(body) {
+        return this.authService.checkAvailability(body.email, body.phone);
+    }
     async register(registerDto) {
         return this.authService.register(registerDto);
     }
@@ -59,6 +62,17 @@ let AuthController = class AuthController {
     }
 };
 exports.AuthController = AuthController;
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Post)('check-availability'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Verifica se email/telefone já estão em uso' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Resultado da verificação' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "checkAvailability", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Post)('register'),

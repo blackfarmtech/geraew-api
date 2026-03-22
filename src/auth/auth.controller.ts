@@ -29,6 +29,15 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Post('check-availability')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verifica se email/telefone já estão em uso' })
+  @ApiResponse({ status: 200, description: 'Resultado da verificação' })
+  async checkAvailability(@Body() body: { email?: string; phone?: string }) {
+    return this.authService.checkAvailability(body.email, body.phone);
+  }
+
+  @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))

@@ -17,23 +17,55 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const bcrypt = require("bcrypt");
 const crypto_1 = require("crypto");
 const config_1 = require("@nestjs/config");
+const firebase_auth_service_1 = require("../firebase/firebase-auth.service");
 let AuthService = AuthService_1 = class AuthService {
     prisma;
     jwtService;
     configService;
+    firebaseAuth;
     logger = new common_1.Logger(AuthService_1.name);
-    constructor(prisma, jwtService, configService) {
+    constructor(prisma, jwtService, configService, firebaseAuth) {
         this.prisma = prisma;
         this.jwtService = jwtService;
         this.configService = configService;
+        this.firebaseAuth = firebaseAuth;
+    }
+    async checkAvailability(email, phone) {
+        let emailTaken = false;
+        let phoneTaken = false;
+        if (email) {
+            const existing = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+            emailTaken = !!existing;
+        }
+        if (phone) {
+            let normalized = phone.replace(/\D/g, '');
+            if (!normalized.startsWith('55')) {
+                normalized = `55${normalized}`;
+            }
+            const existing = await this.prisma.user.findUnique({ where: { phone: normalized } });
+            phoneTaken = !!existing;
+        }
+        return { emailTaken, phoneTaken };
     }
     async register(registerDto) {
-        const { email, password, name } = registerDto;
+        const { email, password, name, phone, firebaseToken } = registerDto;
+        const verifiedPhone = await this.firebaseAuth.verifyPhoneToken(firebaseToken);
+        const normalizedInput = phone.replace(/\D/g, '');
+        const normalizedVerified = verifiedPhone.replace(/\D/g, '');
+        if (!normalizedVerified.endsWith(normalizedInput.slice(-11)) && normalizedInput !== normalizedVerified) {
+            throw new common_1.BadRequestException('O telefone verificado não corresponde ao informado');
+        }
         const existingUser = await this.prisma.user.findUnique({
             where: { email: email.toLowerCase() },
         });
         if (existingUser) {
             throw new common_1.ConflictException('Email já cadastrado');
+        }
+        const existingPhone = await this.prisma.user.findUnique({
+            where: { phone: normalizedVerified },
+        });
+        if (existingPhone) {
+            throw new common_1.ConflictException('Telefone já cadastrado');
         }
         const hashedPassword = await bcrypt.hash(password, 10);
         const user = await this.prisma.$transaction(async (tx) => {
@@ -42,6 +74,8 @@ let AuthService = AuthService_1 = class AuthService {
                     email: email.toLowerCase(),
                     name,
                     passwordHash: hashedPassword,
+                    phone: normalizedVerified,
+                    phoneVerified: true,
                     role: 'USER',
                 },
             });
@@ -368,6 +402,7 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        firebase_auth_service_1.FirebaseAuthService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map
