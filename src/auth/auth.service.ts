@@ -287,31 +287,57 @@ export class AuthService {
   }
 
   /**
-   * Login/Cadastro via Google OAuth (mobile — verifica ID token)
+   * Login/Cadastro via Google OAuth (verifica ID token ou access token)
    */
   async googleAuthWithToken(googleToken: string): Promise<AuthResponseDto> {
     try {
       const { OAuth2Client } = await import('google-auth-library');
       const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
 
-      const ticket = await client.verifyIdToken({
-        idToken: googleToken,
-        audience: this.configService.get('GOOGLE_CLIENT_ID'),
-      });
+      // Tenta verificar como ID token primeiro
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: googleToken,
+          audience: this.configService.get('GOOGLE_CLIENT_ID'),
+        });
 
-      const payload = ticket.getPayload();
+        const payload = ticket.getPayload();
 
-      if (!payload || !payload.email) {
-        throw new UnauthorizedException('Token Google inválido');
+        if (!payload || !payload.email) {
+          throw new Error('Invalid ID token payload');
+        }
+
+        return this.googleAuth({
+          googleId: payload.sub,
+          email: payload.email,
+          name: payload.name || payload.email.split('@')[0],
+          avatarUrl: payload.picture,
+          provider: 'google',
+        });
+      } catch {
+        // Se falhar como ID token, tenta como access token
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${googleToken}` },
+        });
+
+        if (!response.ok) {
+          throw new UnauthorizedException('Token Google inválido');
+        }
+
+        const userInfo = await response.json();
+
+        if (!userInfo.email) {
+          throw new UnauthorizedException('Token Google inválido');
+        }
+
+        return this.googleAuth({
+          googleId: userInfo.sub,
+          email: userInfo.email,
+          name: userInfo.name || userInfo.email.split('@')[0],
+          avatarUrl: userInfo.picture,
+          provider: 'google',
+        });
       }
-
-      return this.googleAuth({
-        googleId: payload.sub,
-        email: payload.email,
-        name: payload.name || payload.email.split('@')[0],
-        avatarUrl: payload.picture,
-        provider: 'google',
-      });
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Token Google inválido ou expirado');
