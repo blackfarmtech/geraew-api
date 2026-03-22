@@ -10,6 +10,13 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
+    checkAvailability(body: {
+        email?: string;
+        phone?: string;
+    }): Promise<{
+        emailTaken: boolean;
+        phoneTaken: boolean;
+    }>;
     register(registerDto: RegisterDto): Promise<AuthResponseDto>;
     login(loginDto: LoginDto): Promise<AuthResponseDto>;
     googleAuth(): Promise<void>;

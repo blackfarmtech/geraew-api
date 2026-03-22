@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { randomBytes, createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
+import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 
 @Injectable()
 export class AuthService {
@@ -16,13 +17,50 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly firebaseAuth: FirebaseAuthService,
   ) { }
 
   /**
-   * Registra um novo usuário
+   * Verifica se email ou telefone já estão em uso
+   */
+  async checkAvailability(email?: string, phone?: string): Promise<{ emailTaken: boolean; phoneTaken: boolean }> {
+    let emailTaken = false;
+    let phoneTaken = false;
+
+    if (email) {
+      const existing = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      emailTaken = !!existing;
+    }
+
+    if (phone) {
+      let normalized = phone.replace(/\D/g, '');
+      // Sempre normaliza para formato com código do país (55)
+      // O register salva o telefone verificado pelo Firebase que vem com +55
+      if (!normalized.startsWith('55')) {
+        normalized = `55${normalized}`;
+      }
+      const existing = await this.prisma.user.findUnique({ where: { phone: normalized } });
+      phoneTaken = !!existing;
+    }
+
+    return { emailTaken, phoneTaken };
+  }
+
+  /**
+   * Registra um novo usuário com verificação de telefone via Firebase
    */
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, password, name } = registerDto;
+    const { email, password, name, phone, firebaseToken } = registerDto;
+
+    // Verifica o token do Firebase e extrai o número de telefone
+    const verifiedPhone = await this.firebaseAuth.verifyPhoneToken(firebaseToken);
+
+    // Normaliza os telefones para comparação
+    const normalizedInput = phone.replace(/\D/g, '');
+    const normalizedVerified = verifiedPhone.replace(/\D/g, '');
+    if (!normalizedVerified.endsWith(normalizedInput.slice(-11)) && normalizedInput !== normalizedVerified) {
+      throw new BadRequestException('O telefone verificado não corresponde ao informado');
+    }
 
     // Verifica se o email já está em uso
     const existingUser = await this.prisma.user.findUnique({
@@ -31,6 +69,15 @@ export class AuthService {
 
     if (existingUser) {
       throw new ConflictException('Email já cadastrado');
+    }
+
+    // Verifica se o telefone já está em uso
+    const existingPhone = await this.prisma.user.findUnique({
+      where: { phone: normalizedVerified },
+    });
+
+    if (existingPhone) {
+      throw new ConflictException('Telefone já cadastrado');
     }
 
     // Hash da senha
@@ -44,6 +91,8 @@ export class AuthService {
           email: email.toLowerCase(),
           name,
           passwordHash: hashedPassword,
+          phone: normalizedVerified,
+          phoneVerified: true,
           role: 'USER',
         },
       });

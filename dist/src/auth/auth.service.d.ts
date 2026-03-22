@@ -4,12 +4,18 @@ import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
+import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 export declare class AuthService {
     private readonly prisma;
     private readonly jwtService;
     private readonly configService;
+    private readonly firebaseAuth;
     private readonly logger;
-    constructor(prisma: PrismaService, jwtService: JwtService, configService: ConfigService);
+    constructor(prisma: PrismaService, jwtService: JwtService, configService: ConfigService, firebaseAuth: FirebaseAuthService);
+    checkAvailability(email?: string, phone?: string): Promise<{
+        emailTaken: boolean;
+        phoneTaken: boolean;
+    }>;
     register(registerDto: RegisterDto): Promise<AuthResponseDto>;
     private generateTokens;
     private formatUserResponse;

@@ -98,6 +98,10 @@ model User {
   // Stripe
   stripeCustomerId String? @unique @map("stripe_customer_id")
 
+  // Phone
+  phone         String? @unique
+  phoneVerified Boolean @default(false) @map("phone_verified")
+
   // Status
   emailVerified         Boolean @default(false) @map("email_verified")
   isActive              Boolean @default(true) @map("is_active")
@@ -107,15 +111,15 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  subscriptions       Subscription[]
-  creditBalance       CreditBalance?
-  creditTransactions  CreditTransaction[]
-  generations         Generation[]
-  payments            Payment[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  folders             Folder[]
-  videoProjects       VideoProject[]
+  subscriptions        Subscription[]
+  creditBalance        CreditBalance?
+  creditTransactions   CreditTransaction[]
+  generations          Generation[]
+  payments             Payment[]
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  folders              Folder[]
+  videoProjects        VideoProject[]
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])

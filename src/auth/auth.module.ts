@@ -7,12 +7,14 @@ import { AuthService } from './auth.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { FirebaseModule } from '../firebase/firebase.module';
 
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
     ConfigModule,
+    FirebaseModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
