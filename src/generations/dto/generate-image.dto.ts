@@ -95,4 +95,11 @@ export class GenerateImageDto {
   @ValidateNested({ each: true })
   @Type(() => ImageInputDto)
   images?: ImageInputDto[];
+
+  @ApiPropertyOptional({
+    description: 'Variante do modelo (NB2, NBP)',
+  })
+  @IsOptional()
+  @IsString()
+  model_variant?: string;
 }

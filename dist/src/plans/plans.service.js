@@ -41,24 +41,23 @@ let PlansService = class PlansService {
         }
         return plan;
     }
-    async getCreditCost(generationType, resolution, hasAudio) {
-        console.log(generationType, resolution, hasAudio);
-        const cost = await this.prisma.creditCost.findUnique({
+    async getCreditCost(generationType, resolution, hasAudio, modelVariant) {
+        const cost = await this.prisma.creditCost.findFirst({
             where: {
-                generationType_resolution_hasAudio: {
-                    generationType,
-                    resolution,
-                    hasAudio,
-                },
+                generationType,
+                resolution,
+                hasAudio,
+                modelVariant: modelVariant ?? null,
+                isActive: true,
             },
         });
         if (!cost) {
-            throw new common_1.NotFoundException(`Custo de crédito não encontrado para ${generationType} ${resolution} (audio: ${hasAudio})`);
+            throw new common_1.NotFoundException(`Custo de crédito não encontrado para ${generationType} ${resolution} (audio: ${hasAudio}, variant: ${modelVariant ?? 'default'})`);
         }
         return cost;
     }
-    async calculateGenerationCost(generationType, resolution, durationSeconds, hasAudio = false, sampleCount = 1) {
-        const cost = await this.getCreditCost(generationType, resolution, hasAudio);
+    async calculateGenerationCost(generationType, resolution, durationSeconds, hasAudio = false, sampleCount = 1, modelVariant) {
+        const cost = await this.getCreditCost(generationType, resolution, hasAudio, modelVariant);
         let total = cost.creditsPerUnit;
         if (cost.isPerSecond && durationSeconds) {
             total = cost.creditsPerUnit * durationSeconds;

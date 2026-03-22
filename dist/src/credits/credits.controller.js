@@ -55,7 +55,7 @@ let CreditsController = class CreditsController {
         return { checkoutUrl };
     }
     async estimateCost(userId, dto) {
-        return this.creditsService.estimateCost(userId, dto.type, dto.resolution, dto.durationSeconds, dto.hasAudio, dto.sampleCount);
+        return this.creditsService.estimateCost(userId, dto.type, dto.resolution, dto.durationSeconds, dto.hasAudio, dto.sampleCount, dto.modelVariant);
     }
 };
 exports.CreditsController = CreditsController;

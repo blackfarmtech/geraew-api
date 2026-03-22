@@ -123,4 +123,11 @@ export class GenerateImageNanoBananaDto {
   @ValidateNested({ each: true })
   @Type(() => NanoBananaImageInputDto)
   images?: NanoBananaImageInputDto[];
+
+  @ApiPropertyOptional({
+    description: 'Variante do modelo (NB2, NBP)',
+  })
+  @IsOptional()
+  @IsString()
+  model_variant?: string;
 }

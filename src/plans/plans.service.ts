@@ -41,21 +41,21 @@ export class PlansService {
     generationType: GenerationType,
     resolution: Resolution,
     hasAudio: boolean,
+    modelVariant?: string | null,
   ) {
-    console.log(generationType, resolution, hasAudio);
-    const cost = await this.prisma.creditCost.findUnique({
+    const cost = await this.prisma.creditCost.findFirst({
       where: {
-        generationType_resolution_hasAudio: {
-          generationType,
-          resolution,
-          hasAudio,
-        },
+        generationType,
+        resolution,
+        hasAudio,
+        modelVariant: modelVariant ?? null,
+        isActive: true,
       },
     });
 
     if (!cost) {
       throw new NotFoundException(
-        `Custo de crédito não encontrado para ${generationType} ${resolution} (audio: ${hasAudio})`,
+        `Custo de crédito não encontrado para ${generationType} ${resolution} (audio: ${hasAudio}, variant: ${modelVariant ?? 'default'})`,
       );
     }
 
@@ -68,8 +68,9 @@ export class PlansService {
     durationSeconds?: number,
     hasAudio: boolean = false,
     sampleCount: number = 1,
+    modelVariant?: string | null,
   ): Promise<number> {
-    const cost = await this.getCreditCost(generationType, resolution, hasAudio);
+    const cost = await this.getCreditCost(generationType, resolution, hasAudio, modelVariant);
 
     let total = cost.creditsPerUnit;
     if (cost.isPerSecond && durationSeconds) {

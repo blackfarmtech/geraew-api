@@ -11,4 +11,5 @@ export declare class GenerateImageNanoBananaDto {
     output_format?: string;
     google_search?: boolean;
     images?: NanoBananaImageInputDto[];
+    model_variant?: string;
 }

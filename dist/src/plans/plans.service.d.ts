@@ -54,7 +54,7 @@ export declare class PlansService {
         sortOrder: number;
         stripePriceId: string | null;
     }>;
-    getCreditCost(generationType: GenerationType, resolution: Resolution, hasAudio: boolean): Promise<{
+    getCreditCost(generationType: GenerationType, resolution: Resolution, hasAudio: boolean, modelVariant?: string | null): Promise<{
         id: string;
         createdAt: Date;
         isActive: boolean;
@@ -62,10 +62,11 @@ export declare class PlansService {
         generationType: import(".prisma/client").$Enums.GenerationType;
         resolution: import(".prisma/client").$Enums.Resolution;
         hasAudio: boolean;
+        modelVariant: string | null;
         creditsPerUnit: number;
         isPerSecond: boolean;
     }>;
-    calculateGenerationCost(generationType: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number): Promise<number>;
+    calculateGenerationCost(generationType: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number, modelVariant?: string | null): Promise<number>;
     findAllPackages(): Promise<{
         name: string;
         id: string;

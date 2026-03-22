@@ -156,6 +156,7 @@ model CreditCost {
   generationType GenerationType @map("generation_type")
   resolution     Resolution
   hasAudio       Boolean        @default(false) @map("has_audio")
+  modelVariant   String?        @map("model_variant")
   creditsPerUnit Int            @map("credits_per_unit")
   isPerSecond    Boolean        @default(false) @map("is_per_second")
   isActive       Boolean        @default(true) @map("is_active")
@@ -163,7 +164,7 @@ model CreditCost {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([generationType, resolution, hasAudio])
+  @@unique([generationType, resolution, hasAudio, modelVariant])
   @@map("credit_costs")
 }
 

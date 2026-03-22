@@ -8,4 +8,5 @@ export declare class GenerateVideoTextToVideoDto {
     generate_audio?: boolean;
     sample_count?: number;
     negative_prompt?: string;
+    model_variant?: string;
 }

@@ -12,4 +12,5 @@ export declare class GenerateVideoImageToVideoDto {
     first_frame_mime_type?: string;
     last_frame?: string;
     last_frame_mime_type?: string;
+    model_variant?: string;
 }

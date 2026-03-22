@@ -77,4 +77,11 @@ export class GenerateVideoTextToVideoDto {
   @IsOptional()
   @IsString()
   negative_prompt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+  })
+  @IsOptional()
+  @IsString()
+  model_variant?: string;
 }

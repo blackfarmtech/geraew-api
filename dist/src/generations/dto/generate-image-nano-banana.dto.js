@@ -42,6 +42,7 @@ class GenerateImageNanoBananaDto {
     output_format;
     google_search;
     images;
+    model_variant;
 }
 exports.GenerateImageNanoBananaDto = GenerateImageNanoBananaDto;
 __decorate([
@@ -146,4 +147,12 @@ __decorate([
     (0, class_transformer_1.Type)(() => NanoBananaImageInputDto),
     __metadata("design:type", Array)
 ], GenerateImageNanoBananaDto.prototype, "images", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Variante do modelo (NB2, NBP)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GenerateImageNanoBananaDto.prototype, "model_variant", void 0);
 //# sourceMappingURL=generate-image-nano-banana.dto.js.map

@@ -55,6 +55,7 @@ class GenerateVideoWithReferencesDto {
     sample_count;
     negative_prompt;
     reference_images;
+    model_variant;
 }
 exports.GenerateVideoWithReferencesDto = GenerateVideoWithReferencesDto;
 __decorate([
@@ -144,4 +145,12 @@ __decorate([
     (0, class_transformer_1.Type)(() => ReferenceImageDto),
     __metadata("design:type", Array)
 ], GenerateVideoWithReferencesDto.prototype, "reference_images", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GenerateVideoWithReferencesDto.prototype, "model_variant", void 0);
 //# sourceMappingURL=generate-video-with-references.dto.js.map

@@ -27,6 +27,7 @@ class GenerateVideoImageToVideoDto {
     first_frame_mime_type;
     last_frame;
     last_frame_mime_type;
+    model_variant;
 }
 exports.GenerateVideoImageToVideoDto = GenerateVideoImageToVideoDto;
 __decorate([
@@ -137,4 +138,12 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GenerateVideoImageToVideoDto.prototype, "last_frame_mime_type", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GenerateVideoImageToVideoDto.prototype, "model_variant", void 0);
 //# sourceMappingURL=generate-video-image-to-video.dto.js.map

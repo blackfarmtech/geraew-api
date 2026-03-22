@@ -23,6 +23,7 @@ class GenerateVideoTextToVideoDto {
     generate_audio;
     sample_count;
     negative_prompt;
+    model_variant;
 }
 exports.GenerateVideoTextToVideoDto = GenerateVideoTextToVideoDto;
 __decorate([
@@ -100,4 +101,12 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GenerateVideoTextToVideoDto.prototype, "negative_prompt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GenerateVideoTextToVideoDto.prototype, "model_variant", void 0);
 //# sourceMappingURL=generate-video-text-to-video.dto.js.map
