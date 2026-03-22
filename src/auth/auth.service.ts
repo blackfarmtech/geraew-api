@@ -7,7 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { randomBytes, createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { FirebaseAuthService } from '../firebase/firebase-auth.service';
+import { TwilioVerifyService } from '../twilio/twilio-verify.service';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +17,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly firebaseAuth: FirebaseAuthService,
+    private readonly twilioVerify: TwilioVerifyService,
   ) { }
 
   /**
@@ -47,19 +47,52 @@ export class AuthService {
   }
 
   /**
-   * Registra um novo usuário com verificação de telefone via Firebase
+   * Envia SMS de verificação via Twilio Verify
+   */
+  async sendVerification(phone: string): Promise<void> {
+    await this.twilioVerify.sendVerification(phone);
+  }
+
+  /**
+   * Verifica telefone de um usuário já autenticado (ex: após Google login)
+   */
+  async verifyPhone(userId: string, phone: string, code: string): Promise<AuthResponseDto> {
+    const verifiedPhone = await this.twilioVerify.checkVerification(phone, code);
+    const normalizedPhone = verifiedPhone.replace(/\D/g, '');
+
+    // Verifica se o telefone já está em uso por outro usuário
+    const existingPhone = await this.prisma.user.findFirst({
+      where: { phone: normalizedPhone, id: { not: userId } },
+    });
+
+    if (existingPhone) {
+      throw new ConflictException('Telefone já cadastrado por outro usuário');
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { phone: normalizedPhone, phoneVerified: true },
+    });
+
+    const tokens = await this.generateTokens(user);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: this.formatUserResponse(user),
+    };
+  }
+
+  /**
+   * Registra um novo usuário (telefone salvo sem verificação — verificação acontece dentro da plataforma)
    */
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, password, name, phone, firebaseToken } = registerDto;
+    const { email, password, name, phone } = registerDto;
 
-    // Verifica o token do Firebase e extrai o número de telefone
-    const verifiedPhone = await this.firebaseAuth.verifyPhoneToken(firebaseToken);
-
-    // Normaliza os telefones para comparação
-    const normalizedInput = phone.replace(/\D/g, '');
-    const normalizedVerified = verifiedPhone.replace(/\D/g, '');
-    if (!normalizedVerified.endsWith(normalizedInput.slice(-11)) && normalizedInput !== normalizedVerified) {
-      throw new BadRequestException('O telefone verificado não corresponde ao informado');
+    // Normaliza o telefone
+    let normalizedVerified = phone.replace(/\D/g, '');
+    if (!normalizedVerified.startsWith('55')) {
+      normalizedVerified = `55${normalizedVerified}`;
     }
 
     // Verifica se o email já está em uso
@@ -92,7 +125,7 @@ export class AuthService {
           name,
           passwordHash: hashedPassword,
           phone: normalizedVerified,
-          phoneVerified: true,
+          phoneVerified: false,
           role: 'USER',
         },
       });
@@ -203,6 +236,8 @@ export class AuthService {
       avatarUrl: user.avatarUrl || '',
       role: user.role,
       emailVerified: user.emailVerified,
+      phone: user.phone || undefined,
+      phoneVerified: user.phoneVerified,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       createdAt: user.createdAt,
     };

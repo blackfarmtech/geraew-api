@@ -7,6 +7,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { JwtPayload } from '../common/decorators/current-user.decorator';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
@@ -17,12 +18,21 @@ export declare class AuthController {
         emailTaken: boolean;
         phoneTaken: boolean;
     }>;
+    sendVerification(body: {
+        phone: string;
+    }): Promise<{
+        message: string;
+    }>;
     register(registerDto: RegisterDto): Promise<AuthResponseDto>;
     login(loginDto: LoginDto): Promise<AuthResponseDto>;
     googleAuth(): Promise<void>;
     googleAuthRedirect(req: any): Promise<AuthResponseDto>;
     googleAuthMobile(googleAuthDto: GoogleAuthDto): Promise<AuthResponseDto>;
     refresh(refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto>;
+    verifyPhone(user: JwtPayload, body: {
+        phone: string;
+        code: string;
+    }): Promise<AuthResponseDto>;
     logout(logoutDto: LogoutDto): Promise<{
         message: string;
     }>;

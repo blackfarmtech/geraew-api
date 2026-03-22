@@ -17,18 +17,18 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const bcrypt = require("bcrypt");
 const crypto_1 = require("crypto");
 const config_1 = require("@nestjs/config");
-const firebase_auth_service_1 = require("../firebase/firebase-auth.service");
+const twilio_verify_service_1 = require("../twilio/twilio-verify.service");
 let AuthService = AuthService_1 = class AuthService {
     prisma;
     jwtService;
     configService;
-    firebaseAuth;
+    twilioVerify;
     logger = new common_1.Logger(AuthService_1.name);
-    constructor(prisma, jwtService, configService, firebaseAuth) {
+    constructor(prisma, jwtService, configService, twilioVerify) {
         this.prisma = prisma;
         this.jwtService = jwtService;
         this.configService = configService;
-        this.firebaseAuth = firebaseAuth;
+        this.twilioVerify = twilioVerify;
     }
     async checkAvailability(email, phone) {
         let emailTaken = false;
@@ -47,13 +47,34 @@ let AuthService = AuthService_1 = class AuthService {
         }
         return { emailTaken, phoneTaken };
     }
+    async sendVerification(phone) {
+        await this.twilioVerify.sendVerification(phone);
+    }
+    async verifyPhone(userId, phone, code) {
+        const verifiedPhone = await this.twilioVerify.checkVerification(phone, code);
+        const normalizedPhone = verifiedPhone.replace(/\D/g, '');
+        const existingPhone = await this.prisma.user.findFirst({
+            where: { phone: normalizedPhone, id: { not: userId } },
+        });
+        if (existingPhone) {
+            throw new common_1.ConflictException('Telefone já cadastrado por outro usuário');
+        }
+        const user = await this.prisma.user.update({
+            where: { id: userId },
+            data: { phone: normalizedPhone, phoneVerified: true },
+        });
+        const tokens = await this.generateTokens(user);
+        return {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            user: this.formatUserResponse(user),
+        };
+    }
     async register(registerDto) {
-        const { email, password, name, phone, firebaseToken } = registerDto;
-        const verifiedPhone = await this.firebaseAuth.verifyPhoneToken(firebaseToken);
-        const normalizedInput = phone.replace(/\D/g, '');
-        const normalizedVerified = verifiedPhone.replace(/\D/g, '');
-        if (!normalizedVerified.endsWith(normalizedInput.slice(-11)) && normalizedInput !== normalizedVerified) {
-            throw new common_1.BadRequestException('O telefone verificado não corresponde ao informado');
+        const { email, password, name, phone } = registerDto;
+        let normalizedVerified = phone.replace(/\D/g, '');
+        if (!normalizedVerified.startsWith('55')) {
+            normalizedVerified = `55${normalizedVerified}`;
         }
         const existingUser = await this.prisma.user.findUnique({
             where: { email: email.toLowerCase() },
@@ -75,7 +96,7 @@ let AuthService = AuthService_1 = class AuthService {
                     name,
                     passwordHash: hashedPassword,
                     phone: normalizedVerified,
-                    phoneVerified: true,
+                    phoneVerified: false,
                     role: 'USER',
                 },
             });
@@ -156,6 +177,8 @@ let AuthService = AuthService_1 = class AuthService {
             avatarUrl: user.avatarUrl || '',
             role: user.role,
             emailVerified: user.emailVerified,
+            phone: user.phone || undefined,
+            phoneVerified: user.phoneVerified,
             hasCompletedOnboarding: user.hasCompletedOnboarding,
             createdAt: user.createdAt,
         };
@@ -403,6 +426,6 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
         config_1.ConfigService,
-        firebase_auth_service_1.FirebaseAuthService])
+        twilio_verify_service_1.TwilioVerifyService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

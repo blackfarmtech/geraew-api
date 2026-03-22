@@ -22,6 +22,7 @@ import { LogoutDto } from './dto/logout.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
 @ApiTags('auth')
 @Controller('api/v1/auth')
@@ -35,6 +36,17 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Resultado da verificação' })
   async checkAvailability(@Body() body: { email?: string; phone?: string }) {
     return this.authService.checkAvailability(body.email, body.phone);
+  }
+
+  @Public()
+  @Post('send-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Envia SMS de verificação via Twilio' })
+  @ApiResponse({ status: 200, description: 'SMS enviado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Número inválido ou muitas tentativas' })
+  async sendVerification(@Body() body: { phone: string }) {
+    await this.authService.sendVerification(body.phone);
+    return { message: 'SMS de verificação enviado' };
   }
 
   @Public()
@@ -141,6 +153,19 @@ export class AuthController {
   })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
     return this.authService.refreshTokens(refreshTokenDto.refreshToken);
+  }
+
+  @Post('verify-phone')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar telefone de usuário autenticado (ex: após Google login)' })
+  @ApiResponse({ status: 200, description: 'Telefone verificado com sucesso', type: AuthResponseDto })
+  @ApiResponse({ status: 400, description: 'Código inválido' })
+  @ApiResponse({ status: 409, description: 'Telefone já cadastrado' })
+  async verifyPhone(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { phone: string; code: string },
+  ): Promise<AuthResponseDto> {
+    return this.authService.verifyPhone(user.sub, body.phone, body.code);
   }
 
   @Public()

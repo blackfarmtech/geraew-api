@@ -6,18 +6,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FirebaseModule = void 0;
+exports.TwilioModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const firebase_auth_service_1 = require("./firebase-auth.service");
-let FirebaseModule = class FirebaseModule {
+const twilio_verify_service_1 = require("./twilio-verify.service");
+let TwilioModule = class TwilioModule {
 };
-exports.FirebaseModule = FirebaseModule;
-exports.FirebaseModule = FirebaseModule = __decorate([
+exports.TwilioModule = TwilioModule;
+exports.TwilioModule = TwilioModule = __decorate([
     (0, common_1.Module)({
         imports: [config_1.ConfigModule],
-        providers: [firebase_auth_service_1.FirebaseAuthService],
-        exports: [firebase_auth_service_1.FirebaseAuthService],
+        providers: [twilio_verify_service_1.TwilioVerifyService],
+        exports: [twilio_verify_service_1.TwilioVerifyService],
     })
-], FirebaseModule);
-//# sourceMappingURL=firebase.module.js.map
+], TwilioModule);
+//# sourceMappingURL=twilio.module.js.map

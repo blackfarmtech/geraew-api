@@ -5,6 +5,8 @@ export declare class UserResponseDto {
     avatarUrl?: string;
     role: string;
     emailVerified: boolean;
+    phone?: string;
+    phoneVerified: boolean;
     hasCompletedOnboarding: boolean;
     createdAt: Date;
 }

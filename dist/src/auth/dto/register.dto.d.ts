@@ -3,5 +3,4 @@ export declare class RegisterDto {
     name: string;
     password: string;
     phone: string;
-    firebaseToken: string;
 }

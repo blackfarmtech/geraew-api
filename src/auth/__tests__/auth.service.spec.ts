@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TwilioVerifyService } from '../../twilio/twilio-verify.service';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 
@@ -82,6 +83,11 @@ const mockConfigService = {
   }),
 };
 
+const mockTwilioVerify = {
+  sendVerification: jest.fn().mockResolvedValue(undefined),
+  checkVerification: jest.fn().mockResolvedValue('+5511999998888'),
+};
+
 // ── Test Suite ───────────────────────────────────────────────────────
 
 describe('AuthService', () => {
@@ -96,6 +102,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: TwilioVerifyService, useValue: mockTwilioVerify },
       ],
     }).compile();
 
@@ -120,6 +127,7 @@ describe('AuthService', () => {
       email: 'Test@Example.com',
       password: 'SecurePassword123!',
       name: 'Test User',
+      phone: '5511999998888',
     };
 
     it('should register successfully with valid data', async () => {
@@ -242,7 +250,8 @@ describe('AuthService', () => {
         email: 'TEST@EXAMPLE.COM',
         password: 'SecurePassword123!',
         name: 'Test',
-      });
+        phone: '5511999998888',
+        });
 
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: 'test@example.com' },

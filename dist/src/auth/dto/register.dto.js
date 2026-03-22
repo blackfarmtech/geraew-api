@@ -17,7 +17,6 @@ class RegisterDto {
     name;
     password;
     phone;
-    firebaseToken;
 }
 exports.RegisterDto = RegisterDto;
 __decorate([
@@ -66,13 +65,4 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], RegisterDto.prototype, "phone", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        example: 'eyJhbGciOiJSUzI1NiIs...',
-        description: 'Firebase ID Token obtido após verificação do SMS',
-    }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'Token de verificação é obrigatório' }),
-    __metadata("design:type", String)
-], RegisterDto.prototype, "firebaseToken", void 0);
 //# sourceMappingURL=register.dto.js.map

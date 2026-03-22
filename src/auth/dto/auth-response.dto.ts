@@ -19,6 +19,12 @@ export class UserResponseDto {
   @ApiProperty()
   emailVerified: boolean;
 
+  @ApiProperty({ required: false })
+  phone?: string;
+
+  @ApiProperty()
+  phoneVerified: boolean;
+
   @ApiProperty()
   hasCompletedOnboarding: boolean;
 

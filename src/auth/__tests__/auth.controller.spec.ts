@@ -25,6 +25,7 @@ const mockAuthResponse = {
 
 const mockAuthService = {
   register: jest.fn().mockResolvedValue(mockAuthResponse),
+  sendVerification: jest.fn().mockResolvedValue(undefined),
   login: jest.fn().mockResolvedValue(mockAuthResponse),
   googleAuth: jest.fn().mockResolvedValue(mockAuthResponse),
   googleAuthWithToken: jest.fn().mockResolvedValue(mockAuthResponse),
@@ -62,6 +63,7 @@ describe('AuthController', () => {
       email: 'test@example.com',
       name: 'Test User',
       password: 'SecurePassword123!',
+      phone: '5511999998888',
     };
 
     it('should call authService.register with dto and return result', async () => {

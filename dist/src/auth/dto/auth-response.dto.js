@@ -18,6 +18,8 @@ class UserResponseDto {
     avatarUrl;
     role;
     emailVerified;
+    phone;
+    phoneVerified;
     hasCompletedOnboarding;
     createdAt;
 }
@@ -46,6 +48,14 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)
 ], UserResponseDto.prototype, "emailVerified", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false }),
+    __metadata("design:type", String)
+], UserResponseDto.prototype, "phone", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", Boolean)
+], UserResponseDto.prototype, "phoneVerified", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Boolean)

@@ -47,11 +47,4 @@ export class RegisterDto {
   })
   phone: string;
 
-  @ApiProperty({
-    example: 'eyJhbGciOiJSUzI1NiIs...',
-    description: 'Firebase ID Token obtido após verificação do SMS',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'Token de verificação é obrigatório' })
-  firebaseToken: string;
 }

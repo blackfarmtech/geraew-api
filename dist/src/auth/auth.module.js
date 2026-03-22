@@ -16,7 +16,7 @@ const auth_service_1 = require("./auth.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const google_strategy_1 = require("./strategies/google.strategy");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
-const firebase_module_1 = require("../firebase/firebase.module");
+const twilio_module_1 = require("../twilio/twilio.module");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -26,7 +26,7 @@ exports.AuthModule = AuthModule = __decorate([
             prisma_module_1.PrismaModule,
             passport_1.PassportModule,
             config_1.ConfigModule,
-            firebase_module_1.FirebaseModule,
+            twilio_module_1.TwilioModule,
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],
                 useFactory: async (configService) => ({
