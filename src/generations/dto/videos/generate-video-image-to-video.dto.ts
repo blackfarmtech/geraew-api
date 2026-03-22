@@ -106,4 +106,11 @@ export class GenerateVideoImageToVideoDto {
   @IsOptional()
   @IsString()
   last_frame_mime_type?: string;
+
+  @ApiPropertyOptional({
+    description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+  })
+  @IsOptional()
+  @IsString()
+  model_variant?: string;
 }

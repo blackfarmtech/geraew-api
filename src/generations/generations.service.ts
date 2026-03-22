@@ -32,6 +32,26 @@ import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.d
 import { getVideoDurationSeconds } from './utils/video-duration.util';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
+
+/**
+ * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
+ * NBP = gemini-3-pro-image-preview (Nano Banana Pro)
+ * NB2 = gemini-3.1-flash-image-preview (Nano Banana 2)
+ * VEO_FAST = veo-3.1-fast-generate-preview
+ * VEO_MAX = veo-3.1-generate-preview
+ */
+function getModelVariant(model: string | undefined | null): string | null {
+  if (!model) return null;
+  const MODEL_TO_VARIANT: Record<string, string> = {
+    'gemini-3-pro-image-preview': 'NBP',
+    'gemini-3.1-flash-image-preview': 'NB2',
+    'nano-banana-pro': 'NBP',
+    'nano-banana-2': 'NB2',
+    'veo-3.1-fast-generate-preview': 'VEO_FAST',
+    'veo-3.1-generate-preview': 'VEO_MAX',
+  };
+  return MODEL_TO_VARIANT[model] ?? null;
+}
 import {
   GENERATION_QUEUE,
   GenerationJobName,
@@ -96,9 +116,14 @@ export class GenerationsService {
         ? GenerationType.IMAGE_TO_IMAGE
         : GenerationType.TEXT_TO_IMAGE;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);
@@ -171,9 +196,14 @@ export class GenerationsService {
         ? GenerationType.IMAGE_TO_IMAGE
         : GenerationType.TEXT_TO_IMAGE;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);
@@ -246,9 +276,14 @@ export class GenerationsService {
         ? GenerationType.IMAGE_TO_IMAGE
         : GenerationType.TEXT_TO_IMAGE;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);
@@ -337,12 +372,14 @@ export class GenerationsService {
 
     const sampleCount = dto.sample_count ?? 1;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
       sampleCount,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);
@@ -403,12 +440,14 @@ export class GenerationsService {
 
     const sampleCount = dto.sample_count ?? 1;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
       sampleCount,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);
@@ -506,12 +545,14 @@ export class GenerationsService {
 
     const sampleCount = dto.sample_count ?? 1;
 
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
       dto.duration_seconds,
       hasAudio,
       sampleCount,
+      modelVariant,
     );
 
     await this.checkConcurrentLimit(userId);

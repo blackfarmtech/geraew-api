@@ -92,6 +92,7 @@ export class CreditsService {
     durationSeconds?: number,
     hasAudio: boolean = false,
     sampleCount: number = 1,
+    modelVariant?: string,
   ): Promise<EstimateCostResponseDto> {
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -99,6 +100,7 @@ export class CreditsService {
       durationSeconds,
       hasAudio,
       sampleCount,
+      modelVariant,
     );
 
     const balance = await this.getBalance(userId);

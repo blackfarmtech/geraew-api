@@ -24,6 +24,19 @@ const client_1 = require("@prisma/client");
 const paginated_response_dto_1 = require("../common/dto/paginated-response.dto");
 const uploads_service_1 = require("../uploads/uploads.service");
 const video_duration_util_1 = require("./utils/video-duration.util");
+function getModelVariant(model) {
+    if (!model)
+        return null;
+    const MODEL_TO_VARIANT = {
+        'gemini-3-pro-image-preview': 'NBP',
+        'gemini-3.1-flash-image-preview': 'NB2',
+        'nano-banana-pro': 'NBP',
+        'nano-banana-2': 'NB2',
+        'veo-3.1-fast-generate-preview': 'VEO_FAST',
+        'veo-3.1-generate-preview': 'VEO_MAX',
+    };
+    return MODEL_TO_VARIANT[model] ?? null;
+}
 const generation_queue_constants_1 = require("./queue/generation-queue.constants");
 let GenerationsService = GenerationsService_1 = class GenerationsService {
     prisma;
@@ -43,7 +56,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = dto.images?.length
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, undefined, false, 1, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -94,7 +108,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = dto.images?.length
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, undefined, false, 1, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -145,7 +160,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = dto.images?.length
             ? client_1.GenerationType.IMAGE_TO_IMAGE
             : client_1.GenerationType.TEXT_TO_IMAGE;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution);
+        const modelVariant = dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, undefined, false, 1, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -202,7 +218,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const type = client_1.GenerationType.TEXT_TO_VIDEO;
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -246,7 +263,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const model = dto.model ?? 'veo-3.1-generate-preview';
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        const modelVariant = dto.model_variant ?? getModelVariant(model);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({
@@ -312,7 +330,8 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const model = dto.model ?? 'veo-3.1-generate-preview';
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount);
+        const modelVariant = dto.model_variant ?? getModelVariant(model);
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
         const generation = await this.prisma.generation.create({

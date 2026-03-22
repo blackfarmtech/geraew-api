@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsInt, IsBoolean, Min } from 'class-validator';
+import { IsEnum, IsOptional, IsInt, IsBoolean, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { GenerationType, Resolution } from '@prisma/client';
@@ -30,6 +30,11 @@ export class EstimateCostDto {
   @IsInt()
   @Min(1)
   sampleCount?: number;
+
+  @ApiPropertyOptional({ description: 'Model variant (e.g. NB2, NBP, VEO_FAST, VEO_MAX)' })
+  @IsOptional()
+  @IsString()
+  modelVariant?: string;
 }
 
 export class EstimateCostResponseDto {

@@ -14,4 +14,5 @@ export declare class GenerateVideoWithReferencesDto {
     sample_count?: number;
     negative_prompt?: string;
     reference_images?: ReferenceImageDto[];
+    model_variant?: string;
 }

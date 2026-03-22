@@ -129,6 +129,7 @@ export class CreditsController {
       dto.durationSeconds,
       dto.hasAudio,
       dto.sampleCount,
+      dto.modelVariant,
     );
   }
 }

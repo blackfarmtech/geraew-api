@@ -72,8 +72,8 @@ let CreditsService = class CreditsService {
     async getPackages() {
         return this.plansService.findAllPackages();
     }
-    async estimateCost(userId, type, resolution, durationSeconds, hasAudio = false, sampleCount = 1) {
-        const creditsRequired = await this.plansService.calculateGenerationCost(type, resolution, durationSeconds, hasAudio, sampleCount);
+    async estimateCost(userId, type, resolution, durationSeconds, hasAudio = false, sampleCount = 1, modelVariant) {
+        const creditsRequired = await this.plansService.calculateGenerationCost(type, resolution, durationSeconds, hasAudio, sampleCount, modelVariant);
         const balance = await this.getBalance(userId);
         return {
             creditsRequired,

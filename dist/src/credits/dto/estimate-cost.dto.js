@@ -20,6 +20,7 @@ class EstimateCostDto {
     durationSeconds;
     hasAudio;
     sampleCount;
+    modelVariant;
 }
 exports.EstimateCostDto = EstimateCostDto;
 __decorate([
@@ -54,6 +55,12 @@ __decorate([
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
 ], EstimateCostDto.prototype, "sampleCount", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Model variant (e.g. NB2, NBP, VEO_FAST, VEO_MAX)' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], EstimateCostDto.prototype, "modelVariant", void 0);
 class EstimateCostResponseDto {
     creditsRequired;
     hasSufficientBalance;

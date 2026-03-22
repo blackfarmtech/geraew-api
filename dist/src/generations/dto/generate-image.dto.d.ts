@@ -10,4 +10,5 @@ export declare class GenerateImageDto {
     aspect_ratio?: string;
     mime_type?: string;
     images?: ImageInputDto[];
+    model_variant?: string;
 }

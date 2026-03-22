@@ -41,6 +41,7 @@ class GenerateImageDto {
     aspect_ratio;
     mime_type;
     images;
+    model_variant;
 }
 exports.GenerateImageDto = GenerateImageDto;
 __decorate([
@@ -118,4 +119,12 @@ __decorate([
     (0, class_transformer_1.Type)(() => ImageInputDto),
     __metadata("design:type", Array)
 ], GenerateImageDto.prototype, "images", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Variante do modelo (NB2, NBP)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GenerateImageDto.prototype, "model_variant", void 0);
 //# sourceMappingURL=generate-image.dto.js.map

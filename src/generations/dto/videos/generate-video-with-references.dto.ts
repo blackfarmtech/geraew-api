@@ -115,4 +115,11 @@ export class GenerateVideoWithReferencesDto {
   @ValidateNested({ each: true })
   @Type(() => ReferenceImageDto)
   reference_images?: ReferenceImageDto[];
+
+  @ApiPropertyOptional({
+    description: 'Variante do modelo (VEO_FAST, VEO_MAX)',
+  })
+  @IsOptional()
+  @IsString()
+  model_variant?: string;
 }

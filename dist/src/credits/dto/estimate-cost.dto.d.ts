@@ -5,6 +5,7 @@ export declare class EstimateCostDto {
     durationSeconds?: number;
     hasAudio?: boolean;
     sampleCount?: number;
+    modelVariant?: string;
 }
 export declare class EstimateCostResponseDto {
     creditsRequired: number;
