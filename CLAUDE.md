@@ -23,8 +23,8 @@ Toda operação consome créditos fixos por geração (não por segundo).
 | NB2 4K | 19 | R$0,51 | Direto USD |
 | NBPro 1K/2K | 19 | R$0,51 | Direto USD |
 | NBPro 4K | 25 | R$0,68 | Direto USD |
-| Motion Control 720p (por geração) | 7 | R$0,17 | Direto USD |
-| Motion Control 1080p (por geração) | 10 | R$0,26 | Direto USD |
+| Motion Control 720p (por segundo) | 7 | R$0,17 | Direto USD |
+| Motion Control 1080p (por segundo) | 10 | R$0,26 | Direto USD |
 | Veo Fast 720p/1080p sem áudio (8s) | 60 | R$0,13 | Vertex A |
 | Veo Fast 720p/1080p com áudio (8s) | 90 | R$0,20 | Vertex A |
 | Veo Fast 4K sem áudio (8s) | 160 | R$0,40 | Vertex A |

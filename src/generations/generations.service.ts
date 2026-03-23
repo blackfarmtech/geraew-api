@@ -376,7 +376,7 @@ export class GenerationsService {
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
 
     // Block VEO for free plan users
-    await this.blockVeoForFreePlan(userId, modelVariant);
+    // await this.blockVeoForFreePlan(userId, modelVariant);
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,

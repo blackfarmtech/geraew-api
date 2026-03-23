@@ -201,9 +201,9 @@ async function main() {
     { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
     { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 25, isPerSecond: false },
 
-    // Motion Control (no model variant)
-    { generationType: 'MOTION_CONTROL', resolution: 'RES_720P', hasAudio: false, modelVariant: null, creditsPerUnit: 7, isPerSecond: false },
-    { generationType: 'MOTION_CONTROL', resolution: 'RES_1080P', hasAudio: false, modelVariant: null, creditsPerUnit: 10, isPerSecond: false },
+    // Motion Control (no model variant) — per second pricing
+    { generationType: 'MOTION_CONTROL', resolution: 'RES_720P', hasAudio: false, modelVariant: null, creditsPerUnit: 7, isPerSecond: true },
+    { generationType: 'MOTION_CONTROL', resolution: 'RES_1080P', hasAudio: false, modelVariant: null, creditsPerUnit: 10, isPerSecond: true },
 
     // Veo 3.1 Fast (VEO_FAST) - Text to Video
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
