@@ -62,7 +62,8 @@ let PlansService = class PlansService {
         if (cost.isPerSecond && durationSeconds) {
             total = cost.creditsPerUnit * durationSeconds;
         }
-        return total * Math.max(sampleCount, 1);
+        const effectiveSamples = sampleCount <= 4 ? 1 : sampleCount;
+        return total * Math.max(effectiveSamples, 1);
     }
     async findAllPackages() {
         return this.prisma.creditPackage.findMany({

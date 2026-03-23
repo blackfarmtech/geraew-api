@@ -57,6 +57,11 @@ export declare class AdminService {
             prompt: string | null;
             resolution: import(".prisma/client").$Enums.Resolution;
             creditsConsumed: number;
+            outputs: {
+                url: string;
+                thumbnailUrl: string | null;
+                mimeType: string | null;
+            }[];
             createdAt: Date;
             completedAt: Date | null;
         }[];
@@ -77,6 +82,38 @@ export declare class AdminService {
         hasAudio: boolean;
         creditsConsumed: number;
         outputUrls: string[];
+        errorMessage: string | null;
+        processingTimeMs: number | null;
+        createdAt: Date;
+        completedAt: Date | null;
+    }>>;
+    toggleUserStatus(userId: string, isActive: boolean): Promise<void>;
+    deleteUser(userId: string): Promise<void>;
+    getUserGenerations(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<{
+        id: string;
+        type: import(".prisma/client").$Enums.GenerationType;
+        status: import(".prisma/client").$Enums.GenerationStatus;
+        prompt: string | null;
+        negativePrompt: string | null;
+        resolution: import(".prisma/client").$Enums.Resolution;
+        durationSeconds: number | null;
+        hasAudio: boolean;
+        modelUsed: string;
+        creditsConsumed: number;
+        outputs: {
+            id: string;
+            url: string;
+            thumbnailUrl: string | null;
+            mimeType: string | null;
+        }[];
+        inputImages: {
+            id: string;
+            url: string | null;
+            role: import(".prisma/client").$Enums.GenerationImageRole;
+            mimeType: string | null;
+        }[];
+        isFavorited: boolean;
+        isDeleted: boolean;
         errorMessage: string | null;
         processingTimeMs: number | null;
         createdAt: Date;

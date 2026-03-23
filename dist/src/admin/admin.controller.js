@@ -20,6 +20,7 @@ const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 const adjust_credits_dto_1 = require("./dto/adjust-credits.dto");
+const toggle_user_status_dto_1 = require("./dto/toggle-user-status.dto");
 const admin_stats_response_dto_1 = require("./dto/admin-stats-response.dto");
 let AdminController = class AdminController {
     adminService;
@@ -35,9 +36,21 @@ let AdminController = class AdminController {
     async getUserById(id) {
         return this.adminService.getUserById(id);
     }
+    async toggleUserStatus(id, dto) {
+        await this.adminService.toggleUserStatus(id, dto.isActive);
+        const status = dto.isActive ? 'ativado' : 'desativado';
+        return { success: true, message: `Usuário ${status} com sucesso` };
+    }
+    async deleteUser(id) {
+        await this.adminService.deleteUser(id);
+        return { success: true, message: 'Usuário excluído com sucesso' };
+    }
     async adjustCredits(id, dto) {
         await this.adminService.adjustCredits(id, dto.amount, dto.description);
         return { success: true, message: 'Créditos ajustados com sucesso' };
+    }
+    async getUserGenerations(id, pagination) {
+        return this.adminService.getUserGenerations(id, pagination);
     }
     async getGenerations(pagination) {
         return this.adminService.getGenerations(pagination);
@@ -70,6 +83,24 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "getUserById", null);
 __decorate([
+    (0, common_1.Patch)('users/:id/status'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Ativar ou desativar um usuário' }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, toggle_user_status_dto_1.ToggleUserStatusDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "toggleUserStatus", null);
+__decorate([
+    (0, common_1.Delete)('users/:id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Excluir um usuário permanentemente' }),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "deleteUser", null);
+__decorate([
     (0, common_1.Patch)('users/:id/credits'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     (0, swagger_1.ApiOperation)({ summary: 'Ajuste manual de créditos de um usuário' }),
@@ -79,6 +110,16 @@ __decorate([
     __metadata("design:paramtypes", [String, adjust_credits_dto_1.AdjustCreditsDto]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "adjustCredits", null);
+__decorate([
+    (0, common_1.Get)('users/:id/generations'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Lista gerações de um usuário específico' }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, pagination_dto_1.PaginationDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getUserGenerations", null);
 __decorate([
     (0, common_1.Get)('generations'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

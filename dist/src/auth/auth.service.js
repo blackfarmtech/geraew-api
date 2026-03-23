@@ -77,7 +77,7 @@ let AuthService = AuthService_1 = class AuthService {
             normalizedVerified = `55${normalizedVerified}`;
         }
         const existingUser = await this.prisma.user.findUnique({
-            where: { email: email.toLowerCase() },
+            where: { email: email.toLowerCase(), isActive: true },
         });
         if (existingUser) {
             throw new common_1.ConflictException('Email já cadastrado');
@@ -97,6 +97,7 @@ let AuthService = AuthService_1 = class AuthService {
                     passwordHash: hashedPassword,
                     phone: normalizedVerified,
                     phoneVerified: false,
+                    isActive: false,
                     role: 'USER',
                 },
             });

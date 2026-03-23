@@ -101,6 +101,9 @@ let AdminService = class AdminService {
                 generations: {
                     orderBy: { createdAt: 'desc' },
                     take: 10,
+                    include: {
+                        outputs: { orderBy: { order: 'asc' } },
+                    },
                 },
             },
         });
@@ -145,6 +148,11 @@ let AdminService = class AdminService {
                 prompt: gen.prompt,
                 resolution: gen.resolution,
                 creditsConsumed: gen.creditsConsumed,
+                outputs: gen.outputs?.map((o) => ({
+                    url: o.url,
+                    thumbnailUrl: o.thumbnailUrl,
+                    mimeType: o.mimeType,
+                })) ?? [],
                 createdAt: gen.createdAt,
                 completedAt: gen.completedAt,
             })),
@@ -213,6 +221,85 @@ let AdminService = class AdminService {
             hasAudio: gen.hasAudio,
             creditsConsumed: gen.creditsConsumed,
             outputUrls: gen.outputs?.map((o) => o.url) ?? [],
+            errorMessage: gen.errorMessage,
+            processingTimeMs: gen.processingTimeMs,
+            createdAt: gen.createdAt,
+            completedAt: gen.completedAt,
+        }));
+        return new paginated_response_dto_1.PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+    }
+    async toggleUserStatus(userId, isActive) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id: userId },
+                data: { isActive },
+            });
+            if (!isActive) {
+                await tx.refreshToken.updateMany({
+                    where: { userId, revoked: false },
+                    data: { revoked: true },
+                });
+            }
+        });
+    }
+    async deleteUser(userId) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        if (user.role === 'ADMIN') {
+            throw new common_1.BadRequestException('Não é possível excluir um administrador');
+        }
+        await this.prisma.user.delete({ where: { id: userId } });
+    }
+    async getUserGenerations(userId, pagination) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        const where = { userId };
+        const [generations, total] = await Promise.all([
+            this.prisma.generation.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.limit,
+                include: {
+                    outputs: { orderBy: { order: 'asc' } },
+                    inputImages: { orderBy: { order: 'asc' } },
+                },
+            }),
+            this.prisma.generation.count({ where }),
+        ]);
+        const data = generations.map((gen) => ({
+            id: gen.id,
+            type: gen.type,
+            status: gen.status,
+            prompt: gen.prompt,
+            negativePrompt: gen.negativePrompt,
+            resolution: gen.resolution,
+            durationSeconds: gen.durationSeconds,
+            hasAudio: gen.hasAudio,
+            modelUsed: gen.modelUsed,
+            creditsConsumed: gen.creditsConsumed,
+            outputs: gen.outputs.map((o) => ({
+                id: o.id,
+                url: o.url,
+                thumbnailUrl: o.thumbnailUrl,
+                mimeType: o.mimeType,
+            })),
+            inputImages: gen.inputImages.map((i) => ({
+                id: i.id,
+                url: i.url,
+                role: i.role,
+                mimeType: i.mimeType,
+            })),
+            isFavorited: gen.isFavorited,
+            isDeleted: gen.isDeleted,
             errorMessage: gen.errorMessage,
             processingTimeMs: gen.processingTimeMs,
             createdAt: gen.createdAt,

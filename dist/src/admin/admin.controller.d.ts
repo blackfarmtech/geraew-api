@@ -1,6 +1,7 @@
 import { AdminService } from './admin.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
+import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 export declare class AdminController {
     private readonly adminService;
@@ -57,14 +58,57 @@ export declare class AdminController {
             prompt: string | null;
             resolution: import(".prisma/client").$Enums.Resolution;
             creditsConsumed: number;
+            outputs: {
+                url: string;
+                thumbnailUrl: string | null;
+                mimeType: string | null;
+            }[];
             createdAt: Date;
             completedAt: Date | null;
         }[];
+    }>;
+    toggleUserStatus(id: string, dto: ToggleUserStatusDto): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    deleteUser(id: string): Promise<{
+        success: boolean;
+        message: string;
     }>;
     adjustCredits(id: string, dto: AdjustCreditsDto): Promise<{
         success: boolean;
         message: string;
     }>;
+    getUserGenerations(id: string, pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
+        id: string;
+        type: import(".prisma/client").$Enums.GenerationType;
+        status: import(".prisma/client").$Enums.GenerationStatus;
+        prompt: string | null;
+        negativePrompt: string | null;
+        resolution: import(".prisma/client").$Enums.Resolution;
+        durationSeconds: number | null;
+        hasAudio: boolean;
+        modelUsed: string;
+        creditsConsumed: number;
+        outputs: {
+            id: string;
+            url: string;
+            thumbnailUrl: string | null;
+            mimeType: string | null;
+        }[];
+        inputImages: {
+            id: string;
+            url: string | null;
+            role: import(".prisma/client").$Enums.GenerationImageRole;
+            mimeType: string | null;
+        }[];
+        isFavorited: boolean;
+        isDeleted: boolean;
+        errorMessage: string | null;
+        processingTimeMs: number | null;
+        createdAt: Date;
+        completedAt: Date | null;
+    }>>;
     getGenerations(pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
         id: string;
         user: {
