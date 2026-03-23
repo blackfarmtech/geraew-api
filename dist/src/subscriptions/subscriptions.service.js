@@ -14,7 +14,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const plans_service_1 = require("../plans/plans.service");
 const stripe_service_1 = require("../payments/stripe.service");
-const PLAN_ORDER = ['free', 'starter', 'pro', 'business'];
+const PLAN_ORDER = ['free', 'starter', 'creator', 'pro', 'studio'];
 let SubscriptionsService = class SubscriptionsService {
     prisma;
     plansService;

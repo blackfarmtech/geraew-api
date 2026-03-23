@@ -185,21 +185,21 @@ async function main() {
   console.log('💰 Creating credit costs...');
 
   const creditCosts = [
-    // Images - Nano Banana 2 (NB2)
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 5, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 8, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 12, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 5, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 8, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 12, isPerSecond: false },
+    // Images - Nano Banana 2 (NB2) — v4 pricing
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 9, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 13, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 9, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 13, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 19, isPerSecond: false },
 
-    // Images - Nano Banana Pro (NBP)
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 12, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 12, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 16, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 12, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 12, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 16, isPerSecond: false },
+    // Images - Nano Banana Pro (NBP) — v4 pricing
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 25, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 25, isPerSecond: false },
 
     // Motion Control (no model variant)
     { generationType: 'MOTION_CONTROL', resolution: 'RES_720P', hasAudio: false, modelVariant: null, creditsPerUnit: 7, isPerSecond: false },

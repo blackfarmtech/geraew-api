@@ -18,11 +18,11 @@ Toda operação consome créditos fixos por geração (não por segundo).
 
 | Operação | Créditos | Custo API real | Base |
 |---|---|---|---|
-| NB2 1K | 5 | R$0,23 | Direto USD |
-| NB2 2K | 8 | R$0,34 | Direto USD |
-| NB2 4K | 12 | R$0,51 | Direto USD |
-| NBPro 1K/2K | 12 | R$0,51 | Direto USD |
-| NBPro 4K | 16 | R$0,68 | Direto USD |
+| NB2 1K | 9 | R$0,23 | Direto USD |
+| NB2 2K | 13 | R$0,34 | Direto USD |
+| NB2 4K | 19 | R$0,51 | Direto USD |
+| NBPro 1K/2K | 19 | R$0,51 | Direto USD |
+| NBPro 4K | 25 | R$0,68 | Direto USD |
 | Motion Control 720p (por geração) | 7 | R$0,17 | Direto USD |
 | Motion Control 1080p (por geração) | 10 | R$0,26 | Direto USD |
 | Veo Fast 720p/1080p sem áudio (8s) | 60 | R$0,13 | Vertex A |
@@ -370,15 +370,15 @@ INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_ge
 
 ```sql
 INSERT INTO credit_costs (generation_type, resolution, has_audio, credits_per_unit, is_per_second) VALUES
--- Imagens NB2
-('text_to_image', '1k', false, 5, false),
-('text_to_image', '2k', false, 8, false),
-('text_to_image', '4k', false, 12, false),
-('image_to_image', '1k', false, 5, false),
-('image_to_image', '2k', false, 8, false),
-('image_to_image', '4k', false, 12, false),
--- Imagens NBPro
--- NBPro 1K/2K = 12 créditos, NBPro 4K = 16 créditos
+-- Imagens NB2 (v4)
+('text_to_image', '1k', false, 9, false),
+('text_to_image', '2k', false, 13, false),
+('text_to_image', '4k', false, 19, false),
+('image_to_image', '1k', false, 9, false),
+('image_to_image', '2k', false, 13, false),
+('image_to_image', '4k', false, 19, false),
+-- Imagens NBPro (v4)
+-- NBPro 1K/2K = 19 créditos, NBPro 4K = 25 créditos
 -- (diferenciação por modelo em parameters JSONB)
 -- Motion Control (Kling 2.6) — por geração
 ('motion_control', '720p', false, 7, false),
