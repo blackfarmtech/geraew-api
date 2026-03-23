@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -20,6 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
+import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 
 @ApiTags('admin')
@@ -50,6 +52,25 @@ export class AdminController {
     return this.adminService.getUserById(id);
   }
 
+  @Patch('users/:id/status')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Ativar ou desativar um usuário' })
+  async toggleUserStatus(
+    @Param('id') id: string,
+    @Body() dto: ToggleUserStatusDto,
+  ) {
+    await this.adminService.toggleUserStatus(id, dto.isActive);
+    const status = dto.isActive ? 'ativado' : 'desativado';
+    return { success: true, message: `Usuário ${status} com sucesso` };
+  }
+
+  @Delete('users/:id')
+  @ApiOperation({ summary: 'Excluir um usuário permanentemente' })
+  async deleteUser(@Param('id') id: string) {
+    await this.adminService.deleteUser(id);
+    return { success: true, message: 'Usuário excluído com sucesso' };
+  }
+
   @Patch('users/:id/credits')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Ajuste manual de créditos de um usuário' })
@@ -59,6 +80,16 @@ export class AdminController {
   ) {
     await this.adminService.adjustCredits(id, dto.amount, dto.description);
     return { success: true, message: 'Créditos ajustados com sucesso' };
+  }
+
+  @Get('users/:id/generations')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Lista gerações de um usuário específico' })
+  async getUserGenerations(
+    @Param('id') id: string,
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.adminService.getUserGenerations(id, pagination);
   }
 
   @Get('generations')
