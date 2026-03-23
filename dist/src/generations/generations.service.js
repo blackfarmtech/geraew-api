@@ -219,7 +219,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -265,7 +264,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(model);
-        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -333,7 +331,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(model);
-        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -448,22 +445,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             status: client_1.GenerationStatus.PROCESSING,
             creditsConsumed: creditsRequired,
         };
-    }
-    async blockVeoForFreePlan(userId, modelVariant) {
-        if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
-            return;
-        }
-        const subscription = await this.prisma.subscription.findFirst({
-            where: { userId, status: 'ACTIVE' },
-            include: { plan: true },
-        });
-        if (!subscription || subscription.plan.slug === 'free') {
-            throw new common_1.ForbiddenException({
-                code: 'PLAN_UPGRADE_REQUIRED',
-                message: 'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
-                statusCode: 403,
-            });
-        }
     }
     async checkConcurrentLimit(userId) {
         const [processingCount, subscription] = await Promise.all([

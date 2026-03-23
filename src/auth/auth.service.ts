@@ -97,7 +97,7 @@ export class AuthService {
 
     // Verifica se o email já está em uso
     const existingUser = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: email.toLowerCase(), isActive: true },
     });
 
     if (existingUser) {
@@ -126,6 +126,7 @@ export class AuthService {
           passwordHash: hashedPassword,
           phone: normalizedVerified,
           phoneVerified: false,
+          isActive: false,
           role: 'USER',
         },
       });
