@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
+import { ContentSafetyError } from '../errors/content-safety.error';
 
 /** Maps internal resolution enum to image size values */
 const IMAGE_SIZE_MAP: Record<string, string> = {
@@ -286,6 +287,10 @@ export class GeraewProvider {
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
       this.logger.error(`[VIDEO] Error response: ${errorText}`);
+      const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(
         `Video API error (${startResponse.status}): ${errorText}`,
       );
@@ -366,6 +371,10 @@ export class GeraewProvider {
       if (!response.ok) {
         const errorText = await response.text();
         this.logger.error(`[VIDEO POLL] Error response (${response.status}): ${errorText}`);
+        const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+        if (safetyError) {
+          throw safetyError;
+        }
         throw new Error(
           `Video status check error (${response.status}): ${errorText}`,
         );
@@ -381,9 +390,12 @@ export class GeraewProvider {
       }
 
       if (data.error) {
-        throw new Error(
-          `Video generation failed: ${JSON.stringify(data.error)}`,
-        );
+        const errorStr = JSON.stringify(data.error);
+        const safetyError = ContentSafetyError.fromErrorMessage(errorStr);
+        if (safetyError) {
+          throw safetyError;
+        }
+        throw new Error(`Video generation failed: ${errorStr}`);
       }
 
       if (data.videos?.length) {

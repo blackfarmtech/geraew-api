@@ -5,5 +5,6 @@ import { PromptEnhancerService } from './prompt-enhancer.service';
 @Module({
   controllers: [PromptEnhancerController],
   providers: [PromptEnhancerService],
+  exports: [PromptEnhancerService],
 })
 export class PromptEnhancerModule {}

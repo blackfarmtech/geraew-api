@@ -12,6 +12,7 @@ import { UploadsModule } from '../uploads/uploads.module';
 import { GeraewProvider } from './providers/geraew.provider';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { WanProvider } from './providers/wan.provider';
+import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WanProvider } from './providers/wan.provider';
     CreditsModule,
     PlansModule,
     UploadsModule,
+    PromptEnhancerModule,
     BullModule.registerQueue({
       name: GENERATION_QUEUE,
       defaultJobOptions: {

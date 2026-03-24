@@ -11,6 +11,8 @@ import {
 } from '../providers/nano-banana.provider';
 import { WanProvider } from '../providers/wan.provider';
 import { GenerationEventsService } from '../generation-events.service';
+import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
+import { ContentSafetyError } from '../errors/content-safety.error';
 import {
   GenerationStatus,
   GenerationType,
@@ -42,6 +44,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly wanProvider: WanProvider,
     private readonly generationEvents: GenerationEventsService,
+    private readonly promptEnhancer: PromptEnhancerService,
   ) {
     super();
   }
@@ -188,9 +191,9 @@ export class GenerationProcessor extends WorkerHost {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
 
-    const result = await this.geraewProvider.generateTextToVideo({
+    const buildInput = (prompt: string) => ({
       id: data.generationId,
-      prompt: data.prompt,
+      prompt,
       model: data.model,
       resolution: data.resolution,
       durationSeconds: data.durationSeconds,
@@ -200,7 +203,25 @@ export class GenerationProcessor extends WorkerHost {
       negativePrompt: data.negativePrompt,
     });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+    try {
+      const result = await this.geraewProvider.generateTextToVideo(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (error instanceof ContentSafetyError) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.geraewProvider.generateTextToVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
   }
 
   private async processImageToVideo(data: ImageToVideoJobData): Promise<void> {
@@ -228,9 +249,9 @@ export class GenerationProcessor extends WorkerHost {
       ? await this.downloadToBase64(lastFrameImg.url)
       : undefined;
 
-    const result = await this.geraewProvider.generateImageToVideo({
+    const buildInput = (prompt: string) => ({
       id: data.generationId,
-      prompt: data.prompt,
+      prompt,
       model: data.resolvedModel,
       resolution: data.resolution,
       durationSeconds: data.durationSeconds,
@@ -244,7 +265,25 @@ export class GenerationProcessor extends WorkerHost {
       lastFrameMimeType: lastFrameImg?.mimeType ?? undefined,
     });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+    try {
+      const result = await this.geraewProvider.generateImageToVideo(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (error instanceof ContentSafetyError) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.geraewProvider.generateImageToVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
   }
 
   private async processReferenceVideo(
@@ -269,9 +308,9 @@ export class GenerationProcessor extends WorkerHost {
       })),
     );
 
-    const result = await this.geraewProvider.generateVideoWithReferences({
+    const buildInput = (prompt: string) => ({
       id: data.generationId,
-      prompt: data.prompt,
+      prompt,
       model: data.resolvedModel,
       resolution: data.resolution,
       durationSeconds: data.durationSeconds,
@@ -282,7 +321,26 @@ export class GenerationProcessor extends WorkerHost {
       referenceImages,
     });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+    try {
+      const result = await this.geraewProvider.generateVideoWithReferences(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (error instanceof ContentSafetyError) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) =>
+            this.geraewProvider.generateVideoWithReferences(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
   }
 
   private async processMotionControl(
@@ -299,6 +357,85 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  // ─── Safety refinement retry ────────────────────────────────
+
+  /**
+   * When a video generation is blocked by Vertex AI safety filters,
+   * refine the prompt via Claude and retry the generation once.
+   * Returns the result if successful, or null if refinement failed / retry also failed.
+   */
+  private async retryWithRefinedPrompt(
+    generationId: string,
+    originalPrompt: string,
+    generateFn: (refinedPrompt: string) => Promise<{ outputUrls: string[]; modelUsed: string }>,
+  ): Promise<{ outputUrls: string[]; modelUsed: string } | null> {
+    this.logger.warn(
+      `Generation ${generationId} blocked by safety filter — attempting prompt refinement`,
+    );
+
+    let refinedPrompt: string | null;
+    try {
+      refinedPrompt = await this.promptEnhancer.refinePromptForSafety(originalPrompt);
+    } catch (refineError) {
+      this.logger.error(
+        `Prompt refinement failed for ${generationId}: ${(refineError as Error).message}`,
+      );
+      return null;
+    }
+
+    if (!refinedPrompt) {
+      this.logger.warn(
+        `Prompt refinement returned null for ${generationId} — content is unrefinable`,
+      );
+      return null;
+    }
+
+    // Save the refined prompt for audit / user visibility
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: {
+        parameters: {
+          ...(await this.getExistingParameters(generationId)),
+          originalPrompt,
+          refinedBySafetyAgent: true,
+        },
+        prompt: refinedPrompt,
+      },
+    });
+
+    this.logger.log(
+      `Retrying generation ${generationId} with refined prompt`,
+    );
+
+    try {
+      return await generateFn(refinedPrompt);
+    } catch (retryError) {
+      this.logger.error(
+        `Retry with refined prompt also failed for ${generationId}: ${(retryError as Error).message}`,
+      );
+      // If the retry also fails with a safety error, propagate it with a clear message
+      if (retryError instanceof ContentSafetyError) {
+        throw new ContentSafetyError(
+          `Geração bloqueada pelos filtros de segurança da Vertex AI mesmo após refinamento do prompt. Tente reformular sua ideia de forma diferente. Erro original: ${retryError.message}`,
+          retryError.supportCode,
+        );
+      }
+      throw retryError;
+    }
+  }
+
+  private async getExistingParameters(
+    generationId: string,
+  ): Promise<Record<string, unknown>> {
+    const gen = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { parameters: true },
+    });
+    return gen?.parameters && typeof gen.parameters === 'object'
+      ? (gen.parameters as Record<string, unknown>)
+      : {};
   }
 
   // ─── Shared helpers ─────────────────────────────────────────
@@ -483,8 +620,13 @@ export class GenerationProcessor extends WorkerHost {
       return;
     }
 
+    const isSafetyError = error instanceof ContentSafetyError;
+    const errorCode = isSafetyError
+      ? 'CONTENT_SAFETY_BLOCKED'
+      : 'GENERATION_FAILED';
+
     this.logger.error(
-      `Generation ${generationId} failed: ${error.message}`,
+      `Generation ${generationId} failed (${errorCode}): ${error.message}`,
       error.stack,
     );
 
@@ -493,7 +635,7 @@ export class GenerationProcessor extends WorkerHost {
       data: {
         status: GenerationStatus.FAILED,
         errorMessage: error.message,
-        errorCode: 'GENERATION_FAILED',
+        errorCode,
       },
     });
 
@@ -505,7 +647,7 @@ export class GenerationProcessor extends WorkerHost {
       status: 'failed',
       data: {
         errorMessage: error.message,
-        errorCode: 'GENERATION_FAILED',
+        errorCode,
         creditsRefunded: creditsConsumed,
       },
     });
