@@ -437,6 +437,10 @@ export class GenerationProcessingService {
       return null;
     }
 
+    this.logger.log(
+      `[retryWithRefinedPrompt] gen=${generationId} originalPrompt="${originalPrompt}" refinedPrompt="${refinedPrompt}"`,
+    );
+
     // Save the refined prompt for audit / user visibility
     await this.prisma.generation.update({
       where: { id: generationId },
