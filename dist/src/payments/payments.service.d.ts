@@ -1,0 +1,61 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+export declare class PaymentsService {
+    private readonly prisma;
+    private readonly logger;
+    constructor(prisma: PrismaService);
+    createPayment(userId: string, type: PaymentType, amountCents: number, provider: string, metadata?: Prisma.InputJsonValue): Promise<{
+        metadata: Prisma.JsonValue | null;
+        type: import(".prisma/client").$Enums.PaymentType;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        status: import(".prisma/client").$Enums.PaymentStatus;
+        provider: string;
+        currency: string;
+        amountCents: number;
+        externalPaymentId: string | null;
+        externalInvoiceId: string | null;
+        subscriptionId: string | null;
+        creditPackageId: string | null;
+    }>;
+    updatePaymentStatus(id: string, status: PaymentStatus, externalPaymentId?: string): Promise<{
+        metadata: Prisma.JsonValue | null;
+        type: import(".prisma/client").$Enums.PaymentType;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        status: import(".prisma/client").$Enums.PaymentStatus;
+        provider: string;
+        currency: string;
+        amountCents: number;
+        externalPaymentId: string | null;
+        externalInvoiceId: string | null;
+        subscriptionId: string | null;
+        creditPackageId: string | null;
+    }>;
+    findByExternalPaymentId(externalPaymentId: string): Promise<{
+        metadata: Prisma.JsonValue | null;
+        type: import(".prisma/client").$Enums.PaymentType;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        status: import(".prisma/client").$Enums.PaymentStatus;
+        provider: string;
+        currency: string;
+        amountCents: number;
+        externalPaymentId: string | null;
+        externalInvoiceId: string | null;
+        subscriptionId: string | null;
+        creditPackageId: string | null;
+    } | null>;
+    processSubscriptionPayment(userId: string, planSlug: string, stripeSubscriptionId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    processCreditPurchase(userId: string, packageId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    handleSubscriptionRenewal(stripeSubscriptionId: string, periodStart: Date, periodEnd: Date, amountCents: number, externalPaymentId: string): Promise<void>;
+    handlePaymentFailed(stripeSubscriptionId: string, amountCents: number, externalPaymentId: string): Promise<void>;
+    handleRefund(paymentIntentId: string | null, invoiceId: string | null, amountRefundedCents: number): Promise<void>;
+    handleSubscriptionDeleted(stripeSubscriptionId: string): Promise<void>;
+}

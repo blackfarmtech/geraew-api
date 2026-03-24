@@ -1,0 +1,37 @@
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreditsService } from '../../credits/credits.service';
+import { UploadsService } from '../../uploads/uploads.service';
+import { GeraewProvider } from '../providers/geraew.provider';
+import { NanoBananaProvider } from '../providers/nano-banana.provider';
+import { WanProvider } from '../providers/wan.provider';
+import { GenerationEventsService } from '../generation-events.service';
+import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
+export declare class GenerationProcessingService {
+    private readonly prisma;
+    private readonly creditsService;
+    private readonly uploadsService;
+    private readonly geraewProvider;
+    private readonly nanoBananaProvider;
+    private readonly wanProvider;
+    private readonly generationEvents;
+    private readonly promptEnhancer;
+    private readonly logger;
+    constructor(prisma: PrismaService, creditsService: CreditsService, uploadsService: UploadsService, geraewProvider: GeraewProvider, nanoBananaProvider: NanoBananaProvider, wanProvider: WanProvider, generationEvents: GenerationEventsService, promptEnhancer: PromptEnhancerService);
+    dispatch(jobName: string, data: any): Promise<void>;
+    onJobFailed(jobName: string, data: any, error: Error, attemptsMade: number, maxAttempts: number): Promise<void>;
+    private processImage;
+    private processImageWithFallback;
+    private processNanoBanana;
+    private processTextToVideo;
+    private processImageToVideo;
+    private processReferenceVideo;
+    private processMotionControl;
+    private isSafetyRelatedError;
+    private retryWithRefinedPrompt;
+    private getExistingParameters;
+    private markProcessingStarted;
+    private completeGeneration;
+    private handleFailure;
+    private loadInputImagesAsBase64;
+    private downloadToBase64;
+}

@@ -242,7 +242,7 @@ export class GenerationProcessingService {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -308,7 +308,7 @@ export class GenerationProcessingService {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -368,7 +368,7 @@ export class GenerationProcessingService {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -402,6 +402,20 @@ export class GenerationProcessingService {
     });
 
     await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  // ─── Safety detection ──────────────────────────────────────
+
+  /** Explicit ContentSafetyError OR silent Veo block (done but no video data) */
+  private isSafetyRelatedError(error: unknown): boolean {
+    if (error instanceof ContentSafetyError) return true;
+    if (error instanceof Error && error.message.includes('no video data returned')) {
+      this.logger.warn(
+        `Treating "${error.message}" as potential silent safety block`,
+      );
+      return true;
+    }
+    return false;
   }
 
   // ─── Safety refinement retry ────────────────────────────────
@@ -464,11 +478,11 @@ export class GenerationProcessingService {
       this.logger.error(
         `Retry with refined prompt also failed for ${generationId}: ${(retryError as Error).message}`,
       );
-      // If the retry also fails with a safety error, propagate it with a clear message
-      if (retryError instanceof ContentSafetyError) {
+      // If the retry also fails with a safety error, propagate with user-friendly message
+      if (this.isSafetyRelatedError(retryError)) {
         throw new ContentSafetyError(
-          `Geração bloqueada pelos filtros de segurança da Vertex AI mesmo após refinamento do prompt. Tente reformular sua ideia de forma diferente. Erro original: ${retryError.message}`,
-          retryError.supportCode,
+          'A imagem ou texto enviado viola nossas diretrizes de conteúdo mesmo após ajuste automático. Tente reformular sua ideia de forma diferente.',
+          retryError instanceof ContentSafetyError ? retryError.supportCode : undefined,
         );
       }
       throw retryError;
@@ -659,11 +673,15 @@ export class GenerationProcessingService {
       error.stack,
     );
 
+    const userMessage = isSafetyError
+      ? 'A imagem ou texto enviado viola nossas diretrizes de conteúdo. Tente reformular seu prompt ou use outra imagem.'
+      : error.message;
+
     await this.prisma.generation.update({
       where: { id: generationId },
       data: {
         status: GenerationStatus.FAILED,
-        errorMessage: error.message,
+        errorMessage: userMessage,
         errorCode,
       },
     });
@@ -675,7 +693,7 @@ export class GenerationProcessingService {
       generationId,
       status: 'failed',
       data: {
-        errorMessage: error.message,
+        errorMessage: userMessage,
         errorCode,
         creditsRefunded: creditsConsumed,
       },

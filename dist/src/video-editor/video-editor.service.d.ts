@@ -1,0 +1,30 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
+import { FfmpegService } from './ffmpeg.service';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { AddClipDto } from './dto/add-clip.dto';
+import { UpdateClipDto } from './dto/update-clip.dto';
+import { ProjectResponseDto, ClipResponseDto } from './dto/project-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+export declare class VideoEditorService {
+    private readonly prisma;
+    private readonly uploadsService;
+    private readonly ffmpegService;
+    private readonly logger;
+    constructor(prisma: PrismaService, uploadsService: UploadsService, ffmpegService: FfmpegService);
+    createProject(userId: string, dto: CreateProjectDto): Promise<ProjectResponseDto>;
+    listProjects(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<ProjectResponseDto>>;
+    getProject(userId: string, projectId: string): Promise<ProjectResponseDto>;
+    updateProject(userId: string, projectId: string, dto: UpdateProjectDto): Promise<ProjectResponseDto>;
+    deleteProject(userId: string, projectId: string): Promise<void>;
+    addClip(userId: string, projectId: string, dto: AddClipDto): Promise<ClipResponseDto>;
+    updateClip(userId: string, projectId: string, clipId: string, dto: UpdateClipDto): Promise<ClipResponseDto>;
+    deleteClip(userId: string, projectId: string, clipId: string): Promise<void>;
+    reorderClips(userId: string, projectId: string, clipIds: string[]): Promise<ProjectResponseDto>;
+    render(userId: string, projectId: string): Promise<ProjectResponseDto>;
+    private processRender;
+    private toProjectResponse;
+    private toClipResponse;
+}

@@ -80,6 +80,10 @@ export class GenerationProcessor extends WorkerHost {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
 
+    this.logger.log(
+      `[IMAGE] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
+    );
+
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)
       : undefined;
@@ -100,6 +104,10 @@ export class GenerationProcessor extends WorkerHost {
   private async processImageWithFallback(data: ImageJobData): Promise<void> {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[IMAGE_FALLBACK] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
+    );
 
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)
@@ -173,6 +181,10 @@ export class GenerationProcessor extends WorkerHost {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
 
+    this.logger.log(
+      `[NANO_BANANA] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} outputFormat=${data.outputFormat} googleSearch=${data.googleSearch} imageUrls=${data.imageUrls?.length ?? 0} prompt="${data.prompt}"`,
+    );
+
     const result = await this.nanoBananaProvider.generateImage({
       id: data.generationId,
       model: data.model,
@@ -190,6 +202,10 @@ export class GenerationProcessor extends WorkerHost {
   private async processTextToVideo(data: TextToVideoJobData): Promise<void> {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[TEXT_TO_VIDEO] ${data.generationId} model=${data.model} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
+    );
 
     const buildInput = (prompt: string) => ({
       id: data.generationId,
@@ -209,7 +225,7 @@ export class GenerationProcessor extends WorkerHost {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -227,6 +243,10 @@ export class GenerationProcessor extends WorkerHost {
   private async processImageToVideo(data: ImageToVideoJobData): Promise<void> {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[IMAGE_TO_VIDEO] ${data.generationId} model=${data.resolvedModel} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
+    );
 
     const inputImages = await this.prisma.generationInputImage.findMany({
       where: { generationId: data.generationId },
@@ -271,7 +291,7 @@ export class GenerationProcessor extends WorkerHost {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -291,6 +311,10 @@ export class GenerationProcessor extends WorkerHost {
   ): Promise<void> {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[REFERENCE_VIDEO] ${data.generationId} model=${data.resolvedModel} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
+    );
 
     const inputImages = await this.prisma.generationInputImage.findMany({
       where: {
@@ -327,7 +351,7 @@ export class GenerationProcessor extends WorkerHost {
       );
       await this.completeGeneration(data.generationId, result, startTime);
     } catch (error) {
-      if (error instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
@@ -349,6 +373,10 @@ export class GenerationProcessor extends WorkerHost {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
 
+    this.logger.log(
+      `[MOTION_CONTROL] ${data.generationId} resolution=${data.resolution} videoUrl=${data.videoUrl} imageUrl=${data.imageUrl}`,
+    );
+
     const result = await this.wanProvider.generateAnimateReplace({
       id: data.generationId,
       videoUrl: data.videoUrl,
@@ -359,13 +387,24 @@ export class GenerationProcessor extends WorkerHost {
     await this.completeGeneration(data.generationId, result, startTime);
   }
 
+  // ─── Safety helpers ─────────────────────────────────────────
+
+  private isSafetyRelatedError(error: unknown): boolean {
+    if (error instanceof ContentSafetyError) return true;
+    if (
+      error instanceof Error &&
+      error.message.includes('no video data returned')
+    ) {
+      this.logger.warn(
+        `Treating "${error.message}" as potential silent safety block`,
+      );
+      return true;
+    }
+    return false;
+  }
+
   // ─── Safety refinement retry ────────────────────────────────
 
-  /**
-   * When a video generation is blocked by Vertex AI safety filters,
-   * refine the prompt via Claude and retry the generation once.
-   * Returns the result if successful, or null if refinement failed / retry also failed.
-   */
   private async retryWithRefinedPrompt(
     generationId: string,
     originalPrompt: string,
@@ -406,7 +445,7 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     this.logger.log(
-      `Retrying generation ${generationId} with refined prompt`,
+      `Retrying generation ${generationId} with refined prompt — original: "${originalPrompt}" → refined: "${refinedPrompt}"`,
     );
 
     try {
@@ -415,11 +454,12 @@ export class GenerationProcessor extends WorkerHost {
       this.logger.error(
         `Retry with refined prompt also failed for ${generationId}: ${(retryError as Error).message}`,
       );
-      // If the retry also fails with a safety error, propagate it with a clear message
-      if (retryError instanceof ContentSafetyError) {
+      if (this.isSafetyRelatedError(retryError)) {
         throw new ContentSafetyError(
-          `Geração bloqueada pelos filtros de segurança da Vertex AI mesmo após refinamento do prompt. Tente reformular sua ideia de forma diferente. Erro original: ${retryError.message}`,
-          retryError.supportCode,
+          'A imagem ou texto enviado viola nossas diretrizes de conteúdo mesmo após ajuste automático. Tente reformular sua ideia de forma diferente.',
+          retryError instanceof ContentSafetyError
+            ? retryError.supportCode
+            : undefined,
         );
       }
       throw retryError;
@@ -620,10 +660,14 @@ export class GenerationProcessor extends WorkerHost {
       return;
     }
 
-    const isSafetyError = error instanceof ContentSafetyError;
+    const isSafetyError = this.isSafetyRelatedError(error);
     const errorCode = isSafetyError
       ? 'CONTENT_SAFETY_BLOCKED'
       : 'GENERATION_FAILED';
+
+    const userMessage = isSafetyError
+      ? 'A imagem ou texto enviado viola nossas diretrizes de conteúdo. Tente reformular seu prompt ou use outra imagem.'
+      : error.message;
 
     this.logger.error(
       `Generation ${generationId} failed (${errorCode}): ${error.message}`,
@@ -634,7 +678,7 @@ export class GenerationProcessor extends WorkerHost {
       where: { id: generationId },
       data: {
         status: GenerationStatus.FAILED,
-        errorMessage: error.message,
+        errorMessage: userMessage,
         errorCode,
       },
     });
@@ -646,7 +690,7 @@ export class GenerationProcessor extends WorkerHost {
       generationId,
       status: 'failed',
       data: {
-        errorMessage: error.message,
+        errorMessage: userMessage,
         errorCode,
         creditsRefunded: creditsConsumed,
       },
