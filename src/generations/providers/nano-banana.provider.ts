@@ -90,6 +90,10 @@ export class NanoBananaProvider {
       },
     };
 
+    this.logger.log(
+      `[NANO_BANANA] Creating task: model=${model} resolution=${resolution} aspectRatio=${input.aspectRatio ?? 'auto'} outputFormat=${input.outputFormat ?? 'png'} googleSearch=${input.googleSearch ?? false} imageUrls=${input.imageUrls?.length ?? 0} prompt="${input.prompt}"`,
+    );
+
     const createResponse = await this.fetchWithTimeout(
       `${this.baseUrl}/api/v1/jobs/createTask`,
       {

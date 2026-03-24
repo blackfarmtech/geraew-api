@@ -65,6 +65,10 @@ export class WanProvider {
       },
     };
 
+    this.logger.log(
+      `[MOTION_CONTROL] Creating task: mode=${input.resolution} imageUrl=${input.imageUrl} videoUrl=${input.videoUrl} prompt="${input.prompt ?? ''}"`,
+    );
+
     const createResponse = await this.fetchWithTimeout(
       `${this.baseUrl}/api/v1/jobs/createTask`,
       {

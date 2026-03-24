@@ -269,7 +269,7 @@ export class GeraewProvider {
   ): Promise<GenerationResult> {
     const url = `${this.baseUrl}${route}`;
     this.logger.log(`[VIDEO] POST ${url}`);
-    this.logger.log(`[VIDEO] Body: ${JSON.stringify(body)}`);
+    this.logger.log(`[VIDEO] Body: ${JSON.stringify(this.sanitizeBodyForLog(body))}`);
 
     let startResponse: Response;
     try {
@@ -436,6 +436,25 @@ export class GeraewProvider {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private sanitizeBodyForLog(body: Record<string, unknown>): Record<string, unknown> {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (key === 'first_frame' || key === 'last_frame') {
+        sanitized[key] = `[base64 ${typeof value === 'string' ? `${Math.round(value.length / 1024)}KB` : 'omitted'}]`;
+      } else if (key === 'reference_images' && Array.isArray(value)) {
+        sanitized[key] = value.map((ref: Record<string, unknown>) => ({
+          ...ref,
+          base64: `[base64 ${typeof ref.base64 === 'string' ? `${Math.round((ref.base64 as string).length / 1024)}KB` : 'omitted'}]`,
+        }));
+      } else if (key === 'images' && Array.isArray(value)) {
+        sanitized[key] = `[${value.length} image(s)]`;
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
   }
 
   private headers(): Record<string, string> {
