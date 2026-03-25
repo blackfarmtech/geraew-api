@@ -296,6 +296,10 @@ export class AuthService {
       throw new UnauthorizedException('Email ou senha inválidos');
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Email não verificado. Verifique sua caixa de entrada.');
+    }
+
     const tokens = await this.generateTokens(user);
 
     return {
