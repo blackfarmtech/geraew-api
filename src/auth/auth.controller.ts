@@ -21,6 +21,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -178,6 +179,26 @@ export class AuthController {
   })
   async logout(@Body() logoutDto: LogoutDto): Promise<{ message: string }> {
     return this.authService.logout(logoutDto.refreshToken);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Verificar email com token' })
+  @ApiResponse({ status: 200, description: 'Email verificado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Token inválido ou expirado' })
+  async verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ message: string }> {
+    return this.authService.verifyEmail(dto.token);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reenviar email de verificação' })
+  @ApiResponse({ status: 200, description: 'Email de verificação reenviado' })
+  @ApiResponse({ status: 400, description: 'Aguarde antes de solicitar novamente' })
+  async resendVerification(@CurrentUser() user: JwtPayload): Promise<{ message: string }> {
+    return this.authService.resendVerificationEmail(user.sub);
   }
 
   @Public()

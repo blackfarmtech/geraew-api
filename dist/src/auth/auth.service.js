@@ -18,17 +18,20 @@ const bcrypt = require("bcrypt");
 const crypto_1 = require("crypto");
 const config_1 = require("@nestjs/config");
 const twilio_verify_service_1 = require("../twilio/twilio-verify.service");
+const email_service_1 = require("../email/email.service");
 let AuthService = AuthService_1 = class AuthService {
     prisma;
     jwtService;
     configService;
     twilioVerify;
+    emailService;
     logger = new common_1.Logger(AuthService_1.name);
-    constructor(prisma, jwtService, configService, twilioVerify) {
+    constructor(prisma, jwtService, configService, twilioVerify, emailService) {
         this.prisma = prisma;
         this.jwtService = jwtService;
         this.configService = configService;
         this.twilioVerify = twilioVerify;
+        this.emailService = emailService;
     }
     async checkAvailability(email, phone) {
         let emailTaken = false;
@@ -138,6 +141,18 @@ let AuthService = AuthService_1 = class AuthService {
                 },
             });
             return newUser;
+        });
+        const verificationToken = (0, crypto_1.randomBytes)(32).toString('hex');
+        const verificationTokenHash = (0, crypto_1.createHash)('sha256').update(verificationToken).digest('hex');
+        await this.prisma.emailVerificationToken.create({
+            data: {
+                userId: user.id,
+                tokenHash: verificationTokenHash,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+        });
+        this.emailService.sendVerificationEmail(user.email, user.name, verificationToken).catch((err) => {
+            this.logger.error(`Failed to send verification email: ${err.message}`);
         });
         const tokens = await this.generateTokens(user);
         return {
@@ -273,6 +288,7 @@ let AuthService = AuthService_1 = class AuthService {
                 ],
             },
         });
+        let isNewUser = false;
         if (user) {
             if (!user.oauthProvider) {
                 user = await this.prisma.user.update({
@@ -287,6 +303,7 @@ let AuthService = AuthService_1 = class AuthService {
             }
         }
         else {
+            isNewUser = true;
             user = await this.prisma.$transaction(async (tx) => {
                 const newUser = await tx.user.create({
                     data: {
@@ -338,6 +355,11 @@ let AuthService = AuthService_1 = class AuthService {
                 return newUser;
             });
         }
+        if (isNewUser) {
+            this.emailService.sendWelcomeEmail(user.email, user.name).catch((err) => {
+                this.logger.error(`Failed to send welcome email: ${err.message}`);
+            });
+        }
         const tokens = await this.generateTokens(user);
         return {
             accessToken: tokens.accessToken,
@@ -382,6 +404,73 @@ let AuthService = AuthService_1 = class AuthService {
         });
         return { message: 'Logout realizado com sucesso' };
     }
+    async verifyEmail(token) {
+        const tokenHash = (0, crypto_1.createHash)('sha256').update(token).digest('hex');
+        const verificationToken = await this.prisma.emailVerificationToken.findFirst({
+            where: {
+                tokenHash,
+                used: false,
+                expiresAt: { gt: new Date() },
+            },
+        });
+        if (!verificationToken) {
+            throw new common_1.BadRequestException('Token inválido ou expirado');
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id: verificationToken.userId },
+                data: { emailVerified: true },
+            });
+            await tx.emailVerificationToken.update({
+                where: { id: verificationToken.id },
+                data: { used: true },
+            });
+        });
+        const user = await this.prisma.user.findUnique({
+            where: { id: verificationToken.userId },
+        });
+        if (user) {
+            this.emailService.sendWelcomeEmail(user.email, user.name).catch((err) => {
+                this.logger.error(`Failed to send welcome email: ${err.message}`);
+            });
+        }
+        return { message: 'Email verificado com sucesso' };
+    }
+    async resendVerificationEmail(userId) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        if (user.emailVerified) {
+            return { message: 'Email já verificado' };
+        }
+        const lastToken = await this.prisma.emailVerificationToken.findFirst({
+            where: { userId, used: false },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (lastToken && lastToken.createdAt.getTime() > Date.now() - 60 * 1000) {
+            throw new common_1.BadRequestException('Aguarde 1 minuto antes de solicitar outro email de verificação');
+        }
+        await this.prisma.emailVerificationToken.updateMany({
+            where: { userId, used: false },
+            data: { used: true },
+        });
+        const verificationToken = (0, crypto_1.randomBytes)(32).toString('hex');
+        const tokenHash = (0, crypto_1.createHash)('sha256').update(verificationToken).digest('hex');
+        await this.prisma.emailVerificationToken.create({
+            data: {
+                userId,
+                tokenHash,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+        });
+        this.emailService.sendVerificationEmail(user.email, user.name, verificationToken).catch((err) => {
+            this.logger.error(`Failed to send verification email: ${err.message}`);
+        });
+        return { message: 'Email de verificação reenviado' };
+    }
     async forgotPassword(email) {
         const user = await this.prisma.user.findUnique({
             where: { email: email.toLowerCase(), isActive: true },
@@ -402,6 +491,9 @@ let AuthService = AuthService_1 = class AuthService {
                 tokenHash,
                 expiresAt: new Date(Date.now() + 15 * 60 * 1000),
             },
+        });
+        this.emailService.sendPasswordResetEmail(user.email, user.name, resetToken).catch((err) => {
+            this.logger.error(`Failed to send password reset email: ${err.message}`);
         });
         const isDev = this.configService.get('NODE_ENV') !== 'production';
         if (isDev) {
@@ -448,6 +540,7 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
         config_1.ConfigService,
-        twilio_verify_service_1.TwilioVerifyService])
+        twilio_verify_service_1.TwilioVerifyService,
+        email_service_1.EmailService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

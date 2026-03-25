@@ -5,7 +5,7 @@ import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async getProfile(userId: string): Promise<UserProfileResponseDto> {
     const user = await this.prisma.user.findUnique({
@@ -38,33 +38,33 @@ export class UsersService {
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       plan: activeSubscription
         ? {
-            slug: activeSubscription.plan.slug,
-            name: activeSubscription.plan.name,
-            priceCents: activeSubscription.plan.priceCents,
-            maxConcurrentGenerations:
-              activeSubscription.plan.maxConcurrentGenerations,
-            hasWatermark: activeSubscription.plan.hasWatermark,
-            hasApiAccess: activeSubscription.plan.hasApiAccess,
-          }
+          slug: activeSubscription.plan.slug,
+          name: activeSubscription.plan.name,
+          priceCents: activeSubscription.plan.priceCents,
+          maxConcurrentGenerations:
+            activeSubscription.plan.maxConcurrentGenerations,
+          hasWatermark: activeSubscription.plan.hasWatermark,
+          hasApiAccess: activeSubscription.plan.hasApiAccess,
+        }
         : null,
       credits: user.creditBalance
         ? {
-            planCreditsRemaining:
-              user.creditBalance.planCreditsRemaining,
-            bonusCreditsRemaining:
-              user.creditBalance.bonusCreditsRemaining,
-            planCreditsUsed: user.creditBalance.planCreditsUsed,
-            periodStart: user.creditBalance.periodStart,
-            periodEnd: user.creditBalance.periodEnd,
-          }
+          planCreditsRemaining:
+            user.creditBalance.planCreditsRemaining,
+          bonusCreditsRemaining:
+            user.creditBalance.bonusCreditsRemaining,
+          planCreditsUsed: user.creditBalance.planCreditsUsed,
+          periodStart: user.creditBalance.periodStart,
+          periodEnd: user.creditBalance.periodEnd,
+        }
         : null,
       subscription: activeSubscription
         ? {
-            status: activeSubscription.status,
-            currentPeriodStart: activeSubscription.currentPeriodStart,
-            currentPeriodEnd: activeSubscription.currentPeriodEnd,
-            cancelAtPeriodEnd: activeSubscription.cancelAtPeriodEnd,
-          }
+          status: activeSubscription.status,
+          currentPeriodStart: activeSubscription.currentPeriodStart,
+          currentPeriodEnd: activeSubscription.currentPeriodEnd,
+          cancelAtPeriodEnd: activeSubscription.cancelAtPeriodEnd,
+        }
         : null,
     };
   }
@@ -105,7 +105,7 @@ export class UsersService {
       return this.getProfile(userId);
     }
 
-    const ONBOARDING_BONUS_CREDITS = 50;
+    const ONBOARDING_BONUS_CREDITS = 0;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({

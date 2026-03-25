@@ -98,7 +98,7 @@ let UsersService = class UsersService {
         if (user.hasCompletedOnboarding) {
             return this.getProfile(userId);
         }
-        const ONBOARDING_BONUS_CREDITS = 50;
+        const ONBOARDING_BONUS_CREDITS = 0;
         await this.prisma.$transaction(async (tx) => {
             await tx.user.update({
                 where: { id: userId },

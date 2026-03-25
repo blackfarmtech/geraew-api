@@ -25,6 +25,7 @@ const refresh_token_dto_1 = require("./dto/refresh-token.dto");
 const logout_dto_1 = require("./dto/logout.dto");
 const forgot_password_dto_1 = require("./dto/forgot-password.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
+const verify_email_dto_1 = require("./dto/verify-email.dto");
 const public_decorator_1 = require("../common/decorators/public.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let AuthController = class AuthController {
@@ -61,6 +62,12 @@ let AuthController = class AuthController {
     }
     async logout(logoutDto) {
         return this.authService.logout(logoutDto.refreshToken);
+    }
+    async verifyEmail(dto) {
+        return this.authService.verifyEmail(dto.token);
+    }
+    async resendVerification(user) {
+        return this.authService.resendVerificationEmail(user.sub);
     }
     async forgotPassword(dto) {
         return this.authService.forgotPassword(dto.email);
@@ -236,6 +243,30 @@ __decorate([
     __metadata("design:paramtypes", [logout_dto_1.LogoutDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "logout", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Post)('verify-email'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar email com token' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Email verificado com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Token inválido ou expirado' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [verify_email_dto_1.VerifyEmailDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyEmail", null);
+__decorate([
+    (0, common_1.Post)('resend-verification'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Reenviar email de verificação' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Email de verificação reenviado' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Aguarde antes de solicitar novamente' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "resendVerification", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Post)('forgot-password'),

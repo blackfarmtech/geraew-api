@@ -5,13 +5,15 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { TwilioVerifyService } from '../twilio/twilio-verify.service';
+import { EmailService } from '../email/email.service';
 export declare class AuthService {
     private readonly prisma;
     private readonly jwtService;
     private readonly configService;
     private readonly twilioVerify;
+    private readonly emailService;
     private readonly logger;
-    constructor(prisma: PrismaService, jwtService: JwtService, configService: ConfigService, twilioVerify: TwilioVerifyService);
+    constructor(prisma: PrismaService, jwtService: JwtService, configService: ConfigService, twilioVerify: TwilioVerifyService, emailService: EmailService);
     checkAvailability(email?: string, phone?: string): Promise<{
         emailTaken: boolean;
         phoneTaken: boolean;
@@ -33,6 +35,12 @@ export declare class AuthService {
     }): Promise<AuthResponseDto>;
     refreshTokens(refreshToken: string): Promise<AuthResponseDto>;
     logout(refreshToken: string): Promise<{
+        message: string;
+    }>;
+    verifyEmail(token: string): Promise<{
+        message: string;
+    }>;
+    resendVerificationEmail(userId: string): Promise<{
         message: string;
     }>;
     forgotPassword(email: string): Promise<{
