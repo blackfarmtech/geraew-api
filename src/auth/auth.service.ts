@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, UnauthorizedException, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
@@ -586,24 +586,21 @@ export class AuthService {
   }
 
   /**
-   * Reenvia email de verificação para o usuário autenticado
+   * Reenvia email de verificação para o usuário pelo email
    */
-  async resendVerificationEmail(userId: string): Promise<{ message: string }> {
+  async resendVerificationEmail(email: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { email: email.toLowerCase(), isActive: true },
     });
 
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
-
-    if (user.emailVerified) {
-      return { message: 'Email já verificado' };
+    // Não revela se o email existe para evitar enumeração de contas
+    if (!user || user.emailVerified) {
+      return { message: 'Se o email existir e não estiver verificado, um novo link será enviado' };
     }
 
     // Rate limit: verifica se o último token foi criado há menos de 1 minuto
     const lastToken = await this.prisma.emailVerificationToken.findFirst({
-      where: { userId, used: false },
+      where: { userId: user.id, used: false },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -613,7 +610,7 @@ export class AuthService {
 
     // Invalida tokens anteriores
     await this.prisma.emailVerificationToken.updateMany({
-      where: { userId, used: false },
+      where: { userId: user.id, used: false },
       data: { used: true },
     });
 
@@ -623,7 +620,7 @@ export class AuthService {
 
     await this.prisma.emailVerificationToken.create({
       data: {
-        userId,
+        userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
       },
@@ -633,7 +630,7 @@ export class AuthService {
       this.logger.error(`Failed to send verification email: ${err.message}`);
     });
 
-    return { message: 'Email de verificação reenviado' };
+    return { message: 'Se o email existir e não estiver verificado, um novo link será enviado' };
   }
 
   /**
