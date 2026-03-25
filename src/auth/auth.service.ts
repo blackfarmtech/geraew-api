@@ -128,7 +128,7 @@ export class AuthService {
           passwordHash: hashedPassword,
           phone: normalizedVerified,
           phoneVerified: false,
-          isActive: false,
+          isActive: true,
           role: 'USER',
         },
       });
