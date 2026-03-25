@@ -22,6 +22,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
+import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 
 @ApiTags('admin')
@@ -80,6 +81,17 @@ export class AdminController {
   ) {
     await this.adminService.adjustCredits(id, dto.amount, dto.description);
     return { success: true, message: 'Créditos ajustados com sucesso' };
+  }
+
+  @Patch('users/:id/plan')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Alterar plano de um usuário' })
+  async changeUserPlan(
+    @Param('id') id: string,
+    @Body() dto: ChangeUserPlanDto,
+  ) {
+    await this.adminService.changeUserPlan(id, dto.planSlug);
+    return { success: true, message: `Plano alterado para "${dto.planSlug}" com sucesso` };
   }
 
   @Get('users/:id/generations')

@@ -335,6 +335,7 @@ model GenerationOutput {
   generationId String  @map("generation_id")
   url          String
   thumbnailUrl String? @map("thumbnail_url")
+  blurDataUrl  String? @map("blur_data_url")
   mimeType     String? @map("mime_type")
   order        Int     @default(0)
 

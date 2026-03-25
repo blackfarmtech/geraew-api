@@ -8,6 +8,7 @@ import { LogoutDto } from './dto/logout.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { JwtPayload } from '../common/decorators/current-user.decorator';
 export declare class AuthController {
     private readonly authService;
@@ -40,7 +41,7 @@ export declare class AuthController {
     verifyEmail(dto: VerifyEmailDto): Promise<{
         message: string;
     }>;
-    resendVerification(user: JwtPayload): Promise<{
+    resendVerification(dto: ResendVerificationDto): Promise<{
         message: string;
     }>;
     forgotPassword(dto: ForgotPasswordDto): Promise<{

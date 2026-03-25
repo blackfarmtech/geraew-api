@@ -2,6 +2,7 @@ import { AdminService } from './admin.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
+import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 export declare class AdminController {
     private readonly adminService;
@@ -79,6 +80,10 @@ export declare class AdminController {
         success: boolean;
         message: string;
     }>;
+    changeUserPlan(id: string, dto: ChangeUserPlanDto): Promise<{
+        success: boolean;
+        message: string;
+    }>;
     getUserGenerations(id: string, pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
         id: string;
         type: import(".prisma/client").$Enums.GenerationType;
@@ -96,12 +101,7 @@ export declare class AdminController {
             thumbnailUrl: string | null;
             mimeType: string | null;
         }[];
-        inputImages: {
-            id: string;
-            url: string | null;
-            role: import(".prisma/client").$Enums.GenerationImageRole;
-            mimeType: string | null;
-        }[];
+        inputImages: never[];
         isFavorited: boolean;
         isDeleted: boolean;
         errorMessage: string | null;
@@ -112,9 +112,9 @@ export declare class AdminController {
     getGenerations(pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
         id: string;
         user: {
-            name: string;
-            email: string;
             id: string;
+            email: string;
+            name: string;
         };
         type: import(".prisma/client").$Enums.GenerationType;
         status: import(".prisma/client").$Enums.GenerationStatus;

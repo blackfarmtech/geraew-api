@@ -197,6 +197,67 @@ let AdminService = class AdminService {
             });
         });
     }
+    async changeUserPlan(userId, planSlug) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        const plan = await this.prisma.plan.findUnique({ where: { slug: planSlug } });
+        if (!plan) {
+            throw new common_1.NotFoundException(`Plano "${planSlug}" não encontrado`);
+        }
+        if (!plan.isActive) {
+            throw new common_1.BadRequestException(`Plano "${planSlug}" não está ativo`);
+        }
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        await this.prisma.$transaction(async (tx) => {
+            await tx.subscription.updateMany({
+                where: {
+                    userId,
+                    status: { in: [client_1.SubscriptionStatus.ACTIVE, client_1.SubscriptionStatus.PAST_DUE, client_1.SubscriptionStatus.TRIALING] },
+                },
+                data: { status: client_1.SubscriptionStatus.CANCELED },
+            });
+            await tx.subscription.create({
+                data: {
+                    userId,
+                    planId: plan.id,
+                    status: client_1.SubscriptionStatus.ACTIVE,
+                    currentPeriodStart: now,
+                    currentPeriodEnd: periodEnd,
+                    paymentProvider: 'admin',
+                },
+            });
+            await tx.creditBalance.upsert({
+                where: { userId },
+                create: {
+                    userId,
+                    planCreditsRemaining: plan.creditsPerMonth,
+                    bonusCreditsRemaining: 0,
+                    planCreditsUsed: 0,
+                    periodStart: now,
+                    periodEnd: periodEnd,
+                },
+                update: {
+                    planCreditsRemaining: plan.creditsPerMonth,
+                    planCreditsUsed: 0,
+                    periodStart: now,
+                    periodEnd: periodEnd,
+                },
+            });
+            await tx.creditTransaction.create({
+                data: {
+                    userId,
+                    type: client_1.CreditTransactionType.ADMIN_ADJUSTMENT,
+                    amount: plan.creditsPerMonth,
+                    source: 'plan',
+                    description: `Admin: plano alterado para ${plan.name}`,
+                },
+            });
+        });
+    }
     async getGenerations(pagination) {
         const [generations, total] = await Promise.all([
             this.prisma.generation.findMany({
@@ -270,7 +331,6 @@ let AdminService = class AdminService {
                 take: pagination.limit,
                 include: {
                     outputs: { orderBy: { order: 'asc' } },
-                    inputImages: { orderBy: { order: 'asc' } },
                 },
             }),
             this.prisma.generation.count({ where }),
@@ -292,12 +352,7 @@ let AdminService = class AdminService {
                 thumbnailUrl: o.thumbnailUrl,
                 mimeType: o.mimeType,
             })),
-            inputImages: gen.inputImages.map((i) => ({
-                id: i.id,
-                url: i.url,
-                role: i.role,
-                mimeType: i.mimeType,
-            })),
+            inputImages: [],
             isFavorited: gen.isFavorited,
             isDeleted: gen.isDeleted,
             errorMessage: gen.errorMessage,

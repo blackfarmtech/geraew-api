@@ -26,6 +26,7 @@ const logout_dto_1 = require("./dto/logout.dto");
 const forgot_password_dto_1 = require("./dto/forgot-password.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
 const verify_email_dto_1 = require("./dto/verify-email.dto");
+const resend_verification_dto_1 = require("./dto/resend-verification.dto");
 const public_decorator_1 = require("../common/decorators/public.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let AuthController = class AuthController {
@@ -66,8 +67,8 @@ let AuthController = class AuthController {
     async verifyEmail(dto) {
         return this.authService.verifyEmail(dto.token);
     }
-    async resendVerification(user) {
-        return this.authService.resendVerificationEmail(user.sub);
+    async resendVerification(dto) {
+        return this.authService.resendVerificationEmail(dto.email);
     }
     async forgotPassword(dto) {
         return this.authService.forgotPassword(dto.email);
@@ -257,14 +258,16 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyEmail", null);
 __decorate([
+    (0, public_decorator_1.Public)(),
     (0, common_1.Post)('resend-verification'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     (0, swagger_1.ApiOperation)({ summary: 'Reenviar email de verificação' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Email de verificação reenviado' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Aguarde antes de solicitar novamente' }),
-    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [resend_verification_dto_1.ResendVerificationDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resendVerification", null);
 __decorate([

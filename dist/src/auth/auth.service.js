@@ -100,7 +100,7 @@ let AuthService = AuthService_1 = class AuthService {
                     passwordHash: hashedPassword,
                     phone: normalizedVerified,
                     phoneVerified: false,
-                    isActive: false,
+                    isActive: true,
                     role: 'USER',
                 },
             });
@@ -219,6 +219,9 @@ let AuthService = AuthService_1 = class AuthService {
         const user = await this.validateUser(email, password);
         if (!user) {
             throw new common_1.UnauthorizedException('Email ou senha inválidos');
+        }
+        if (!user.emailVerified) {
+            throw new common_1.UnauthorizedException('Email não verificado. Verifique sua caixa de entrada.');
         }
         const tokens = await this.generateTokens(user);
         return {
@@ -436,32 +439,29 @@ let AuthService = AuthService_1 = class AuthService {
         }
         return { message: 'Email verificado com sucesso' };
     }
-    async resendVerificationEmail(userId) {
+    async resendVerificationEmail(email) {
         const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+            where: { email: email.toLowerCase(), isActive: true },
         });
-        if (!user) {
-            throw new common_1.NotFoundException('Usuário não encontrado');
-        }
-        if (user.emailVerified) {
-            return { message: 'Email já verificado' };
+        if (!user || user.emailVerified) {
+            return { message: 'Se o email existir e não estiver verificado, um novo link será enviado' };
         }
         const lastToken = await this.prisma.emailVerificationToken.findFirst({
-            where: { userId, used: false },
+            where: { userId: user.id, used: false },
             orderBy: { createdAt: 'desc' },
         });
         if (lastToken && lastToken.createdAt.getTime() > Date.now() - 60 * 1000) {
             throw new common_1.BadRequestException('Aguarde 1 minuto antes de solicitar outro email de verificação');
         }
         await this.prisma.emailVerificationToken.updateMany({
-            where: { userId, used: false },
+            where: { userId: user.id, used: false },
             data: { used: true },
         });
         const verificationToken = (0, crypto_1.randomBytes)(32).toString('hex');
         const tokenHash = (0, crypto_1.createHash)('sha256').update(verificationToken).digest('hex');
         await this.prisma.emailVerificationToken.create({
             data: {
-                userId,
+                userId: user.id,
                 tokenHash,
                 expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
             },
@@ -469,7 +469,7 @@ let AuthService = AuthService_1 = class AuthService {
         this.emailService.sendVerificationEmail(user.email, user.name, verificationToken).catch((err) => {
             this.logger.error(`Failed to send verification email: ${err.message}`);
         });
-        return { message: 'Email de verificação reenviado' };
+        return { message: 'Se o email existir e não estiver verificado, um novo link será enviado' };
     }
     async forgotPassword(email) {
         const user = await this.prisma.user.findUnique({

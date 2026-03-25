@@ -4,21 +4,27 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import * as sharp from 'sharp';
+import * as ffmpeg from 'fluent-ffmpeg';
+import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import * as fs from 'fs';
+import * as path from 'path';
+
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 import { PresignedUrlDto } from './dto/presigned-url.dto';
 import { PresignedUrlResponseDto } from './dto/presigned-url-response.dto';
-
-/** Default signed URL expiration: 7 days (in seconds) */
-const SIGNED_URL_EXPIRY = 7 * 24 * 60 * 60;
 
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
   private readonly s3Client: S3Client | null;
   private readonly bucketName: string;
+  private readonly publicUrlBase: string;
 
   constructor(private readonly configService: ConfigService) {
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
@@ -26,6 +32,9 @@ export class UploadsService {
       'S3_BUCKET_NAME',
       'ai-generations',
     );
+    this.publicUrlBase = (
+      this.configService.get<string>('S3_PUBLIC_URL', '') || ''
+    ).replace(/\/$/, '');
 
     if (endpoint) {
       this.s3Client = new S3Client({
@@ -45,6 +54,17 @@ export class UploadsService {
       this.s3Client = null;
       this.logger.warn('S3_ENDPOINT not configured — using mock URLs');
     }
+  }
+
+  /**
+   * Returns a permanent public URL for an S3 object.
+   * Requires S3_PUBLIC_URL to be configured.
+   */
+  getPublicUrl(fileKey: string): string {
+    if (!this.publicUrlBase) {
+      return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+    }
+    return `${this.publicUrlBase}/${fileKey}`;
   }
 
   async generatePresignedUrl(
@@ -74,7 +94,7 @@ export class UploadsService {
 
   /**
    * Downloads a file from a URL and uploads it to S3.
-   * Returns a signed URL to access the file.
+   * Returns a public URL to access the file.
    */
   async uploadFromUrl(
     sourceUrl: string,
@@ -112,11 +132,11 @@ export class UploadsService {
     this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
 
     // Return signed URL for reading
-    return this.getSignedReadUrl(fileKey);
+    return this.getPublicUrl(fileKey);
   }
 
   /**
-   * Uploads raw buffer to S3 and returns a signed URL.
+   * Uploads raw buffer to S3 and returns a public URL.
    */
   async uploadBuffer(
     buffer: Buffer,
@@ -140,11 +160,11 @@ export class UploadsService {
     );
 
     this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
-    return this.getSignedReadUrl(fileKey);
+    return this.getPublicUrl(fileKey);
   }
 
   /**
-   * Generates a thumbnail from an image URL, uploads it to S3 and returns its signed URL.
+   * Generates a thumbnail from an image URL, uploads it to S3 and returns its public URL.
    */
   async generateThumbnail(
     sourceUrl: string,
@@ -165,7 +185,7 @@ export class UploadsService {
       const buffer = Buffer.from(await response.arrayBuffer());
       const thumbnail = await sharp(buffer)
         .resize(size, size, { fit: 'cover' })
-        .jpeg({ quality: 70 })
+        .webp({ quality: 70 })
         .toBuffer();
 
       await this.s3Client.send(
@@ -173,12 +193,12 @@ export class UploadsService {
           Bucket: this.bucketName,
           Key: fileKey,
           Body: thumbnail,
-          ContentType: 'image/jpeg',
+          ContentType: 'image/webp',
         }),
       );
 
       this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
-      return this.getSignedReadUrl(fileKey);
+      return this.getPublicUrl(fileKey);
     } catch (error) {
       this.logger.warn(`Failed to generate thumbnail: ${(error as Error).message}`);
       return sourceUrl;
@@ -206,7 +226,7 @@ export class UploadsService {
     const buffer = Buffer.from(await response.arrayBuffer());
     const thumbnail = await sharp(buffer)
       .resize(size, size, { fit: 'cover' })
-      .jpeg({ quality: 70 })
+      .webp({ quality: 70 })
       .toBuffer();
 
     await this.s3Client.send(
@@ -214,19 +234,79 @@ export class UploadsService {
         Bucket: this.bucketName,
         Key: fileKey,
         Body: thumbnail,
-        ContentType: 'image/jpeg',
+        ContentType: 'image/webp',
       }),
     );
 
     this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
-    return this.getSignedReadUrl(fileKey);
+    return this.getPublicUrl(fileKey);
+  }
+
+  /**
+   * Generates a thumbnail from a video URL by extracting the first frame with ffmpeg.
+   * Downloads video → extracts frame at 0s → resizes with sharp → uploads to S3.
+   */
+  async generateVideoThumbnail(
+    videoUrl: string,
+    folder: string,
+    filename: string,
+    size = 256,
+  ): Promise<string> {
+    const fileKey = `${folder}/${randomUUID()}/${filename}`;
+
+    if (!this.s3Client) {
+      return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+    }
+
+    const tempDir = path.join('/tmp', `vidthumb-${randomUUID()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const framePath = path.join(tempDir, 'frame.jpg');
+
+    try {
+      // Extract first frame directly from URL (ffmpeg streams only what it needs)
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(videoUrl)
+          .seekInput(0)
+          .frames(1)
+          .output(framePath)
+          .on('end', () => resolve())
+          .on('error', (err: Error) => reject(err))
+          .run();
+      });
+
+      // Resize with sharp and upload
+      const frameBuffer = fs.readFileSync(framePath);
+      const thumbnail = await sharp(frameBuffer)
+        .resize(size, size, { fit: 'cover' })
+        .webp({ quality: 70 })
+        .toBuffer();
+
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: fileKey,
+          Body: thumbnail,
+          ContentType: 'image/webp',
+        }),
+      );
+
+      this.logger.log(`Video thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
+      return this.getPublicUrl(fileKey);
+    } catch (error) {
+      this.logger.warn(`Failed to generate video thumbnail: ${(error as Error).message}`);
+      throw error;
+    } finally {
+      // Cleanup temp files
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch { /* ignore */ }
+    }
   }
 
   /**
    * Uploads raw buffer to S3 and returns both a public URL (for external APIs)
    * and a signed URL (for internal use / display).
-   * Requires S3_PUBLIC_URL env to be configured for public URLs.
-   * Falls back to signed URL if S3_PUBLIC_URL is not set.
+   * With public bucket, both URLs are the same permanent public URL.
    */
   async uploadBufferPublic(
     buffer: Buffer,
@@ -247,23 +327,18 @@ export class UploadsService {
         Key: fileKey,
         Body: buffer,
         ContentType: contentType,
-        ACL: 'public-read',
       }),
     );
 
     this.logger.log(`Uploaded (public) ${fileKey} (${buffer.length} bytes)`);
 
-    const signedUrl = await this.getSignedReadUrl(fileKey);
-    const publicBase = this.configService.get<string>('S3_PUBLIC_URL');
-    const publicUrl = publicBase
-      ? `${publicBase.replace(/\/$/, '')}/${fileKey}`
-      : signedUrl;
-
-    return { publicUrl, signedUrl };
+    const publicUrl = this.getPublicUrl(fileKey);
+    return { publicUrl, signedUrl: publicUrl };
   }
 
   /**
-   * Generates a signed read URL for an S3 object (valid for 7 days).
+   * Generates a signed read URL for an S3 object.
+   * Only used by backfill scripts to re-sign expired URLs from old data.
    */
   async getSignedReadUrl(fileKey: string): Promise<string> {
     if (!this.s3Client) {
@@ -276,7 +351,65 @@ export class UploadsService {
     });
 
     return getSignedUrl(this.s3Client, command, {
-      expiresIn: SIGNED_URL_EXPIRY,
+      expiresIn: 7 * 24 * 60 * 60,
     });
+  }
+
+  /**
+   * Deletes all S3 objects under a given prefix (folder).
+   * E.g., deleteByPrefix('inputs/abc123/') removes all files in that folder.
+   */
+  async deleteByPrefix(prefix: string): Promise<number> {
+    if (!this.s3Client) {
+      this.logger.warn('S3 not configured — skipping deleteByPrefix');
+      return 0;
+    }
+
+    let totalDeleted = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const listResult = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      const objects = listResult.Contents;
+      if (!objects?.length) break;
+
+      await this.s3Client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucketName,
+          Delete: { Objects: objects.map((o) => ({ Key: o.Key! })) },
+        }),
+      );
+
+      totalDeleted += objects.length;
+      continuationToken = listResult.IsTruncated
+        ? listResult.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    if (totalDeleted > 0) {
+      this.logger.log(`Deleted ${totalDeleted} objects under prefix "${prefix}"`);
+    }
+
+    return totalDeleted;
+  }
+
+  /**
+   * Generates a tiny blurred base64 data URL from an image buffer.
+   * Used as LQIP (Low Quality Image Placeholder) for instant perceived loading.
+   */
+  async generateBlurDataUrl(imageBuffer: Buffer): Promise<string> {
+    const tiny = await sharp(imageBuffer)
+      .resize(16, 16, { fit: 'cover' })
+      .blur(2)
+      .webp({ quality: 20 })
+      .toBuffer();
+    return `data:image/webp;base64,${tiny.toString('base64')}`;
   }
 }

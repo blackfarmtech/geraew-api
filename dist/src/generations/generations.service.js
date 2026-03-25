@@ -487,7 +487,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             },
             include: {
                 outputs: { orderBy: { order: 'asc' } },
-                inputImages: { orderBy: { order: 'asc' } },
             },
         });
         if (!generation) {
@@ -553,7 +552,6 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 take: filters.limit,
                 include: {
                     outputs: { orderBy: { order: 'asc' } },
-                    inputImages: { orderBy: { order: 'asc' } },
                 },
             }),
             this.prisma.generation.count({ where }),
@@ -604,14 +602,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 mimeType: o.mimeType ?? undefined,
                 order: o.order,
             })),
-            inputImages: generation.inputImages.map((img) => ({
-                id: img.id,
-                role: img.role,
-                mimeType: img.mimeType ?? undefined,
-                order: img.order,
-                referenceType: img.referenceType ?? undefined,
-                url: img.url ?? undefined,
-            })),
+            inputImages: [],
             hasWatermark: generation.hasWatermark,
             creditsConsumed: generation.creditsConsumed,
             processingTimeMs: generation.processingTimeMs ?? undefined,

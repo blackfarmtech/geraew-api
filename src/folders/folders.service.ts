@@ -113,7 +113,6 @@ export class FoldersService {
         take: pagination.limit,
         include: {
           outputs: { orderBy: { order: 'asc' } },
-          inputImages: { orderBy: { order: 'asc' } },
         },
       }),
       this.prisma.generation.count({ where: generationWhere }),
@@ -137,14 +136,7 @@ export class FoldersService {
         mimeType: o.mimeType ?? undefined,
         order: o.order,
       })),
-      inputImages: gen.inputImages.map((img) => ({
-        id: img.id,
-        role: img.role,
-        mimeType: img.mimeType ?? undefined,
-        order: img.order,
-        referenceType: img.referenceType ?? undefined,
-        url: img.url ?? undefined,
-      })),
+      inputImages: [],
       hasWatermark: gen.hasWatermark,
       creditsConsumed: gen.creditsConsumed,
       processingTimeMs: gen.processingTimeMs ?? undefined,

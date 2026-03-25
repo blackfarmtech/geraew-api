@@ -539,11 +539,21 @@ export class GenerationProcessor extends WorkerHost {
       },
     });
 
+    // Calculate expiresAt based on user's plan retention
+    if (generation) {
+      const retentionDays = await this.getUserRetentionDays(generation.userId);
+      if (retentionDays !== null) {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + retentionDays);
+        updateData.expiresAt = expiresAt;
+      }
+    }
+
     const isImage =
       generation?.type === GenerationType.TEXT_TO_IMAGE ||
       generation?.type === GenerationType.IMAGE_TO_IMAGE;
 
-    let thumbnailUrls: (string | null)[] = result.outputUrls.map(() => null);
+    let thumbnailUrls: (string | null)[];
     if (isImage) {
       thumbnailUrls = await Promise.all(
         result.outputUrls.map((url, i) =>
@@ -551,12 +561,39 @@ export class GenerationProcessor extends WorkerHost {
             .generateThumbnail(
               url,
               `thumbnails/${generationId}`,
-              `thumb_${i}.jpg`,
+              `thumb_${i}.webp`,
+            )
+            .catch(() => null),
+        ),
+      );
+    } else {
+      // Video types: extract first frame as thumbnail
+      thumbnailUrls = await Promise.all(
+        result.outputUrls.map((url, i) =>
+          this.uploadsService
+            .generateVideoThumbnail(
+              url,
+              `thumbnails/${generationId}`,
+              `thumb_${i}.webp`,
             )
             .catch(() => null),
         ),
       );
     }
+
+    // Generate LQIP blur placeholders from output images
+    const blurDataUrls: (string | null)[] = await Promise.all(
+      result.outputUrls.map(async (url) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const buf = Buffer.from(await res.arrayBuffer());
+          return this.uploadsService.generateBlurDataUrl(buf);
+        } catch {
+          return null;
+        }
+      }),
+    );
 
     const requestedCount = generation?.quantity ?? result.outputUrls.length;
     const actualCount = result.outputUrls.length;
@@ -581,6 +618,7 @@ export class GenerationProcessor extends WorkerHost {
           generationId,
           url,
           thumbnailUrl: thumbnailUrls[i],
+          blurDataUrl: blurDataUrls[i],
           order: i,
         })),
       }),
@@ -617,6 +655,9 @@ export class GenerationProcessor extends WorkerHost {
     this.logger.log(
       `Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`,
     );
+
+    // Fire-and-forget: delete input files from S3 to save storage
+    this.cleanupInputFiles(generationId);
   }
 
   @OnWorkerEvent('failed')
@@ -699,6 +740,56 @@ export class GenerationProcessor extends WorkerHost {
     this.logger.log(
       `Refunded ${creditsConsumed} credits for failed generation ${generationId}`,
     );
+
+    // Fire-and-forget: delete input files from S3 to save storage
+    this.cleanupInputFiles(generationId);
+  }
+
+  private async getUserRetentionDays(
+    userId: string,
+  ): Promise<number | null> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      select: { plan: { select: { galleryRetentionDays: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Return plan's retention or default 7 days for free users
+    return subscription?.plan.galleryRetentionDays ?? 7;
+  }
+
+  private cleanupInputFiles(generationId: string): void {
+    // Delete S3 files
+    this.uploadsService
+      .deleteByPrefix(`inputs/${generationId}/`)
+      .then((count) => {
+        if (count > 0) {
+          this.logger.log(
+            `Cleaned up ${count} input file(s) for generation ${generationId}`,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to cleanup inputs for ${generationId}: ${(err as Error).message}`,
+        );
+      });
+
+    // Delete DB records (no longer needed after processing)
+    this.prisma.generationInputImage
+      .deleteMany({ where: { generationId } })
+      .then((result) => {
+        if (result.count > 0) {
+          this.logger.log(
+            `Deleted ${result.count} input image record(s) for generation ${generationId}`,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to delete input image records for ${generationId}: ${(err as Error).message}`,
+        );
+      });
   }
 
   private async loadInputImagesAsBase64(

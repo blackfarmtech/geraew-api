@@ -67,10 +67,13 @@ async function main() {
             const chunk = batch.slice(i, i + CONCURRENCY);
             await Promise.all(chunk.map(async (output) => {
                 try {
-                    const thumbnailUrl = await uploads.generateThumbnailDirect(output.url, `thumbnails/${output.generationId}`, `thumb_${output.id}.jpg`);
+                    const thumbnailUrl = await uploads.generateThumbnailDirect(output.url, `thumbnails/${output.generationId}`, `thumb_${output.id}.webp`);
+                    const imgRes = await fetch(output.url);
+                    const imgBuf = imgRes.ok ? Buffer.from(await imgRes.arrayBuffer()) : null;
+                    const blurDataUrl = imgBuf ? await uploads.generateBlurDataUrl(imgBuf) : null;
                     await prisma.generationOutput.update({
                         where: { id: output.id },
-                        data: { thumbnailUrl },
+                        data: { thumbnailUrl, blurDataUrl },
                     });
                     processed++;
                     console.log(`[${processed + failed}/${total}] ✓ ${output.id}`);

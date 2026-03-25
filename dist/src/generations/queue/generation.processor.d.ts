@@ -34,6 +34,8 @@ export declare class GenerationProcessor extends WorkerHost {
     private completeGeneration;
     onFailed(job: Job, error: Error): Promise<void>;
     private handleFailure;
+    private getUserRetentionDays;
+    private cleanupInputFiles;
     private loadInputImagesAsBase64;
     private downloadToBase64;
 }

@@ -84,14 +84,6 @@ type GenerationWithRelations = {
   createdAt: Date;
   completedAt: Date | null;
   outputs: Array<{ id: string; url: string; thumbnailUrl: string | null; mimeType: string | null; order: number }>;
-  inputImages: Array<{
-    id: string;
-    role: GenerationImageRole;
-    mimeType: string | null;
-    order: number;
-    referenceType: string | null;
-    url: string | null;
-  }>;
 };
 
 @Injectable()
@@ -828,7 +820,6 @@ export class GenerationsService {
       },
       include: {
         outputs: { orderBy: { order: 'asc' } },
-        inputImages: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -909,7 +900,6 @@ export class GenerationsService {
         take: filters.limit,
         include: {
           outputs: { orderBy: { order: 'asc' } },
-          inputImages: { orderBy: { order: 'asc' } },
         },
       }),
       this.prisma.generation.count({ where }),
@@ -976,14 +966,7 @@ export class GenerationsService {
         mimeType: o.mimeType ?? undefined,
         order: o.order,
       })),
-      inputImages: generation.inputImages.map((img) => ({
-        id: img.id,
-        role: img.role,
-        mimeType: img.mimeType ?? undefined,
-        order: img.order,
-        referenceType: img.referenceType ?? undefined,
-        url: img.url ?? undefined,
-      })),
+      inputImages: [],
       hasWatermark: generation.hasWatermark,
       creditsConsumed: generation.creditsConsumed,
       processingTimeMs: generation.processingTimeMs ?? undefined,

@@ -21,6 +21,7 @@ const roles_guard_1 = require("../common/guards/roles.guard");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 const adjust_credits_dto_1 = require("./dto/adjust-credits.dto");
 const toggle_user_status_dto_1 = require("./dto/toggle-user-status.dto");
+const change_user_plan_dto_1 = require("./dto/change-user-plan.dto");
 const admin_stats_response_dto_1 = require("./dto/admin-stats-response.dto");
 let AdminController = class AdminController {
     adminService;
@@ -48,6 +49,10 @@ let AdminController = class AdminController {
     async adjustCredits(id, dto) {
         await this.adminService.adjustCredits(id, dto.amount, dto.description);
         return { success: true, message: 'Créditos ajustados com sucesso' };
+    }
+    async changeUserPlan(id, dto) {
+        await this.adminService.changeUserPlan(id, dto.planSlug);
+        return { success: true, message: `Plano alterado para "${dto.planSlug}" com sucesso` };
     }
     async getUserGenerations(id, pagination) {
         return this.adminService.getUserGenerations(id, pagination);
@@ -110,6 +115,16 @@ __decorate([
     __metadata("design:paramtypes", [String, adjust_credits_dto_1.AdjustCreditsDto]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "adjustCredits", null);
+__decorate([
+    (0, common_1.Patch)('users/:id/plan'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Alterar plano de um usuário' }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, change_user_plan_dto_1.ChangeUserPlanDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "changeUserPlan", null);
 __decorate([
     (0, common_1.Get)('users/:id/generations'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

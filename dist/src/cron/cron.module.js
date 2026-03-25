@@ -13,12 +13,13 @@ const subscription_renewal_service_1 = require("./subscription-renewal.service")
 const payment_retry_service_1 = require("./payment-retry.service");
 const gallery_cleanup_service_1 = require("./gallery-cleanup.service");
 const stuck_generations_service_1 = require("./stuck-generations.service");
+const uploads_module_1 = require("../uploads/uploads.module");
 let CronModule = class CronModule {
 };
 exports.CronModule = CronModule;
 exports.CronModule = CronModule = __decorate([
     (0, common_1.Module)({
-        imports: [schedule_1.ScheduleModule.forRoot()],
+        imports: [schedule_1.ScheduleModule.forRoot(), uploads_module_1.UploadsModule],
         providers: [
             subscription_renewal_service_1.SubscriptionRenewalService,
             payment_retry_service_1.PaymentRetryService,

@@ -67,12 +67,13 @@ export declare class AdminService {
         }[];
     }>;
     adjustCredits(userId: string, amount: number, description: string): Promise<void>;
+    changeUserPlan(userId: string, planSlug: string): Promise<void>;
     getGenerations(pagination: PaginationDto): Promise<PaginatedResponseDto<{
         id: string;
         user: {
-            name: string;
-            email: string;
             id: string;
+            email: string;
+            name: string;
         };
         type: import(".prisma/client").$Enums.GenerationType;
         status: import(".prisma/client").$Enums.GenerationStatus;
@@ -106,12 +107,7 @@ export declare class AdminService {
             thumbnailUrl: string | null;
             mimeType: string | null;
         }[];
-        inputImages: {
-            id: string;
-            url: string | null;
-            role: import(".prisma/client").$Enums.GenerationImageRole;
-            mimeType: string | null;
-        }[];
+        inputImages: never[];
         isFavorited: boolean;
         isDeleted: boolean;
         errorMessage: string | null;

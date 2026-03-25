@@ -71,12 +71,17 @@ async function main() {
             const thumbnailUrl = await uploads.generateThumbnailDirect(
               output.url,
               `thumbnails/${output.generationId}`,
-              `thumb_${output.id}.jpg`,
+              `thumb_${output.id}.webp`,
             );
+
+            // Generate LQIP blur placeholder
+            const imgRes = await fetch(output.url);
+            const imgBuf = imgRes.ok ? Buffer.from(await imgRes.arrayBuffer()) : null;
+            const blurDataUrl = imgBuf ? await uploads.generateBlurDataUrl(imgBuf) : null;
 
             await prisma.generationOutput.update({
               where: { id: output.id },
-              data: { thumbnailUrl },
+              data: { thumbnailUrl, blurDataUrl },
             });
 
             processed++;

@@ -17,16 +17,22 @@ const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const crypto_1 = require("crypto");
 const sharp = require("sharp");
-const SIGNED_URL_EXPIRY = 7 * 24 * 60 * 60;
+const ffmpeg = require("fluent-ffmpeg");
+const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
+const fs = require("fs");
+const path = require("path");
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 let UploadsService = UploadsService_1 = class UploadsService {
     configService;
     logger = new common_1.Logger(UploadsService_1.name);
     s3Client;
     bucketName;
+    publicUrlBase;
     constructor(configService) {
         this.configService = configService;
         const endpoint = this.configService.get('S3_ENDPOINT');
         this.bucketName = this.configService.get('S3_BUCKET_NAME', 'ai-generations');
+        this.publicUrlBase = (this.configService.get('S3_PUBLIC_URL', '') || '').replace(/\/$/, '');
         if (endpoint) {
             this.s3Client = new client_s3_1.S3Client({
                 endpoint,
@@ -43,6 +49,12 @@ let UploadsService = UploadsService_1 = class UploadsService {
             this.s3Client = null;
             this.logger.warn('S3_ENDPOINT not configured — using mock URLs');
         }
+    }
+    getPublicUrl(fileKey) {
+        if (!this.publicUrlBase) {
+            return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+        }
+        return `${this.publicUrlBase}/${fileKey}`;
     }
     async generatePresignedUrl(dto) {
         const fileKey = `${dto.purpose}/${(0, crypto_1.randomUUID)()}/${dto.filename}`;
@@ -81,7 +93,7 @@ let UploadsService = UploadsService_1 = class UploadsService {
             ContentType: contentType,
         }));
         this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
-        return this.getSignedReadUrl(fileKey);
+        return this.getPublicUrl(fileKey);
     }
     async uploadBuffer(buffer, folder, filename, contentType) {
         const fileKey = `${folder}/${(0, crypto_1.randomUUID)()}/${filename}`;
@@ -95,7 +107,7 @@ let UploadsService = UploadsService_1 = class UploadsService {
             ContentType: contentType,
         }));
         this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
-        return this.getSignedReadUrl(fileKey);
+        return this.getPublicUrl(fileKey);
     }
     async generateThumbnail(sourceUrl, folder, filename, size = 256) {
         const fileKey = `${folder}/${(0, crypto_1.randomUUID)()}/${filename}`;
@@ -109,16 +121,16 @@ let UploadsService = UploadsService_1 = class UploadsService {
             const buffer = Buffer.from(await response.arrayBuffer());
             const thumbnail = await sharp(buffer)
                 .resize(size, size, { fit: 'cover' })
-                .jpeg({ quality: 70 })
+                .webp({ quality: 70 })
                 .toBuffer();
             await this.s3Client.send(new client_s3_1.PutObjectCommand({
                 Bucket: this.bucketName,
                 Key: fileKey,
                 Body: thumbnail,
-                ContentType: 'image/jpeg',
+                ContentType: 'image/webp',
             }));
             this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
-            return this.getSignedReadUrl(fileKey);
+            return this.getPublicUrl(fileKey);
         }
         catch (error) {
             this.logger.warn(`Failed to generate thumbnail: ${error.message}`);
@@ -136,16 +148,59 @@ let UploadsService = UploadsService_1 = class UploadsService {
         const buffer = Buffer.from(await response.arrayBuffer());
         const thumbnail = await sharp(buffer)
             .resize(size, size, { fit: 'cover' })
-            .jpeg({ quality: 70 })
+            .webp({ quality: 70 })
             .toBuffer();
         await this.s3Client.send(new client_s3_1.PutObjectCommand({
             Bucket: this.bucketName,
             Key: fileKey,
             Body: thumbnail,
-            ContentType: 'image/jpeg',
+            ContentType: 'image/webp',
         }));
         this.logger.log(`Thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
-        return this.getSignedReadUrl(fileKey);
+        return this.getPublicUrl(fileKey);
+    }
+    async generateVideoThumbnail(videoUrl, folder, filename, size = 256) {
+        const fileKey = `${folder}/${(0, crypto_1.randomUUID)()}/${filename}`;
+        if (!this.s3Client) {
+            return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
+        }
+        const tempDir = path.join('/tmp', `vidthumb-${(0, crypto_1.randomUUID)()}`);
+        fs.mkdirSync(tempDir, { recursive: true });
+        const framePath = path.join(tempDir, 'frame.jpg');
+        try {
+            await new Promise((resolve, reject) => {
+                ffmpeg(videoUrl)
+                    .seekInput(0)
+                    .frames(1)
+                    .output(framePath)
+                    .on('end', () => resolve())
+                    .on('error', (err) => reject(err))
+                    .run();
+            });
+            const frameBuffer = fs.readFileSync(framePath);
+            const thumbnail = await sharp(frameBuffer)
+                .resize(size, size, { fit: 'cover' })
+                .webp({ quality: 70 })
+                .toBuffer();
+            await this.s3Client.send(new client_s3_1.PutObjectCommand({
+                Bucket: this.bucketName,
+                Key: fileKey,
+                Body: thumbnail,
+                ContentType: 'image/webp',
+            }));
+            this.logger.log(`Video thumbnail uploaded ${fileKey} (${thumbnail.length} bytes)`);
+            return this.getPublicUrl(fileKey);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to generate video thumbnail: ${error.message}`);
+            throw error;
+        }
+        finally {
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+            catch { }
+        }
     }
     async uploadBufferPublic(buffer, folder, filename, contentType) {
         const fileKey = `${folder}/${(0, crypto_1.randomUUID)()}/${filename}`;
@@ -158,15 +213,10 @@ let UploadsService = UploadsService_1 = class UploadsService {
             Key: fileKey,
             Body: buffer,
             ContentType: contentType,
-            ACL: 'public-read',
         }));
         this.logger.log(`Uploaded (public) ${fileKey} (${buffer.length} bytes)`);
-        const signedUrl = await this.getSignedReadUrl(fileKey);
-        const publicBase = this.configService.get('S3_PUBLIC_URL');
-        const publicUrl = publicBase
-            ? `${publicBase.replace(/\/$/, '')}/${fileKey}`
-            : signedUrl;
-        return { publicUrl, signedUrl };
+        const publicUrl = this.getPublicUrl(fileKey);
+        return { publicUrl, signedUrl: publicUrl };
     }
     async getSignedReadUrl(fileKey) {
         if (!this.s3Client) {
@@ -177,8 +227,46 @@ let UploadsService = UploadsService_1 = class UploadsService {
             Key: fileKey,
         });
         return (0, s3_request_presigner_1.getSignedUrl)(this.s3Client, command, {
-            expiresIn: SIGNED_URL_EXPIRY,
+            expiresIn: 7 * 24 * 60 * 60,
         });
+    }
+    async deleteByPrefix(prefix) {
+        if (!this.s3Client) {
+            this.logger.warn('S3 not configured — skipping deleteByPrefix');
+            return 0;
+        }
+        let totalDeleted = 0;
+        let continuationToken;
+        do {
+            const listResult = await this.s3Client.send(new client_s3_1.ListObjectsV2Command({
+                Bucket: this.bucketName,
+                Prefix: prefix,
+                ContinuationToken: continuationToken,
+            }));
+            const objects = listResult.Contents;
+            if (!objects?.length)
+                break;
+            await this.s3Client.send(new client_s3_1.DeleteObjectsCommand({
+                Bucket: this.bucketName,
+                Delete: { Objects: objects.map((o) => ({ Key: o.Key })) },
+            }));
+            totalDeleted += objects.length;
+            continuationToken = listResult.IsTruncated
+                ? listResult.NextContinuationToken
+                : undefined;
+        } while (continuationToken);
+        if (totalDeleted > 0) {
+            this.logger.log(`Deleted ${totalDeleted} objects under prefix "${prefix}"`);
+        }
+        return totalDeleted;
+    }
+    async generateBlurDataUrl(imageBuffer) {
+        const tiny = await sharp(imageBuffer)
+            .resize(16, 16, { fit: 'cover' })
+            .blur(2)
+            .webp({ quality: 20 })
+            .toBuffer();
+        return `data:image/webp;base64,${tiny.toString('base64')}`;
     }
 };
 exports.UploadsService = UploadsService;

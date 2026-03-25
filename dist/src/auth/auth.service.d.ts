@@ -40,7 +40,7 @@ export declare class AuthService {
     verifyEmail(token: string): Promise<{
         message: string;
     }>;
-    resendVerificationEmail(userId: string): Promise<{
+    resendVerificationEmail(email: string): Promise<{
         message: string;
     }>;
     forgotPassword(email: string): Promise<{
