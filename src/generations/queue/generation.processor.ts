@@ -553,47 +553,43 @@ export class GenerationProcessor extends WorkerHost {
       generation?.type === GenerationType.TEXT_TO_IMAGE ||
       generation?.type === GenerationType.IMAGE_TO_IMAGE;
 
-    let thumbnailUrls: (string | null)[];
-    if (isImage) {
-      thumbnailUrls = await Promise.all(
-        result.outputUrls.map((url, i) =>
-          this.uploadsService
-            .generateThumbnail(
-              url,
-              `thumbnails/${generationId}`,
-              `thumb_${i}.webp`,
-            )
-            .catch(() => null),
-        ),
-      );
-    } else {
-      // Video types: extract first frame as thumbnail
-      thumbnailUrls = await Promise.all(
-        result.outputUrls.map((url, i) =>
-          this.uploadsService
-            .generateVideoThumbnail(
-              url,
-              `thumbnails/${generationId}`,
-              `thumb_${i}.webp`,
-            )
-            .catch(() => null),
-        ),
-      );
-    }
+    // For images: generate thumbnails/blur synchronously (fast).
+    // For videos: skip thumbnails now, generate them async after delivery.
+    let thumbnailUrls: (string | null)[] = result.outputUrls.map(() => null);
+    let blurDataUrls: (string | null)[] = result.outputUrls.map(() => null);
 
-    // Generate LQIP blur placeholders from output images
-    const blurDataUrls: (string | null)[] = await Promise.all(
-      result.outputUrls.map(async (url) => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return null;
-          const buf = Buffer.from(await res.arrayBuffer());
-          return this.uploadsService.generateBlurDataUrl(buf);
-        } catch {
-          return null;
-        }
-      }),
-    );
+    if (isImage) {
+      try {
+        thumbnailUrls = await Promise.all(
+          result.outputUrls.map((url, i) =>
+            this.uploadsService
+              .generateThumbnail(
+                url,
+                `thumbnails/${generationId}`,
+                `thumb_${i}.webp`,
+              )
+              .catch(() => null),
+          ),
+        );
+
+        blurDataUrls = await Promise.all(
+          result.outputUrls.map(async (url) => {
+            try {
+              const res = await fetch(url);
+              if (!res.ok) return null;
+              const buf = Buffer.from(await res.arrayBuffer());
+              return this.uploadsService.generateBlurDataUrl(buf);
+            } catch {
+              return null;
+            }
+          }),
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Image post-processing failed for ${generationId}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     const requestedCount = generation?.quantity ?? result.outputUrls.length;
     const actualCount = result.outputUrls.length;
@@ -655,6 +651,16 @@ export class GenerationProcessor extends WorkerHost {
     this.logger.log(
       `Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`,
     );
+
+    // Fire-and-forget: generate video thumbnails + blur AFTER delivery
+    if (!isImage) {
+      this.generateVideoPostProcessing(generationId, result.outputUrls).catch(
+        (err) =>
+          this.logger.warn(
+            `Video post-processing failed for ${generationId}: ${(err as Error).message}`,
+          ),
+      );
+    }
 
     // Fire-and-forget: delete input files from S3 to save storage
     this.cleanupInputFiles(generationId);
@@ -817,5 +823,67 @@ export class GenerationProcessor extends WorkerHost {
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     return buffer.toString('base64');
+  }
+
+  /**
+   * Fire-and-forget: generates video thumbnails + blur AFTER the video
+   * has been delivered to the user. Updates output records in DB.
+   */
+  private async generateVideoPostProcessing(
+    generationId: string,
+    outputUrls: string[],
+  ): Promise<void> {
+    const thumbnailUrls = await Promise.all(
+      outputUrls.map((url, i) =>
+        this.uploadsService
+          .generateVideoThumbnail(
+            url,
+            `thumbnails/${generationId}`,
+            `thumb_${i}.webp`,
+          )
+          .catch(() => null),
+      ),
+    );
+
+    // Generate blur from thumbnails (not from the video file — Sharp can't process MP4)
+    const blurDataUrls = await Promise.all(
+      thumbnailUrls.map(async (thumbUrl) => {
+        if (!thumbUrl) return null;
+        try {
+          const res = await fetch(thumbUrl);
+          if (!res.ok) return null;
+          const buf = Buffer.from(await res.arrayBuffer());
+          return this.uploadsService.generateBlurDataUrl(buf);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    // Update each output record with thumbnail + blur
+    const outputs = await this.prisma.generationOutput.findMany({
+      where: { generationId },
+      orderBy: { order: 'asc' },
+      select: { id: true, order: true },
+    });
+
+    await Promise.all(
+      outputs.map((output) => {
+        const thumbUrl = thumbnailUrls[output.order] ?? null;
+        const blurUrl = blurDataUrls[output.order] ?? null;
+        if (!thumbUrl && !blurUrl) return Promise.resolve();
+        return this.prisma.generationOutput.update({
+          where: { id: output.id },
+          data: {
+            ...(thumbUrl && { thumbnailUrl: thumbUrl }),
+            ...(blurUrl && { blurDataUrl: blurUrl }),
+          },
+        });
+      }),
+    );
+
+    this.logger.log(
+      `Video post-processing done for ${generationId}: ${thumbnailUrls.filter(Boolean).length} thumbnail(s)`,
+    );
   }
 }

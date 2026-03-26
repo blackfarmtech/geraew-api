@@ -260,12 +260,21 @@ export class UploadsService {
 
     const tempDir = path.join('/tmp', `vidthumb-${randomUUID()}`);
     fs.mkdirSync(tempDir, { recursive: true });
+    const videoPath = path.join(tempDir, 'input.mp4');
     const framePath = path.join(tempDir, 'frame.jpg');
 
     try {
-      // Extract first frame directly from URL (ffmpeg streams only what it needs)
+      // Download video to temp file first (more reliable than streaming from URL)
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download video: ${response.status}`);
+      }
+      const videoBuffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(videoPath, videoBuffer);
+
+      // Extract first frame from local file
       await new Promise<void>((resolve, reject) => {
-        ffmpeg(videoUrl)
+        ffmpeg(videoPath)
           .seekInput(0)
           .frames(1)
           .output(framePath)
