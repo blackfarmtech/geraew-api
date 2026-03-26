@@ -13,16 +13,18 @@ exports.VerifyEmailDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 class VerifyEmailDto {
-    token;
+    code;
 }
 exports.VerifyEmailDto = VerifyEmailDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        example: 'a1b2c3d4e5f6...',
-        description: 'Token de verificação de email recebido por email',
+        example: '123456',
+        description: 'Código de 6 dígitos recebido por email',
     }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'Token é obrigatório' }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'Código é obrigatório' }),
+    (0, class_validator_1.Length)(6, 6, { message: 'Código deve ter 6 dígitos' }),
+    (0, class_validator_1.Matches)(/^\d{6}$/, { message: 'Código deve conter apenas números' }),
     __metadata("design:type", String)
-], VerifyEmailDto.prototype, "token", void 0);
+], VerifyEmailDto.prototype, "code", void 0);
 //# sourceMappingURL=verify-email.dto.js.map

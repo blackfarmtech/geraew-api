@@ -38,4 +38,5 @@ export declare class GenerationProcessor extends WorkerHost {
     private cleanupInputFiles;
     private loadInputImagesAsBase64;
     private downloadToBase64;
+    private generateVideoPostProcessing;
 }

@@ -20,6 +20,7 @@ let EmailService = EmailService_1 = class EmailService {
     client = null;
     fromEmail = '';
     frontendUrl = '';
+    logoUrl = '';
     constructor(configService) {
         this.configService = configService;
     }
@@ -27,6 +28,7 @@ let EmailService = EmailService_1 = class EmailService {
         const apiKey = this.configService.get('RESEND_API_KEY');
         this.fromEmail = this.configService.get('RESEND_FROM_EMAIL') || '';
         this.frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:5173';
+        this.logoUrl = this.configService.get('LOGO_URL') || '';
         if (!apiKey || !this.fromEmail) {
             this.logger.warn('Resend credentials not configured — email sending will be unavailable');
             return;
@@ -34,18 +36,17 @@ let EmailService = EmailService_1 = class EmailService {
         this.client = new resend_1.Resend(apiKey);
         this.logger.log('Resend email service initialized');
     }
-    async sendVerificationEmail(to, name, verificationToken) {
+    async sendVerificationEmail(to, name, code) {
         if (!this.client) {
             this.logger.warn('Email service not configured — skipping verification email');
             return;
         }
-        const verifyUrl = `${this.frontendUrl}/verify-email?token=${verificationToken}`;
         try {
             const { error } = await this.client.emails.send({
                 from: this.fromEmail,
                 to: [to],
-                subject: 'Confirme seu email — Geraew',
-                html: this.getVerificationTemplate(name, verifyUrl),
+                subject: 'Seu código de verificação — Geraew',
+                html: this.getVerificationTemplate(name, code),
             });
             if (error) {
                 this.logger.error(`Failed to send verification email to ${to}: ${JSON.stringify(error)}`);
@@ -102,69 +103,115 @@ let EmailService = EmailService_1 = class EmailService {
             this.logger.error(`Failed to send welcome email: ${error.message}`);
         }
     }
-    getVerificationTemplate(name, verifyUrl) {
+    getVerificationTemplate(_name, code) {
+        const logoHtml = this.logoUrl
+            ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+            : '';
         return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-  <h2 style="color: #7c3aed;">Geraew</h2>
-  <p>Olá, ${name}!</p>
-  <p>Obrigado por se cadastrar. Para ativar sua conta, confirme seu email clicando no botão abaixo:</p>
-  <div style="text-align: center; margin: 30px 0;">
-    <a href="${verifyUrl}"
-       style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-      Confirmar Email
-    </a>
-  </div>
-  <p>Este link é válido por <strong>24 horas</strong>.</p>
-  <p>Se você não criou uma conta no Geraew, ignore este email.</p>
-  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-  <p style="font-size: 12px; color: #999;">Geraew — Geração de imagens e vídeos com IA</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Código de verificação</h1>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Insira o código de verificação abaixo para confirmar seu email:</p>
+              <p style="margin: 0 0 28px; font-size: 36px; font-weight: 700; color: #1a1a1a; letter-spacing: 6px; line-height: 1;">${code}</p>
+              <p style="margin: 0 0 0; font-size: 15px; color: #666; line-height: 1.6;">Para proteger sua conta, não compartilhe este código.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1a1a1a;">Não solicitou este código?</p>
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Se você não criou uma conta no Geraew, ignore este email.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
     }
-    getPasswordResetTemplate(name, resetUrl) {
+    getPasswordResetTemplate(_name, resetUrl) {
+        const logoHtml = this.logoUrl
+            ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+            : '';
         return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-  <h2 style="color: #7c3aed;">Geraew</h2>
-  <p>Olá, ${name}!</p>
-  <p>Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:</p>
-  <div style="text-align: center; margin: 30px 0;">
-    <a href="${resetUrl}"
-       style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-      Redefinir Senha
-    </a>
-  </div>
-  <p>Este link é válido por <strong>15 minutos</strong>.</p>
-  <p>Se você não solicitou esta alteração, ignore este email. Sua senha permanecerá a mesma.</p>
-  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-  <p style="font-size: 12px; color: #999;">Geraew — Geração de imagens e vídeos com IA</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Redefinição de senha</h1>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:</p>
+              <div style="margin: 0 0 28px;">
+                <a href="${resetUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Redefinir Senha
+                </a>
+              </div>
+              <p style="margin: 0; font-size: 15px; color: #666; line-height: 1.6;">Este link é válido por <strong>15 minutos</strong>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1a1a1a;">Não solicitou esta alteração?</p>
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Ignore este email. Sua senha permanecerá a mesma.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
     }
     getWelcomeTemplate(name) {
-        const dashboardUrl = `${this.frontendUrl}/dashboard`;
+        const dashboardUrl = `${this.frontendUrl}`;
+        const logoHtml = this.logoUrl
+            ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+            : '';
         return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-  <h2 style="color: #7c3aed;">Bem-vindo ao Geraew!</h2>
-  <p>Olá, ${name}!</p>
-  <p>Seu email foi confirmado e sua conta está pronta. Você já pode começar a gerar imagens e vídeos incríveis com inteligência artificial.</p>
-  <p>Seu plano Free inclui <strong>30 créditos por dia</strong> para você explorar a plataforma.</p>
-  <div style="text-align: center; margin: 30px 0;">
-    <a href="${dashboardUrl}"
-       style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-      Começar a Criar
-    </a>
-  </div>
-  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-  <p style="font-size: 12px; color: #999;">Geraew — Geração de imagens e vídeos com IA</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Bem-vindo ao Geraew!</h1>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Olá, ${name}! Seu email foi confirmado e sua conta está pronta.</p>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Seu plano Free inclui <strong>30 créditos Mensais</strong> para você explorar a plataforma.</p>
+              <div style="margin: 0 0 0;">
+                <a href="${dashboardUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Começar a Criar
+                </a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
     }

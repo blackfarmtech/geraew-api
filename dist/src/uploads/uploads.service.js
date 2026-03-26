@@ -166,10 +166,17 @@ let UploadsService = UploadsService_1 = class UploadsService {
         }
         const tempDir = path.join('/tmp', `vidthumb-${(0, crypto_1.randomUUID)()}`);
         fs.mkdirSync(tempDir, { recursive: true });
+        const videoPath = path.join(tempDir, 'input.mp4');
         const framePath = path.join(tempDir, 'frame.jpg');
         try {
+            const response = await fetch(videoUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download video: ${response.status}`);
+            }
+            const videoBuffer = Buffer.from(await response.arrayBuffer());
+            fs.writeFileSync(videoPath, videoBuffer);
             await new Promise((resolve, reject) => {
-                ffmpeg(videoUrl)
+                ffmpeg(videoPath)
                     .seekInput(0)
                     .frames(1)
                     .output(framePath)

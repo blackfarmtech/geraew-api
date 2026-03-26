@@ -392,29 +392,30 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
         }
         const isImage = generation?.type === client_1.GenerationType.TEXT_TO_IMAGE ||
             generation?.type === client_1.GenerationType.IMAGE_TO_IMAGE;
-        let thumbnailUrls;
+        let thumbnailUrls = result.outputUrls.map(() => null);
+        let blurDataUrls = result.outputUrls.map(() => null);
         if (isImage) {
-            thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
-                .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.webp`)
-                .catch(() => null)));
-        }
-        else {
-            thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
-                .generateVideoThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.webp`)
-                .catch(() => null)));
-        }
-        const blurDataUrls = await Promise.all(result.outputUrls.map(async (url) => {
             try {
-                const res = await fetch(url);
-                if (!res.ok)
-                    return null;
-                const buf = Buffer.from(await res.arrayBuffer());
-                return this.uploadsService.generateBlurDataUrl(buf);
+                thumbnailUrls = await Promise.all(result.outputUrls.map((url, i) => this.uploadsService
+                    .generateThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.webp`)
+                    .catch(() => null)));
+                blurDataUrls = await Promise.all(result.outputUrls.map(async (url) => {
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok)
+                            return null;
+                        const buf = Buffer.from(await res.arrayBuffer());
+                        return this.uploadsService.generateBlurDataUrl(buf);
+                    }
+                    catch {
+                        return null;
+                    }
+                }));
             }
-            catch {
-                return null;
+            catch (err) {
+                this.logger.warn(`Image post-processing failed for ${generationId}: ${err.message}`);
             }
-        }));
+        }
         const requestedCount = generation?.quantity ?? result.outputUrls.length;
         const actualCount = result.outputUrls.length;
         let creditsRefunded = 0;
@@ -458,6 +459,9 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
             },
         });
         this.logger.log(`Generation ${generationId} completed in ${processingTimeMs}ms — ${result.outputUrls.length} output(s)`);
+        if (!isImage) {
+            this.generateVideoPostProcessing(generationId, result.outputUrls).catch((err) => this.logger.warn(`Video post-processing failed for ${generationId}: ${err.message}`));
+        }
         this.cleanupInputFiles(generationId);
     }
     async onFailed(job, error) {
@@ -557,6 +561,44 @@ let GenerationProcessor = GenerationProcessor_1 = class GenerationProcessor exte
         }
         const buffer = Buffer.from(await response.arrayBuffer());
         return buffer.toString('base64');
+    }
+    async generateVideoPostProcessing(generationId, outputUrls) {
+        const thumbnailUrls = await Promise.all(outputUrls.map((url, i) => this.uploadsService
+            .generateVideoThumbnail(url, `thumbnails/${generationId}`, `thumb_${i}.webp`)
+            .catch(() => null)));
+        const blurDataUrls = await Promise.all(thumbnailUrls.map(async (thumbUrl) => {
+            if (!thumbUrl)
+                return null;
+            try {
+                const res = await fetch(thumbUrl);
+                if (!res.ok)
+                    return null;
+                const buf = Buffer.from(await res.arrayBuffer());
+                return this.uploadsService.generateBlurDataUrl(buf);
+            }
+            catch {
+                return null;
+            }
+        }));
+        const outputs = await this.prisma.generationOutput.findMany({
+            where: { generationId },
+            orderBy: { order: 'asc' },
+            select: { id: true, order: true },
+        });
+        await Promise.all(outputs.map((output) => {
+            const thumbUrl = thumbnailUrls[output.order] ?? null;
+            const blurUrl = blurDataUrls[output.order] ?? null;
+            if (!thumbUrl && !blurUrl)
+                return Promise.resolve();
+            return this.prisma.generationOutput.update({
+                where: { id: output.id },
+                data: {
+                    ...(thumbUrl && { thumbnailUrl: thumbUrl }),
+                    ...(blurUrl && { blurDataUrl: blurUrl }),
+                },
+            });
+        }));
+        this.logger.log(`Video post-processing done for ${generationId}: ${thumbnailUrls.filter(Boolean).length} thumbnail(s)`);
     }
 };
 exports.GenerationProcessor = GenerationProcessor;

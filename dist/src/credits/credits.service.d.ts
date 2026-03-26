@@ -13,10 +13,10 @@ export declare class CreditsService {
     getBalance(userId: string): Promise<CreditBalanceResponseDto>;
     getTransactions(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<CreditTransactionResponseDto>>;
     getPackages(): Promise<{
-        id: string;
         name: string;
-        isActive: boolean;
+        id: string;
         createdAt: Date;
+        isActive: boolean;
         priceCents: number;
         sortOrder: number;
         stripePriceId: string | null;

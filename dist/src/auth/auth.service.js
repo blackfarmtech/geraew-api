@@ -142,16 +142,16 @@ let AuthService = AuthService_1 = class AuthService {
             });
             return newUser;
         });
-        const verificationToken = (0, crypto_1.randomBytes)(32).toString('hex');
-        const verificationTokenHash = (0, crypto_1.createHash)('sha256').update(verificationToken).digest('hex');
+        const verificationCode = this.generateSixDigitCode();
+        const verificationCodeHash = (0, crypto_1.createHash)('sha256').update(verificationCode).digest('hex');
         await this.prisma.emailVerificationToken.create({
             data: {
                 userId: user.id,
-                tokenHash: verificationTokenHash,
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                tokenHash: verificationCodeHash,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        this.emailService.sendVerificationEmail(user.email, user.name, verificationToken).catch((err) => {
+        this.emailService.sendVerificationEmail(user.email, user.name, verificationCode).catch((err) => {
             this.logger.error(`Failed to send verification email: ${err.message}`);
         });
         const tokens = await this.generateTokens(user);
@@ -407,8 +407,8 @@ let AuthService = AuthService_1 = class AuthService {
         });
         return { message: 'Logout realizado com sucesso' };
     }
-    async verifyEmail(token) {
-        const tokenHash = (0, crypto_1.createHash)('sha256').update(token).digest('hex');
+    async verifyEmail(code) {
+        const tokenHash = (0, crypto_1.createHash)('sha256').update(code).digest('hex');
         const verificationToken = await this.prisma.emailVerificationToken.findFirst({
             where: {
                 tokenHash,
@@ -417,7 +417,7 @@ let AuthService = AuthService_1 = class AuthService {
             },
         });
         if (!verificationToken) {
-            throw new common_1.BadRequestException('Token inválido ou expirado');
+            throw new common_1.BadRequestException('Código inválido ou expirado');
         }
         await this.prisma.$transaction(async (tx) => {
             await tx.user.update({
@@ -457,16 +457,16 @@ let AuthService = AuthService_1 = class AuthService {
             where: { userId: user.id, used: false },
             data: { used: true },
         });
-        const verificationToken = (0, crypto_1.randomBytes)(32).toString('hex');
-        const tokenHash = (0, crypto_1.createHash)('sha256').update(verificationToken).digest('hex');
+        const verificationCode = this.generateSixDigitCode();
+        const tokenHash = (0, crypto_1.createHash)('sha256').update(verificationCode).digest('hex');
         await this.prisma.emailVerificationToken.create({
             data: {
                 userId: user.id,
                 tokenHash,
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        this.emailService.sendVerificationEmail(user.email, user.name, verificationToken).catch((err) => {
+        this.emailService.sendVerificationEmail(user.email, user.name, verificationCode).catch((err) => {
             this.logger.error(`Failed to send verification email: ${err.message}`);
         });
         return { message: 'Se o email existir e não estiver verificado, um novo link será enviado' };
@@ -532,6 +532,11 @@ let AuthService = AuthService_1 = class AuthService {
             });
         });
         return { message: 'Senha alterada com sucesso' };
+    }
+    generateSixDigitCode() {
+        const bytes = (0, crypto_1.randomBytes)(4);
+        const num = bytes.readUInt32BE(0) % 900000 + 100000;
+        return num.toString();
     }
 };
 exports.AuthService = AuthService;

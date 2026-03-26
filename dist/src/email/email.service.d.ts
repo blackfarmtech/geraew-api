@@ -6,9 +6,10 @@ export declare class EmailService implements OnModuleInit {
     private client;
     private fromEmail;
     private frontendUrl;
+    private logoUrl;
     constructor(configService: ConfigService);
     onModuleInit(): void;
-    sendVerificationEmail(to: string, name: string, verificationToken: string): Promise<void>;
+    sendVerificationEmail(to: string, name: string, code: string): Promise<void>;
     sendPasswordResetEmail(to: string, name: string, resetToken: string): Promise<void>;
     sendWelcomeEmail(to: string, name: string): Promise<void>;
     private getVerificationTemplate;

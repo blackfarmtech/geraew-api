@@ -37,7 +37,7 @@ export declare class AuthService {
     logout(refreshToken: string): Promise<{
         message: string;
     }>;
-    verifyEmail(token: string): Promise<{
+    verifyEmail(code: string): Promise<{
         message: string;
     }>;
     resendVerificationEmail(email: string): Promise<{
@@ -50,4 +50,5 @@ export declare class AuthService {
     resetPassword(token: string, newPassword: string): Promise<{
         message: string;
     }>;
+    private generateSixDigitCode;
 }

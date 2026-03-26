@@ -186,11 +186,11 @@ export class AuthController {
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Verificar email com token' })
+  @ApiOperation({ summary: 'Verificar email com código de 6 dígitos' })
   @ApiResponse({ status: 200, description: 'Email verificado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Token inválido ou expirado' })
+  @ApiResponse({ status: 400, description: 'Código inválido ou expirado' })
   async verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ message: string }> {
-    return this.authService.verifyEmail(dto.token);
+    return this.authService.verifyEmail(dto.code);
   }
 
   @Public()
