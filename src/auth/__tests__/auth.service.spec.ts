@@ -37,7 +37,7 @@ const mockPlan = {
   id: 'plan-free',
   slug: 'free',
   name: 'Free',
-  creditsPerMonth: 30,
+  creditsPerMonth: 300,
 };
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ describe('AuthService', () => {
       expect(mockPrisma.creditBalance.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: mockUser.id,
-          planCreditsRemaining: 30,
+          planCreditsRemaining: 300,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
         }),
@@ -195,7 +195,7 @@ describe('AuthService', () => {
         data: expect.objectContaining({
           userId: mockUser.id,
           type: 'SUBSCRIPTION_RENEWAL',
-          amount: 30,
+          amount: 300,
           source: 'plan',
         }),
       });

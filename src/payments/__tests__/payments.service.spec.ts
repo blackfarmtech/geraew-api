@@ -10,7 +10,7 @@ const mockPlanStarter = {
   slug: 'starter',
   name: 'Starter',
   priceCents: 2990,
-  creditsPerMonth: 1000,
+  creditsPerMonth: 10000,
 };
 
 const mockPlanPro = {
@@ -18,7 +18,7 @@ const mockPlanPro = {
   slug: 'pro',
   name: 'Pro',
   priceCents: 8990,
-  creditsPerMonth: 3500,
+  creditsPerMonth: 35000,
 };
 
 const mockPlanFree = {
@@ -26,7 +26,7 @@ const mockPlanFree = {
   slug: 'free',
   name: 'Free',
   priceCents: 0,
-  creditsPerMonth: 30,
+  creditsPerMonth: 300,
 };
 
 const mockSubscription = {
@@ -45,9 +45,9 @@ const mockSubscription = {
 
 const mockCreditBalance = {
   userId: 'user-1',
-  planCreditsRemaining: 800,
-  bonusCreditsRemaining: 500,
-  planCreditsUsed: 200,
+  planCreditsRemaining: 8000,
+  bonusCreditsRemaining: 5000,
+  planCreditsUsed: 2000,
   periodStart: new Date('2026-03-01'),
   periodEnd: new Date('2026-04-01'),
 };
@@ -55,7 +55,7 @@ const mockCreditBalance = {
 const mockCreditPackage = {
   id: 'pkg-500',
   name: 'Pacote 500',
-  credits: 500,
+  credits: 5000,
   priceCents: 1790,
 };
 
@@ -487,7 +487,7 @@ describe('PaymentsService', () => {
         type: 'CREDIT_PURCHASE',
         status: 'COMPLETED',
         subscriptionId: null,
-        creditPackage: { ...mockCreditPackage, credits: 500 },
+        creditPackage: { ...mockCreditPackage, credits: 5000 },
         subscription: null,
       };
       mockPrisma.payment.findFirst.mockResolvedValue(mockPayment);
@@ -499,7 +499,7 @@ describe('PaymentsService', () => {
           creditBalance: {
             findUnique: jest.fn().mockResolvedValue({
               userId: 'user-1',
-              bonusCreditsRemaining: 200, // menos que os 500 do pacote
+              bonusCreditsRemaining: 2000, // menos que os 5000 do pacote
             }),
             updateMany: jest.fn(),
           },
@@ -512,7 +512,7 @@ describe('PaymentsService', () => {
       await service.handleRefund('pi_partial', null, 1790);
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
-      // O safe deduction garante que min(500, 200) = 200 é usado
+      // O safe deduction garante que min(5000, 2000) = 2000 é usado
     });
   });
 });

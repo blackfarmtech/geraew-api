@@ -8,16 +8,16 @@ const makeGeneration = (overrides: Record<string, any> = {}) => ({
   id: 'gen-1',
   userId: 'user-1',
   status: 'PROCESSING',
-  creditsConsumed: 15,
+  creditsConsumed: 150,
   createdAt: new Date('2026-03-01T10:00:00Z'),
   ...overrides,
 });
 
 const mockCreditBalance = {
   userId: 'user-1',
-  planCreditsRemaining: 500,
-  bonusCreditsRemaining: 200,
-  planCreditsUsed: 500,
+  planCreditsRemaining: 5000,
+  bonusCreditsRemaining: 2000,
+  planCreditsUsed: 5000,
 };
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -88,23 +88,23 @@ describe('StuckGenerationsService', () => {
     });
 
     it('deve estornar créditos do plano a partir de transações de débito do plano', async () => {
-      const gen = makeGeneration({ creditsConsumed: 15 });
+      const gen = makeGeneration({ creditsConsumed: 150 });
       mockPrisma.generation.findMany.mockResolvedValue([gen]);
 
       mockPrisma._tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'ct-debit-1', source: 'plan', amount: -10, type: 'GENERATION_DEBIT' },
-        { id: 'ct-debit-2', source: 'plan', amount: -5, type: 'GENERATION_DEBIT' },
+        { id: 'ct-debit-1', source: 'plan', amount: -100, type: 'GENERATION_DEBIT' },
+        { id: 'ct-debit-2', source: 'plan', amount: -50, type: 'GENERATION_DEBIT' },
       ]);
 
       await service.handleStuckGenerations();
 
-      // Verifica atualização do saldo com estorno de 15 créditos do plano
+      // Verifica atualização do saldo com estorno de 150 créditos do plano
       expect(mockPrisma._tx.creditBalance.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { userId: 'user-1' },
           data: expect.objectContaining({
-            planCreditsRemaining: 500 + 15,
-            planCreditsUsed: 500 - 15,
+            planCreditsRemaining: 5000 + 150,
+            planCreditsUsed: 5000 - 150,
           }),
         }),
       );
@@ -115,7 +115,7 @@ describe('StuckGenerationsService', () => {
           data: expect.objectContaining({
             userId: 'user-1',
             type: 'GENERATION_REFUND',
-            amount: 15,
+            amount: 150,
             source: 'plan',
             generationId: 'gen-1',
           }),
@@ -124,12 +124,12 @@ describe('StuckGenerationsService', () => {
     });
 
     it('deve estornar créditos bônus a partir de transações de débito bônus', async () => {
-      const gen = makeGeneration({ creditsConsumed: 10 });
+      const gen = makeGeneration({ creditsConsumed: 100 });
       mockPrisma.generation.findMany.mockResolvedValue([gen]);
 
       mockPrisma._tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'ct-debit-1', source: 'plan', amount: -6, type: 'GENERATION_DEBIT' },
-        { id: 'ct-debit-2', source: 'bonus', amount: -4, type: 'GENERATION_DEBIT' },
+        { id: 'ct-debit-1', source: 'plan', amount: -60, type: 'GENERATION_DEBIT' },
+        { id: 'ct-debit-2', source: 'bonus', amount: -40, type: 'GENERATION_DEBIT' },
       ]);
 
       await service.handleStuckGenerations();
@@ -137,9 +137,9 @@ describe('StuckGenerationsService', () => {
       expect(mockPrisma._tx.creditBalance.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            planCreditsRemaining: 500 + 6,
-            bonusCreditsRemaining: 200 + 4,
-            planCreditsUsed: 500 - 6,
+            planCreditsRemaining: 5000 + 60,
+            bonusCreditsRemaining: 2000 + 40,
+            planCreditsUsed: 5000 - 60,
           }),
         }),
       );
@@ -149,7 +149,7 @@ describe('StuckGenerationsService', () => {
     });
 
     it('deve usar estorno bônus como fallback quando não há registros de débito', async () => {
-      const gen = makeGeneration({ creditsConsumed: 20 });
+      const gen = makeGeneration({ creditsConsumed: 200 });
       mockPrisma.generation.findMany.mockResolvedValue([gen]);
 
       // Sem transações de débito
@@ -160,7 +160,7 @@ describe('StuckGenerationsService', () => {
       expect(mockPrisma._tx.creditBalance.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            bonusCreditsRemaining: 200 + 20,
+            bonusCreditsRemaining: 2000 + 200,
           }),
         }),
       );
@@ -169,7 +169,7 @@ describe('StuckGenerationsService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             type: 'GENERATION_REFUND',
-            amount: 20,
+            amount: 200,
             source: 'bonus',
           }),
         }),
@@ -213,11 +213,11 @@ describe('StuckGenerationsService', () => {
     });
 
     it('deve lidar graciosamente quando creditBalance não existe', async () => {
-      const gen = makeGeneration({ creditsConsumed: 10 });
+      const gen = makeGeneration({ creditsConsumed: 100 });
       mockPrisma.generation.findMany.mockResolvedValue([gen]);
 
       mockPrisma._tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'ct-1', source: 'plan', amount: -10, type: 'GENERATION_DEBIT' },
+        { id: 'ct-1', source: 'plan', amount: -100, type: 'GENERATION_DEBIT' },
       ]);
       mockPrisma._tx.creditBalance.findUnique.mockResolvedValue(null);
 

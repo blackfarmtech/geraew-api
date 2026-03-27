@@ -9,7 +9,7 @@ const mockPlanFree = {
   slug: 'free',
   name: 'Free',
   priceCents: 0,
-  creditsPerMonth: 30,
+  creditsPerMonth: 300,
 };
 
 const mockPlanStarter = {
@@ -17,7 +17,7 @@ const mockPlanStarter = {
   slug: 'starter',
   name: 'Starter',
   priceCents: 2990,
-  creditsPerMonth: 1000,
+  creditsPerMonth: 10000,
 };
 
 const makeSubscription = (overrides: Record<string, any> = {}) => ({
@@ -144,7 +144,7 @@ describe('PaymentRetryService', () => {
         expect.objectContaining({
           where: { userId: 'user-1' },
           update: expect.objectContaining({
-            planCreditsRemaining: 30,
+            planCreditsRemaining: 300,
             planCreditsUsed: 0,
           }),
         }),

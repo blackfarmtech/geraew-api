@@ -18,21 +18,21 @@ Toda operação consome créditos fixos por geração (não por segundo).
 
 | Operação | Créditos | Custo API real | Base |
 |---|---|---|---|
-| NB2 1K | 9 | R$0,23 | Direto USD |
-| NB2 2K | 13 | R$0,34 | Direto USD |
-| NB2 4K | 19 | R$0,51 | Direto USD |
-| NBPro 1K/2K | 19 | R$0,51 | Direto USD |
-| NBPro 4K | 25 | R$0,68 | Direto USD |
-| Motion Control 720p (por segundo) | 7 | R$0,17 | Direto USD |
-| Motion Control 1080p (por segundo) | 10 | R$0,26 | Direto USD |
-| Veo Fast 720p/1080p sem áudio (8s) | 60 | R$0,13 | Vertex A |
-| Veo Fast 720p/1080p com áudio (8s) | 90 | R$0,20 | Vertex A |
-| Veo Fast 4K sem áudio (8s) | 160 | R$0,40 | Vertex A |
-| Veo Fast 4K com áudio (8s) | 180 | R$0,47 | Vertex A |
-| Veo Max 720p/1080p sem áudio (8s) | 100 | R$0,27 | Vertex A |
-| Veo Max 720p/1080p com áudio (8s) | 200 | R$0,53 | Vertex A |
-| Veo Max 4K sem áudio (8s) | 200 | R$0,53 | Vertex A |
-| Veo Max 4K com áudio (8s) | 280 | R$0,80 | Vertex A |
+| NB2 1K | 90 | R$0,23 | Direto USD |
+| NB2 2K | 130 | R$0,34 | Direto USD |
+| NB2 4K | 190 | R$0,51 | Direto USD |
+| NBPro 1K/2K | 190 | R$0,51 | Direto USD |
+| NBPro 4K | 250 | R$0,68 | Direto USD |
+| Motion Control 720p (por segundo) | 70 | R$0,17 | Direto USD |
+| Motion Control 1080p (por segundo) | 100 | R$0,26 | Direto USD |
+| Veo Fast 720p/1080p sem áudio (8s) | 600 | R$0,13 | Vertex A |
+| Veo Fast 720p/1080p com áudio (8s) | 900 | R$0,20 | Vertex A |
+| Veo Fast 4K sem áudio (8s) | 1600 | R$0,40 | Vertex A |
+| Veo Fast 4K com áudio (8s) | 1800 | R$0,47 | Vertex A |
+| Veo Max 720p/1080p sem áudio (8s) | 1000 | R$0,27 | Vertex A |
+| Veo Max 720p/1080p com áudio (8s) | 2000 | R$0,53 | Vertex A |
+| Veo Max 4K sem áudio (8s) | 2000 | R$0,53 | Vertex A |
+| Veo Max 4K com áudio (8s) | 2800 | R$0,80 | Vertex A |
 
 ### Custos
 
@@ -54,8 +54,8 @@ Toda operação consome créditos fixos por geração (não por segundo).
 | | Free | Starter | Creator | Pro | Studio |
 |---|---|---|---|---|---|
 | Preço | R$ 0 | R$ 39 | R$ 89 | R$ 179 | R$ 369 |
-| Créditos | 30/dia | 400 | 1.200 | 3.000 | 8.000 |
-| R$/crédito | — | R$ 0,0975 | R$ 0,0742 | R$ 0,0597 | R$ 0,0461 |
+| Créditos | 300/dia | 4.000 | 12.000 | 30.000 | 80.000 |
+| R$/crédito | — | R$ 0,00975 | R$ 0,00742 | R$ 0,00597 | R$ 0,00461 |
 | Marca d'água | Sim | Não | Não | Não | Não |
 | Gerações simultâneas | 1 | 2 | 3 | 5 | 10 |
 | Retenção galeria | 30 dias | Ilimitado | Ilimitado | Ilimitado | Ilimitado |
@@ -66,20 +66,20 @@ Toda operação consome créditos fixos por geração (não por segundo).
 
 | Pacote | Preço | Créditos | R$/crédito | vs Starter |
 |---|---|---|---|---|
-| Boost P | R$ 14 | 70 | R$ 0,200 | +105% |
-| Boost M | R$ 26 | 170 | R$ 0,153 | +57% |
-| Boost G | R$ 36 | 320 | R$ 0,113 | +16% |
+| Boost P | R$ 14 | 700 | R$ 0,0200 | +105% |
+| Boost M | R$ 26 | 1.700 | R$ 0,0153 | +57% |
+| Boost G | R$ 36 | 3.200 | R$ 0,0113 | +16% |
 
 Nota: Boosts são sempre mais caros por crédito que qualquer plano (por design, para incentivar compra de plano).
 
 ### Regras de Créditos
 
-- Free plan: **30 créditos por dia**, não acumula, reset diário à meia-noite
+- Free plan: **300 créditos por dia**, não acumula, reset diário à meia-noite
 - Paid plans: créditos renovam na compra/renovação do plano
 - Créditos não acumulam ao trocar de plano — renovam na nova compra
 - Free plan: Veo Fast e Veo Max estão **bloqueados** (requer plano pago)
 - Boost packages são sempre mais caros por crédito que qualquer plano
-- Regra de ouro: Boost G (R$36/320cr) está R$3 abaixo do Starter (R$39/400cr) — UI destaca isso
+- Regra de ouro: Boost G (R$36/3.200cr) está R$3 abaixo do Starter (R$39/4.000cr) — UI destaca isso
 - Na hora do débito, consumir primeiro créditos do plano, depois os avulsos (bônus)
 - Gerações com status `failed` sempre devolvem créditos automaticamente
 
@@ -359,11 +359,11 @@ CREATE INDEX idx_webhook_logs_external ON webhook_logs(external_id);
 
 ```sql
 INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_generations, has_watermark, gallery_retention_days, has_api_access, has_veo_access, sort_order) VALUES
-('free', 'Free', 0, 30, 1, true, 30, false, false, 0),
-('starter', 'Starter', 3900, 400, 2, false, null, false, true, 1),
-('creator', 'Creator', 8900, 1200, 3, false, null, false, true, 2),
-('pro', 'Pro', 17900, 3000, 5, false, null, false, true, 3),
-('studio', 'Studio', 36900, 8000, 10, false, null, true, true, 4);
+('free', 'Free', 0, 300, 1, true, 30, false, false, 0),
+('starter', 'Starter', 3900, 4000, 2, false, null, false, true, 1),
+('creator', 'Creator', 8900, 12000, 3, false, null, false, true, 2),
+('pro', 'Pro', 17900, 30000, 5, false, null, false, true, 3),
+('studio', 'Studio', 36900, 80000, 10, false, null, true, true, 4);
 ```
 
 ### Seed dos Custos de Crédito
@@ -371,42 +371,42 @@ INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_ge
 ```sql
 INSERT INTO credit_costs (generation_type, resolution, has_audio, credits_per_unit, is_per_second) VALUES
 -- Imagens NB2 (v4)
-('text_to_image', '1k', false, 9, false),
-('text_to_image', '2k', false, 13, false),
-('text_to_image', '4k', false, 19, false),
-('image_to_image', '1k', false, 9, false),
-('image_to_image', '2k', false, 13, false),
-('image_to_image', '4k', false, 19, false),
+('text_to_image', '1k', false, 90, false),
+('text_to_image', '2k', false, 130, false),
+('text_to_image', '4k', false, 190, false),
+('image_to_image', '1k', false, 90, false),
+('image_to_image', '2k', false, 130, false),
+('image_to_image', '4k', false, 190, false),
 -- Imagens NBPro (v4)
--- NBPro 1K/2K = 19 créditos, NBPro 4K = 25 créditos
+-- NBPro 1K/2K = 190 créditos, NBPro 4K = 250 créditos
 -- (diferenciação por modelo em parameters JSONB)
 -- Motion Control (Kling 2.6) — por geração
-('motion_control', '720p', false, 7, false),
-('motion_control', '1080p', false, 10, false),
+('motion_control', '720p', false, 70, false),
+('motion_control', '1080p', false, 100, false),
 -- Veo Fast sem áudio (por geração, 8s)
-('text_to_video', '720p', false, 60, false),
-('text_to_video', '1080p', false, 60, false),
-('text_to_video', '4k', false, 160, false),
-('image_to_video', '720p', false, 60, false),
-('image_to_video', '1080p', false, 60, false),
-('image_to_video', '4k', false, 160, false),
+('text_to_video', '720p', false, 600, false),
+('text_to_video', '1080p', false, 600, false),
+('text_to_video', '4k', false, 1600, false),
+('image_to_video', '720p', false, 600, false),
+('image_to_video', '1080p', false, 600, false),
+('image_to_video', '4k', false, 1600, false),
 -- Veo Fast com áudio (por geração, 8s)
-('text_to_video', '720p', true, 90, false),
-('text_to_video', '1080p', true, 90, false),
-('text_to_video', '4k', true, 180, false),
-('image_to_video', '720p', true, 90, false),
-('image_to_video', '1080p', true, 90, false),
-('image_to_video', '4k', true, 180, false);
--- Nota: Veo Max diferenciado por model_tier no código (100/200/280 créditos)
+('text_to_video', '720p', true, 900, false),
+('text_to_video', '1080p', true, 900, false),
+('text_to_video', '4k', true, 1800, false),
+('image_to_video', '720p', true, 900, false),
+('image_to_video', '1080p', true, 900, false),
+('image_to_video', '4k', true, 1800, false);
+-- Nota: Veo Max diferenciado por model_tier no código (1000/2000/2800 créditos)
 ```
 
 ### Seed dos Pacotes de Créditos (Boost)
 
 ```sql
 INSERT INTO credit_packages (name, credits, price_cents, sort_order) VALUES
-('Boost P', 70, 1400, 0),
-('Boost M', 170, 2600, 1),
-('Boost G', 320, 3600, 2);
+('Boost P', 700, 1400, 0),
+('Boost M', 1700, 2600, 1),
+('Boost G', 3200, 3600, 2);
 ```
 
 ---

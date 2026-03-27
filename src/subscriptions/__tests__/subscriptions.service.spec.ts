@@ -16,7 +16,7 @@ const mockPlanFree = {
   slug: 'free',
   name: 'Free',
   priceCents: 0,
-  creditsPerMonth: 30,
+  creditsPerMonth: 300,
   maxConcurrentGenerations: 1,
   hasWatermark: true,
   galleryRetentionDays: 30,
@@ -29,7 +29,7 @@ const mockPlanStarter = {
   slug: 'starter',
   name: 'Starter',
   priceCents: 2990,
-  creditsPerMonth: 1000,
+  creditsPerMonth: 10000,
   maxConcurrentGenerations: 2,
   hasWatermark: false,
   galleryRetentionDays: null,
@@ -42,7 +42,7 @@ const mockPlanPro = {
   slug: 'pro',
   name: 'Pro',
   priceCents: 8990,
-  creditsPerMonth: 3500,
+  creditsPerMonth: 35000,
   maxConcurrentGenerations: 5,
   hasWatermark: false,
   galleryRetentionDays: null,
@@ -55,7 +55,7 @@ const mockPlanStudio = {
   slug: 'studio',
   name: 'Studio',
   priceCents: 36900,
-  creditsPerMonth: 8000,
+  creditsPerMonth: 80000,
   maxConcurrentGenerations: 10,
   hasWatermark: false,
   galleryRetentionDays: null,
@@ -162,7 +162,7 @@ describe('SubscriptionsService', () => {
       expect(result!.status).toBe('ACTIVE');
       expect(result!.plan.slug).toBe('starter');
       expect(result!.plan.priceCents).toBe(2990);
-      expect(result!.plan.creditsPerMonth).toBe(1000);
+      expect(result!.plan.creditsPerMonth).toBe(10000);
       expect(result!.cancelAtPeriodEnd).toBe(false);
       expect(result!.scheduledPlan).toBeUndefined();
     });

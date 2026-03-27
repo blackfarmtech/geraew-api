@@ -52,7 +52,7 @@ const mockPlan = {
   id: 'plan-1',
   slug: 'free',
   name: 'Free',
-  creditsPerMonth: 30,
+  creditsPerMonth: 300,
 };
 
 const mockResetToken = {

@@ -11,9 +11,9 @@ import { PlansService } from '../../plans/plans.service';
 
 const mockCreditBalance = {
   userId: 'user-1',
-  planCreditsRemaining: 800,
-  bonusCreditsRemaining: 200,
-  planCreditsUsed: 200,
+  planCreditsRemaining: 8000,
+  bonusCreditsRemaining: 2000,
+  planCreditsUsed: 2000,
   periodStart: new Date('2026-03-01'),
   periodEnd: new Date('2026-04-01'),
 };
@@ -49,7 +49,7 @@ const createMockPrisma = () => {
 
 const createMockPlansService = () => ({
   findAllPackages: jest.fn().mockResolvedValue([]),
-  calculateGenerationCost: jest.fn().mockResolvedValue(10),
+  calculateGenerationCost: jest.fn().mockResolvedValue(100),
 });
 
 let mockPrisma: ReturnType<typeof createMockPrisma>;
@@ -85,10 +85,10 @@ describe('CreditsService', () => {
       const result = await service.getBalance('user-1');
 
       expect(result).toEqual({
-        planCreditsRemaining: 800,
-        bonusCreditsRemaining: 200,
-        totalCreditsAvailable: 1000,
-        planCreditsUsed: 200,
+        planCreditsRemaining: 8000,
+        bonusCreditsRemaining: 2000,
+        totalCreditsAvailable: 10000,
+        planCreditsUsed: 2000,
         periodStart: mockCreditBalance.periodStart,
         periodEnd: mockCreditBalance.periodEnd,
       });
@@ -115,13 +115,13 @@ describe('CreditsService', () => {
     it('totalCreditsAvailable deve ser planCreditsRemaining + bonusCreditsRemaining', async () => {
       mockPrisma.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 350,
-        bonusCreditsRemaining: 150,
+        planCreditsRemaining: 3500,
+        bonusCreditsRemaining: 1500,
       });
 
       const result = await service.getBalance('user-1');
 
-      expect(result.totalCreditsAvailable).toBe(500);
+      expect(result.totalCreditsAvailable).toBe(5000);
       expect(result.totalCreditsAvailable).toBe(
         result.planCreditsRemaining + result.bonusCreditsRemaining,
       );
@@ -137,7 +137,7 @@ describe('CreditsService', () => {
       const mockTx = {
         id: 'tx-1',
         type: 'GENERATION_DEBIT',
-        amount: -10,
+        amount: -100,
         source: 'plan',
         description: 'Débito',
         generationId: 'gen-1',
@@ -162,7 +162,7 @@ describe('CreditsService', () => {
 
   describe('getPackages', () => {
     it('deve delegar para plansService.findAllPackages', async () => {
-      const packages = [{ id: 'pkg-1', name: 'Pacote 500', credits: 500 }];
+      const packages = [{ id: 'pkg-1', name: 'Pacote 500', credits: 5000 }];
       mockPlansService.findAllPackages.mockResolvedValue(packages);
 
       const result = await service.getPackages();
@@ -178,7 +178,7 @@ describe('CreditsService', () => {
 
   describe('estimateCost', () => {
     it('deve retornar custo correto e hasSufficientBalance=true quando há saldo', async () => {
-      mockPlansService.calculateGenerationCost.mockResolvedValue(50);
+      mockPlansService.calculateGenerationCost.mockResolvedValue(500);
 
       const result = await service.estimateCost(
         'user-1',
@@ -187,7 +187,7 @@ describe('CreditsService', () => {
       );
 
       expect(result).toEqual({
-        creditsRequired: 50,
+        creditsRequired: 500,
         hasSufficientBalance: true,
       });
       expect(mockPlansService.calculateGenerationCost).toHaveBeenCalledWith(
@@ -201,7 +201,7 @@ describe('CreditsService', () => {
     });
 
     it('deve retornar hasSufficientBalance=false quando saldo insuficiente', async () => {
-      mockPlansService.calculateGenerationCost.mockResolvedValue(2000);
+      mockPlansService.calculateGenerationCost.mockResolvedValue(20000);
 
       const result = await service.estimateCost(
         'user-1',
@@ -212,7 +212,7 @@ describe('CreditsService', () => {
       );
 
       expect(result).toEqual({
-        creditsRequired: 2000,
+        creditsRequired: 20000,
         hasSufficientBalance: false,
       });
     });
@@ -227,19 +227,19 @@ describe('CreditsService', () => {
       const tx = mockPrisma.__tx;
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 500,
-        bonusCreditsRemaining: 200,
-        planCreditsUsed: 100,
+        planCreditsRemaining: 5000,
+        bonusCreditsRemaining: 2000,
+        planCreditsUsed: 1000,
       });
 
-      await service.debit('user-1', 100, 'GENERATION_DEBIT' as any, 'gen-1');
+      await service.debit('user-1', 1000, 'GENERATION_DEBIT' as any, 'gen-1');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 400,
-          bonusCreditsRemaining: 200,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 4000,
+          bonusCreditsRemaining: 2000,
+          planCreditsUsed: 2000,
         },
       });
 
@@ -249,7 +249,7 @@ describe('CreditsService', () => {
         data: expect.objectContaining({
           userId: 'user-1',
           type: 'GENERATION_DEBIT',
-          amount: -100,
+          amount: -1000,
           source: 'plan',
           generationId: 'gen-1',
         }),
@@ -260,33 +260,33 @@ describe('CreditsService', () => {
       const tx = mockPrisma.__tx;
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 30,
-        bonusCreditsRemaining: 200,
-        planCreditsUsed: 70,
+        planCreditsRemaining: 300,
+        bonusCreditsRemaining: 2000,
+        planCreditsUsed: 700,
       });
 
-      await service.debit('user-1', 50, 'GENERATION_DEBIT' as any, 'gen-2');
+      await service.debit('user-1', 500, 'GENERATION_DEBIT' as any, 'gen-2');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
           planCreditsRemaining: 0,
-          bonusCreditsRemaining: 180,
-          planCreditsUsed: 100,
+          bonusCreditsRemaining: 1800,
+          planCreditsUsed: 1000,
         },
       });
 
-      // Duas transações: plan (30) + bonus (20)
+      // Duas transações: plan (300) + bonus (200)
       expect(tx.creditTransaction.create).toHaveBeenCalledTimes(2);
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          amount: -30,
+          amount: -300,
           source: 'plan',
         }),
       });
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          amount: -20,
+          amount: -200,
           source: 'bonus',
         }),
       });
@@ -297,18 +297,18 @@ describe('CreditsService', () => {
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
         planCreditsRemaining: 0,
-        bonusCreditsRemaining: 500,
-        planCreditsUsed: 1000,
+        bonusCreditsRemaining: 5000,
+        planCreditsUsed: 10000,
       });
 
-      await service.debit('user-1', 100, 'GENERATION_DEBIT' as any, 'gen-3');
+      await service.debit('user-1', 1000, 'GENERATION_DEBIT' as any, 'gen-3');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
           planCreditsRemaining: 0,
-          bonusCreditsRemaining: 400,
-          planCreditsUsed: 1000,
+          bonusCreditsRemaining: 4000,
+          planCreditsUsed: 10000,
         },
       });
 
@@ -316,7 +316,7 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledTimes(1);
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          amount: -100,
+          amount: -1000,
           source: 'bonus',
         }),
       });
@@ -326,16 +326,16 @@ describe('CreditsService', () => {
       const tx = mockPrisma.__tx;
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 10,
-        bonusCreditsRemaining: 5,
+        planCreditsRemaining: 100,
+        bonusCreditsRemaining: 50,
       });
 
       await expect(
-        service.debit('user-1', 100, 'GENERATION_DEBIT' as any),
+        service.debit('user-1', 1000, 'GENERATION_DEBIT' as any),
       ).rejects.toThrow(BadRequestException);
 
       await expect(
-        service.debit('user-1', 100, 'GENERATION_DEBIT' as any),
+        service.debit('user-1', 1000, 'GENERATION_DEBIT' as any),
       ).rejects.toThrow(/Créditos insuficientes/);
     });
 
@@ -344,7 +344,7 @@ describe('CreditsService', () => {
       tx.creditBalance.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.debit('user-sem-saldo', 10, 'GENERATION_DEBIT' as any),
+        service.debit('user-sem-saldo', 100, 'GENERATION_DEBIT' as any),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -352,14 +352,14 @@ describe('CreditsService', () => {
       const tx = mockPrisma.__tx;
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 60,
-        bonusCreditsRemaining: 100,
-        planCreditsUsed: 40,
+        planCreditsRemaining: 600,
+        bonusCreditsRemaining: 1000,
+        planCreditsUsed: 400,
       });
 
       await service.debit(
         'user-1',
-        80,
+        800,
         'GENERATION_DEBIT' as any,
         'gen-4',
         'Geração de imagem',
@@ -375,7 +375,7 @@ describe('CreditsService', () => {
         expect.objectContaining({
           userId: 'user-1',
           type: 'GENERATION_DEBIT',
-          amount: -60,
+          amount: -600,
           source: 'plan',
           generationId: 'gen-4',
           description: 'Geração de imagem',
@@ -385,7 +385,7 @@ describe('CreditsService', () => {
         expect.objectContaining({
           userId: 'user-1',
           type: 'GENERATION_DEBIT',
-          amount: -20,
+          amount: -200,
           source: 'bonus',
           generationId: 'gen-4',
           description: 'Geração de imagem',
@@ -397,17 +397,17 @@ describe('CreditsService', () => {
       const tx = mockPrisma.__tx;
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 300,
-        bonusCreditsRemaining: 100,
-        planCreditsUsed: 700,
+        planCreditsRemaining: 3000,
+        bonusCreditsRemaining: 1000,
+        planCreditsUsed: 7000,
       });
 
-      await service.debit('user-1', 50, 'GENERATION_DEBIT' as any);
+      await service.debit('user-1', 500, 'GENERATION_DEBIT' as any);
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            planCreditsUsed: 750,
+            planCreditsUsed: 7500,
           }),
         }),
       );
@@ -422,24 +422,24 @@ describe('CreditsService', () => {
     it('deve estornar para as fontes originais (plan->plan, bonus->bonus)', async () => {
       const tx = mockPrisma.__tx;
       tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'dt-1', amount: -60, source: 'plan', type: 'GENERATION_DEBIT' },
-        { id: 'dt-2', amount: -40, source: 'bonus', type: 'GENERATION_DEBIT' },
+        { id: 'dt-1', amount: -600, source: 'plan', type: 'GENERATION_DEBIT' },
+        { id: 'dt-2', amount: -400, source: 'bonus', type: 'GENERATION_DEBIT' },
       ]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 740,
-        bonusCreditsRemaining: 160,
-        planCreditsUsed: 260,
+        planCreditsRemaining: 7400,
+        bonusCreditsRemaining: 1600,
+        planCreditsUsed: 2600,
       });
 
-      await service.refund('user-1', 100, 'gen-1');
+      await service.refund('user-1', 1000, 'gen-1');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 800,
-          bonusCreditsRemaining: 200,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 8000,
+          bonusCreditsRemaining: 2000,
+          planCreditsUsed: 2000,
         },
       });
 
@@ -447,7 +447,7 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 60,
+          amount: 600,
           source: 'plan',
           generationId: 'gen-1',
         }),
@@ -455,7 +455,7 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 40,
+          amount: 400,
           source: 'bonus',
           generationId: 'gen-1',
         }),
@@ -467,19 +467,19 @@ describe('CreditsService', () => {
       tx.creditTransaction.findMany.mockResolvedValue([]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 800,
-        bonusCreditsRemaining: 100,
-        planCreditsUsed: 200,
+        planCreditsRemaining: 8000,
+        bonusCreditsRemaining: 1000,
+        planCreditsUsed: 2000,
       });
 
-      await service.refund('user-1', 50, 'gen-orphan');
+      await service.refund('user-1', 500, 'gen-orphan');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 800,
-          bonusCreditsRemaining: 150,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 8000,
+          bonusCreditsRemaining: 1500,
+          planCreditsUsed: 2000,
         },
       });
 
@@ -487,7 +487,7 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 50,
+          amount: 500,
           source: 'bonus',
         }),
       });
@@ -496,30 +496,30 @@ describe('CreditsService', () => {
     it('deve estornar tudo para plano quando só há débitos de plano', async () => {
       const tx = mockPrisma.__tx;
       tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'dt-1', amount: -100, source: 'plan', type: 'GENERATION_DEBIT' },
+        { id: 'dt-1', amount: -1000, source: 'plan', type: 'GENERATION_DEBIT' },
       ]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 700,
-        bonusCreditsRemaining: 200,
-        planCreditsUsed: 300,
+        planCreditsRemaining: 7000,
+        bonusCreditsRemaining: 2000,
+        planCreditsUsed: 3000,
       });
 
-      await service.refund('user-1', 100, 'gen-plan-only');
+      await service.refund('user-1', 1000, 'gen-plan-only');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 800,
-          bonusCreditsRemaining: 200,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 8000,
+          bonusCreditsRemaining: 2000,
+          planCreditsUsed: 2000,
         },
       });
 
       expect(tx.creditTransaction.create).toHaveBeenCalledTimes(1);
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          amount: 100,
+          amount: 1000,
           source: 'plan',
         }),
       });
@@ -528,25 +528,25 @@ describe('CreditsService', () => {
     it('deve distribuir estorno corretamente com fontes mistas', async () => {
       const tx = mockPrisma.__tx;
       tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'dt-1', amount: -70, source: 'plan', type: 'GENERATION_DEBIT' },
-        { id: 'dt-2', amount: -30, source: 'bonus', type: 'GENERATION_DEBIT' },
+        { id: 'dt-1', amount: -700, source: 'plan', type: 'GENERATION_DEBIT' },
+        { id: 'dt-2', amount: -300, source: 'bonus', type: 'GENERATION_DEBIT' },
       ]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 730,
-        bonusCreditsRemaining: 170,
-        planCreditsUsed: 270,
+        planCreditsRemaining: 7300,
+        bonusCreditsRemaining: 1700,
+        planCreditsUsed: 2700,
       });
 
-      await service.refund('user-1', 100, 'gen-mixed');
+      await service.refund('user-1', 1000, 'gen-mixed');
 
-      // planRefund = 70, bonusRefund = 30 (baseado nos débitos originais)
+      // planRefund = 700, bonusRefund = 300 (baseado nos débitos originais)
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 800,
-          bonusCreditsRemaining: 200,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 8000,
+          bonusCreditsRemaining: 2000,
+          planCreditsUsed: 2000,
         },
       });
     });
@@ -557,7 +557,7 @@ describe('CreditsService', () => {
       tx.creditBalance.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.refund('user-sem-saldo', 50, 'gen-x'),
+        service.refund('user-sem-saldo', 500, 'gen-x'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -569,29 +569,29 @@ describe('CreditsService', () => {
   describe('partialRefund', () => {
     it('deve distribuir estorno parcial proporcionalmente', async () => {
       const tx = mockPrisma.__tx;
-      // Débito original: 80 plan + 20 bonus = 100 total
+      // Débito original: 800 plan + 200 bonus = 1000 total
       tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'dt-1', amount: -80, source: 'plan', type: 'GENERATION_DEBIT' },
-        { id: 'dt-2', amount: -20, source: 'bonus', type: 'GENERATION_DEBIT' },
+        { id: 'dt-1', amount: -800, source: 'plan', type: 'GENERATION_DEBIT' },
+        { id: 'dt-2', amount: -200, source: 'bonus', type: 'GENERATION_DEBIT' },
       ]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 720,
-        bonusCreditsRemaining: 180,
-        planCreditsUsed: 280,
+        planCreditsRemaining: 7200,
+        bonusCreditsRemaining: 1800,
+        planCreditsUsed: 2800,
       });
 
-      // Estorno parcial de 50 (metade)
-      await service.partialRefund('user-1', 50, 'gen-partial');
+      // Estorno parcial de 500 (metade)
+      await service.partialRefund('user-1', 500, 'gen-partial');
 
-      // planRefund = Math.round(80/100 * 50) = 40
-      // bonusRefund = 50 - 40 = 10
+      // planRefund = Math.round(800/1000 * 500) = 400
+      // bonusRefund = 500 - 400 = 100
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 760,
-          bonusCreditsRemaining: 190,
-          planCreditsUsed: 240,
+          planCreditsRemaining: 7600,
+          bonusCreditsRemaining: 1900,
+          planCreditsUsed: 2400,
         },
       });
 
@@ -599,14 +599,14 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 40,
+          amount: 400,
           source: 'plan',
         }),
       });
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 10,
+          amount: 100,
           source: 'bonus',
         }),
       });
@@ -614,31 +614,31 @@ describe('CreditsService', () => {
 
     it('estorno parcial nunca deve exceder o débito original por fonte', async () => {
       const tx = mockPrisma.__tx;
-      // Débito original: 10 plan + 90 bonus = 100 total
+      // Débito original: 100 plan + 900 bonus = 1000 total
       tx.creditTransaction.findMany.mockResolvedValue([
-        { id: 'dt-1', amount: -10, source: 'plan', type: 'GENERATION_DEBIT' },
-        { id: 'dt-2', amount: -90, source: 'bonus', type: 'GENERATION_DEBIT' },
+        { id: 'dt-1', amount: -100, source: 'plan', type: 'GENERATION_DEBIT' },
+        { id: 'dt-2', amount: -900, source: 'bonus', type: 'GENERATION_DEBIT' },
       ]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 790,
-        bonusCreditsRemaining: 110,
-        planCreditsUsed: 210,
+        planCreditsRemaining: 7900,
+        bonusCreditsRemaining: 1100,
+        planCreditsUsed: 2100,
       });
 
-      // Estorno de 80
-      // planRefund = Math.round(10/100 * 80) = 8
-      // bonusRefund = 80 - 8 = 72
-      // 8 <= 10 (ok), 72 <= 90 (ok) — nenhum excede
-      await service.partialRefund('user-1', 80, 'gen-cap');
+      // Estorno de 800
+      // planRefund = Math.round(100/1000 * 800) = 80
+      // bonusRefund = 800 - 80 = 720
+      // 80 <= 100 (ok), 720 <= 900 (ok) — nenhum excede
+      await service.partialRefund('user-1', 800, 'gen-cap');
 
       const updateCall = tx.creditBalance.update.mock.calls[0][0];
-      const planRefund = updateCall.data.planCreditsRemaining - 790;
-      const bonusRefund = updateCall.data.bonusCreditsRemaining - 110;
+      const planRefund = updateCall.data.planCreditsRemaining - 7900;
+      const bonusRefund = updateCall.data.bonusCreditsRemaining - 1100;
 
-      expect(planRefund).toBeLessThanOrEqual(10);
-      expect(bonusRefund).toBeLessThanOrEqual(90);
-      expect(planRefund + bonusRefund).toBe(80);
+      expect(planRefund).toBeLessThanOrEqual(100);
+      expect(bonusRefund).toBeLessThanOrEqual(900);
+      expect(planRefund + bonusRefund).toBe(800);
     });
 
     it('deve ser no-op quando refundAmount é 0', async () => {
@@ -652,19 +652,19 @@ describe('CreditsService', () => {
       tx.creditTransaction.findMany.mockResolvedValue([]);
       tx.creditBalance.findUnique.mockResolvedValue({
         ...mockCreditBalance,
-        planCreditsRemaining: 800,
-        bonusCreditsRemaining: 200,
-        planCreditsUsed: 200,
+        planCreditsRemaining: 8000,
+        bonusCreditsRemaining: 2000,
+        planCreditsUsed: 2000,
       });
 
-      await service.partialRefund('user-1', 30, 'gen-no-debits');
+      await service.partialRefund('user-1', 300, 'gen-no-debits');
 
       expect(tx.creditBalance.update).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         data: {
-          planCreditsRemaining: 800,
-          bonusCreditsRemaining: 230,
-          planCreditsUsed: 200,
+          planCreditsRemaining: 8000,
+          bonusCreditsRemaining: 2300,
+          planCreditsUsed: 2000,
         },
       });
 
@@ -672,7 +672,7 @@ describe('CreditsService', () => {
       expect(tx.creditTransaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: 'GENERATION_REFUND',
-          amount: 30,
+          amount: 300,
           source: 'bonus',
         }),
       });
@@ -687,7 +687,7 @@ describe('CreditsService', () => {
 
       await service.partialRefund(
         'user-1',
-        25,
+        250,
         'gen-desc',
         'Estorno por erro de processamento',
       );
@@ -705,7 +705,7 @@ describe('CreditsService', () => {
       tx.creditBalance.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.partialRefund('user-sem-saldo', 10, 'gen-x'),
+        service.partialRefund('user-sem-saldo', 100, 'gen-x'),
       ).rejects.toThrow(NotFoundException);
     });
   });

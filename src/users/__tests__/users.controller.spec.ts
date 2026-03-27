@@ -26,7 +26,7 @@ const mockProfile: UserProfileResponseDto = {
     hasApiAccess: false,
   },
   credits: {
-    planCreditsRemaining: 30,
+    planCreditsRemaining: 300,
     bonusCreditsRemaining: 0,
     planCreditsUsed: 0,
     periodStart: now,

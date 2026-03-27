@@ -12,7 +12,7 @@ const mockPlan = {
   name: 'Starter',
   description: 'Starter plan',
   priceCents: 2990,
-  creditsPerMonth: 1000,
+  creditsPerMonth: 10000,
   maxConcurrentGenerations: 2,
   hasWatermark: false,
   galleryRetentionDays: null,
@@ -27,7 +27,7 @@ const mockCreditCost = {
   generationType: 'TEXT_TO_IMAGE' as GenerationType,
   resolution: '_1K' as Resolution,
   hasAudio: false,
-  creditsPerUnit: 10,
+  creditsPerUnit: 100,
   isPerSecond: false,
   isActive: true,
   createdAt: new Date('2026-01-01'),
@@ -39,7 +39,7 @@ const mockVideoCreditCost = {
   generationType: 'TEXT_TO_VIDEO' as GenerationType,
   resolution: '_1080P' as Resolution,
   hasAudio: false,
-  creditsPerUnit: 48,
+  creditsPerUnit: 480,
   isPerSecond: true,
   isActive: true,
   createdAt: new Date('2026-01-01'),
@@ -49,7 +49,7 @@ const mockVideoCreditCost = {
 const mockCreditPackage = {
   id: 'pkg-1',
   name: 'Pacote 500',
-  credits: 500,
+  credits: 5000,
   priceCents: 1790,
   isActive: true,
   sortOrder: 0,
@@ -224,7 +224,7 @@ describe('PlansService', () => {
         '_1K' as Resolution,
       );
 
-      expect(result).toBe(10);
+      expect(result).toBe(100);
     });
 
     it('should return creditsPerUnit * durationSeconds for video (per second)', async () => {
@@ -237,7 +237,7 @@ describe('PlansService', () => {
         false,
       );
 
-      expect(result).toBe(240); // 48 * 5
+      expect(result).toBe(2400); // 480 * 5
     });
 
     it('should return creditsPerUnit when isPerSecond but no duration provided', async () => {
@@ -250,7 +250,7 @@ describe('PlansService', () => {
         false,
       );
 
-      expect(result).toBe(48);
+      expect(result).toBe(480);
     });
   });
 

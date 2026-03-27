@@ -36,12 +36,12 @@ async function main() {
     // ── New plans (nova precificação) ──
     prisma.plan.upsert({
       where: { slug: 'free' },
-      update: { creditsPerMonth: 30, isActive: true, galleryRetentionDays: 7 },
+      update: { creditsPerMonth: 300, isActive: true, galleryRetentionDays: 7 },
       create: {
         slug: 'free',
         name: 'Free',
         priceCents: 0,
-        creditsPerMonth: 30,
+        creditsPerMonth: 300,
         maxConcurrentGenerations: 1,
         hasWatermark: true,
         galleryRetentionDays: 7,
@@ -54,7 +54,7 @@ async function main() {
       update: {
         name: 'Starter',
         priceCents: 3900,
-        creditsPerMonth: 400,
+        creditsPerMonth: 4000,
         maxConcurrentGenerations: 2,
         hasWatermark: false,
         galleryRetentionDays: 90,
@@ -67,7 +67,7 @@ async function main() {
         slug: 'starter',
         name: 'Starter',
         priceCents: 3900,
-        creditsPerMonth: 400,
+        creditsPerMonth: 4000,
         maxConcurrentGenerations: 2,
         hasWatermark: false,
         galleryRetentionDays: 90,
@@ -81,7 +81,7 @@ async function main() {
       update: {
         name: 'Creator',
         priceCents: 8900,
-        creditsPerMonth: 1200,
+        creditsPerMonth: 12000,
         maxConcurrentGenerations: 3,
         hasWatermark: false,
         galleryRetentionDays: 180,
@@ -94,7 +94,7 @@ async function main() {
         slug: 'creator',
         name: 'Creator',
         priceCents: 8900,
-        creditsPerMonth: 1200,
+        creditsPerMonth: 12000,
         maxConcurrentGenerations: 3,
         hasWatermark: false,
         galleryRetentionDays: 180,
@@ -108,7 +108,7 @@ async function main() {
       update: {
         name: 'Pro',
         priceCents: 17900,
-        creditsPerMonth: 3000,
+        creditsPerMonth: 30000,
         maxConcurrentGenerations: 5,
         hasWatermark: false,
         galleryRetentionDays: 365,
@@ -121,7 +121,7 @@ async function main() {
         slug: 'pro',
         name: 'Pro',
         priceCents: 17900,
-        creditsPerMonth: 3000,
+        creditsPerMonth: 30000,
         maxConcurrentGenerations: 5,
         hasWatermark: false,
         galleryRetentionDays: 365,
@@ -135,7 +135,7 @@ async function main() {
       update: {
         name: 'Studio',
         priceCents: 36900,
-        creditsPerMonth: 8000,
+        creditsPerMonth: 80000,
         maxConcurrentGenerations: 10,
         hasWatermark: false,
         galleryRetentionDays: 365,
@@ -148,7 +148,7 @@ async function main() {
         slug: 'studio',
         name: 'Studio',
         priceCents: 36900,
-        creditsPerMonth: 8000,
+        creditsPerMonth: 80000,
         maxConcurrentGenerations: 10,
         hasWatermark: false,
         galleryRetentionDays: 365,
@@ -186,72 +186,72 @@ async function main() {
 
   const creditCosts = [
     // Images - Nano Banana 2 (NB2) — v4 pricing
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 9, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 13, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 19, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 9, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 13, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 19, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 190, isPerSecond: false },
 
     // Images - Nano Banana Pro (NBP) — v4 pricing
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
-    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 25, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 19, isPerSecond: false },
-    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 25, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 250, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 250, isPerSecond: false },
 
     // Motion Control (no model variant) — per second pricing
-    { generationType: 'MOTION_CONTROL', resolution: 'RES_720P', hasAudio: false, modelVariant: null, creditsPerUnit: 7, isPerSecond: true },
-    { generationType: 'MOTION_CONTROL', resolution: 'RES_1080P', hasAudio: false, modelVariant: null, creditsPerUnit: 10, isPerSecond: true },
+    { generationType: 'MOTION_CONTROL', resolution: 'RES_720P', hasAudio: false, modelVariant: null, creditsPerUnit: 70, isPerSecond: true },
+    { generationType: 'MOTION_CONTROL', resolution: 'RES_1080P', hasAudio: false, modelVariant: null, creditsPerUnit: 100, isPerSecond: true },
 
     // Veo 3.1 Fast (VEO_FAST) - Text to Video
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 160, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 180, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 1600, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1800, isPerSecond: false },
 
     // Veo 3.1 Fast (VEO_FAST) - Image to Video
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 160, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 180, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 1600, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1800, isPerSecond: false },
 
     // Veo 3.1 Fast (VEO_FAST) - Reference Video (mirrors Image to Video)
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 60, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 90, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 160, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 180, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 600, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_FAST', creditsPerUnit: 1600, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1800, isPerSecond: false },
 
     // Veo 3.1 Max (VEO_MAX) - Text to Video
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 280, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2800, isPerSecond: false },
 
     // Veo 3.1 Max (VEO_MAX) - Image to Video
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 280, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2800, isPerSecond: false },
 
     // Veo 3.1 Max (VEO_MAX) - Reference Video (mirrors Image to Video)
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 100, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 200, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 280, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2800, isPerSecond: false },
   ];
 
   // Deactivate all existing credit costs, then upsert new ones
@@ -295,10 +295,10 @@ async function main() {
     // Boost packages (avulsos)
     prisma.creditPackage.upsert({
       where: { name: 'Boost P' },
-      update: { credits: 70, priceCents: 1400, sortOrder: 0, stripePriceId: STRIPE.priceBoostP },
+      update: { credits: 700, priceCents: 1400, sortOrder: 0, stripePriceId: STRIPE.priceBoostP },
       create: {
         name: 'Boost P',
-        credits: 70,
+        credits: 700,
         priceCents: 1400,
         sortOrder: 0,
         stripePriceId: STRIPE.priceBoostP,
@@ -306,10 +306,10 @@ async function main() {
     }),
     prisma.creditPackage.upsert({
       where: { name: 'Boost M' },
-      update: { credits: 170, priceCents: 2600, sortOrder: 1, stripePriceId: STRIPE.priceBoostM },
+      update: { credits: 1700, priceCents: 2600, sortOrder: 1, stripePriceId: STRIPE.priceBoostM },
       create: {
         name: 'Boost M',
-        credits: 170,
+        credits: 1700,
         priceCents: 2600,
         sortOrder: 1,
         stripePriceId: STRIPE.priceBoostM,
@@ -317,10 +317,10 @@ async function main() {
     }),
     prisma.creditPackage.upsert({
       where: { name: 'Boost G' },
-      update: { credits: 320, priceCents: 3600, sortOrder: 2, stripePriceId: STRIPE.priceBoostG },
+      update: { credits: 3200, priceCents: 3600, sortOrder: 2, stripePriceId: STRIPE.priceBoostG },
       create: {
         name: 'Boost G',
-        credits: 320,
+        credits: 3200,
         priceCents: 3600,
         sortOrder: 2,
         stripePriceId: STRIPE.priceBoostG,
