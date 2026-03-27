@@ -199,6 +199,20 @@ export class GenerationsController {
     return this.generationsService.softDelete(userId, id);
   }
 
+  @Delete(':id/outputs/:outputId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Deleta um output específico de uma geração' })
+  @ApiResponse({ status: 204, description: 'Output removido com sucesso' })
+  @ApiParam({ name: 'id', description: 'ID da geração' })
+  @ApiParam({ name: 'outputId', description: 'ID do output' })
+  async deleteOutput(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+    @Param('outputId') outputId: string,
+  ): Promise<void> {
+    return this.generationsService.deleteOutput(userId, id, outputId);
+  }
+
   @Post(':id/favorite')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Marca geração como favorita' })

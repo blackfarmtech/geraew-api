@@ -925,6 +925,30 @@ export class GenerationsService {
     });
   }
 
+  async deleteOutput(
+    userId: string,
+    generationId: string,
+    outputId: string,
+  ): Promise<void> {
+    const generation = await this.prisma.generation.findFirst({
+      where: { id: generationId, userId },
+      include: { outputs: { select: { id: true } } },
+    });
+
+    if (!generation) {
+      throw new NotFoundException('Geração não encontrada');
+    }
+
+    const output = generation.outputs.find((o) => o.id === outputId);
+    if (!output) {
+      throw new NotFoundException('Output não encontrado nesta geração');
+    }
+
+    await this.prisma.generationOutput.delete({
+      where: { id: outputId },
+    });
+  }
+
   async toggleFavorite(
     userId: string,
     generationId: string,
