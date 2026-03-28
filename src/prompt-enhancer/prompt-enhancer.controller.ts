@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';
 import { PromptEnhancerService } from './prompt-enhancer.service';
 import { EnhancePromptDto } from './dto/enhance-prompt.dto';
 import { EnhanceInfluencerDto } from './dto/enhance-influencer.dto';
@@ -8,6 +8,7 @@ export class PromptEnhancerController {
   constructor(private readonly promptEnhancerService: PromptEnhancerService) {}
 
   @Post('enhance')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async enhance(@Body() dto: EnhancePromptDto) {
     const result = await this.promptEnhancerService.enhance(
       dto.prompt,
@@ -21,6 +22,7 @@ export class PromptEnhancerController {
   }
 
   @Post('enhance-influencer')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async enhanceInfluencer(@Body() dto: EnhanceInfluencerDto) {
     const enhancedPrompt =
       await this.promptEnhancerService.enhanceInfluencer(dto);

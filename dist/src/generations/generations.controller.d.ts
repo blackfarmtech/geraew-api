@@ -28,6 +28,7 @@ export declare class GenerationsController {
     findById(userId: string, id: string): Promise<GenerationResponseDto>;
     findFolders(userId: string, id: string): Promise<FolderResponseDto[]>;
     softDelete(userId: string, id: string): Promise<void>;
+    deleteOutput(userId: string, id: string, outputId: string): Promise<void>;
     addFavorite(userId: string, id: string): Promise<void>;
     removeFavorite(userId: string, id: string): Promise<void>;
 }

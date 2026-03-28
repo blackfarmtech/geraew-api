@@ -53,7 +53,7 @@ async function main() {
       where: { slug: 'starter' },
       update: {
         name: 'Starter',
-        priceCents: 3900,
+        priceCents: 3990,
         creditsPerMonth: 4000,
         maxConcurrentGenerations: 2,
         hasWatermark: false,
@@ -66,7 +66,7 @@ async function main() {
       create: {
         slug: 'starter',
         name: 'Starter',
-        priceCents: 3900,
+        priceCents: 3990,
         creditsPerMonth: 4000,
         maxConcurrentGenerations: 2,
         hasWatermark: false,
@@ -80,7 +80,7 @@ async function main() {
       where: { slug: 'creator' },
       update: {
         name: 'Creator',
-        priceCents: 8900,
+        priceCents: 8990,
         creditsPerMonth: 12000,
         maxConcurrentGenerations: 3,
         hasWatermark: false,
@@ -93,7 +93,7 @@ async function main() {
       create: {
         slug: 'creator',
         name: 'Creator',
-        priceCents: 8900,
+        priceCents: 8990,
         creditsPerMonth: 12000,
         maxConcurrentGenerations: 3,
         hasWatermark: false,
@@ -107,7 +107,7 @@ async function main() {
       where: { slug: 'pro' },
       update: {
         name: 'Pro',
-        priceCents: 17900,
+        priceCents: 17990,
         creditsPerMonth: 30000,
         maxConcurrentGenerations: 5,
         hasWatermark: false,
@@ -120,7 +120,7 @@ async function main() {
       create: {
         slug: 'pro',
         name: 'Pro',
-        priceCents: 17900,
+        priceCents: 17990,
         creditsPerMonth: 30000,
         maxConcurrentGenerations: 5,
         hasWatermark: false,
@@ -134,7 +134,7 @@ async function main() {
       where: { slug: 'studio' },
       update: {
         name: 'Studio',
-        priceCents: 36900,
+        priceCents: 36990,
         creditsPerMonth: 80000,
         maxConcurrentGenerations: 10,
         hasWatermark: false,
@@ -147,7 +147,7 @@ async function main() {
       create: {
         slug: 'studio',
         name: 'Studio',
-        priceCents: 36900,
+        priceCents: 36990,
         creditsPerMonth: 80000,
         maxConcurrentGenerations: 10,
         hasWatermark: false,
@@ -295,33 +295,33 @@ async function main() {
     // Boost packages (avulsos)
     prisma.creditPackage.upsert({
       where: { name: 'Boost P' },
-      update: { credits: 700, priceCents: 1400, sortOrder: 0, stripePriceId: STRIPE.priceBoostP },
+      update: { credits: 700, priceCents: 1490, sortOrder: 0, stripePriceId: STRIPE.priceBoostP },
       create: {
         name: 'Boost P',
         credits: 700,
-        priceCents: 1400,
+        priceCents: 1490,
         sortOrder: 0,
         stripePriceId: STRIPE.priceBoostP,
       },
     }),
     prisma.creditPackage.upsert({
       where: { name: 'Boost M' },
-      update: { credits: 1700, priceCents: 2600, sortOrder: 1, stripePriceId: STRIPE.priceBoostM },
+      update: { credits: 1700, priceCents: 2690, sortOrder: 1, stripePriceId: STRIPE.priceBoostM },
       create: {
         name: 'Boost M',
         credits: 1700,
-        priceCents: 2600,
+        priceCents: 2690,
         sortOrder: 1,
         stripePriceId: STRIPE.priceBoostM,
       },
     }),
     prisma.creditPackage.upsert({
       where: { name: 'Boost G' },
-      update: { credits: 3200, priceCents: 3600, sortOrder: 2, stripePriceId: STRIPE.priceBoostG },
+      update: { credits: 3200, priceCents: 3690, sortOrder: 2, stripePriceId: STRIPE.priceBoostG },
       create: {
         name: 'Boost G',
         credits: 3200,
-        priceCents: 3600,
+        priceCents: 3690,
         sortOrder: 2,
         stripePriceId: STRIPE.priceBoostG,
       },

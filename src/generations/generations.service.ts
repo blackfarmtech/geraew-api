@@ -368,7 +368,7 @@ export class GenerationsService {
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
 
     // Block VEO for free plan users
-    // await this.blockVeoForFreePlan(userId, modelVariant);
+    await this.blockVeoForFreePlan(userId, modelVariant);
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -440,7 +440,7 @@ export class GenerationsService {
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
     // Block VEO for free plan users
-    // await this.blockVeoForFreePlan(userId, modelVariant);
+    await this.blockVeoForFreePlan(userId, modelVariant);
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -549,7 +549,7 @@ export class GenerationsService {
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
     // Block VEO for free plan users
-    // await this.blockVeoForFreePlan(userId, modelVariant);
+    await this.blockVeoForFreePlan(userId, modelVariant);
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -728,28 +728,28 @@ export class GenerationsService {
 
   // ─── Shared helpers ───────────────────────────────────────
 
-  // private async blockVeoForFreePlan(
-  //   userId: string,
-  //   modelVariant: string | null,
-  // ): Promise<void> {
-  //   if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
-  //     return;
-  //   }
+  private async blockVeoForFreePlan(
+    userId: string,
+    modelVariant: string | null,
+  ): Promise<void> {
+    if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
+      return;
+    }
 
-  //   const subscription = await this.prisma.subscription.findFirst({
-  //     where: { userId, status: 'ACTIVE' },
-  //     include: { plan: true },
-  //   });
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      include: { plan: true },
+    });
 
-  //   if (!subscription || subscription.plan.slug === 'free') {
-  //     throw new ForbiddenException({
-  //       code: 'PLAN_UPGRADE_REQUIRED',
-  //       message:
-  //         'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
-  //       statusCode: 403,
-  //     });
-  //   }
-  // }
+    if (!subscription || subscription.plan.slug === 'free') {
+      throw new ForbiddenException({
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message:
+          'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
+        statusCode: 403,
+      });
+    }
+  }
 
   private async checkConcurrentLimit(userId: string): Promise<void> {
     const [processingCount, subscription] = await Promise.all([
@@ -888,8 +888,11 @@ export class GenerationsService {
         completed_at: 'completedAt',
         credits_consumed: 'creditsConsumed',
       };
-      const mappedField = fieldMap[field] || field;
-      orderBy = { [mappedField]: direction };
+      const mappedField = fieldMap[field];
+      if (mappedField) {
+        orderBy = { [mappedField]: direction === 'asc' ? 'asc' : 'desc' };
+      }
+      // If field not in map, keep default orderBy (createdAt desc)
     }
 
     const [generations, total] = await Promise.all([

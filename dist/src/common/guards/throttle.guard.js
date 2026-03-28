@@ -13,19 +13,11 @@ exports.CustomThrottlerGuard = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const throttler_1 = require("@nestjs/throttler");
-const public_decorator_1 = require("../decorators/public.decorator");
 let CustomThrottlerGuard = class CustomThrottlerGuard extends throttler_1.ThrottlerGuard {
     constructor(options, storageService, reflector) {
         super(options, storageService, reflector);
     }
-    async shouldSkip(context) {
-        const isPublic = this.reflector.getAllAndOverride(public_decorator_1.IS_PUBLIC_KEY, [
-            context.getHandler(),
-            context.getClass(),
-        ]);
-        if (isPublic) {
-            return true;
-        }
+    async shouldSkip(_context) {
         return false;
     }
     async getTracker(req) {

@@ -13,14 +13,14 @@ export declare class CreditsService {
     getBalance(userId: string): Promise<CreditBalanceResponseDto>;
     getTransactions(userId: string, pagination: PaginationDto): Promise<PaginatedResponseDto<CreditTransactionResponseDto>>;
     getPackages(): Promise<{
-        name: string;
         id: string;
-        createdAt: Date;
-        isActive: boolean;
+        name: string;
+        credits: number;
         priceCents: number;
+        isActive: boolean;
         sortOrder: number;
         stripePriceId: string | null;
-        credits: number;
+        createdAt: Date;
     }[]>;
     estimateCost(userId: string, type: GenerationType, resolution: Resolution, durationSeconds?: number, hasAudio?: boolean, sampleCount?: number, modelVariant?: string): Promise<EstimateCostResponseDto>;
     debit(userId: string, amount: number, type: CreditTransactionType, generationId?: string, description?: string): Promise<void>;

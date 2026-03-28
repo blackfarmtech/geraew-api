@@ -4,10 +4,147 @@ import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
+import { DateRangeDto } from './dto/date-range.dto';
 export declare class AdminController {
     private readonly adminService;
     constructor(adminService: AdminService);
     getStats(): Promise<AdminStatsResponseDto>;
+    getFinancialStats(dto: DateRangeDto): Promise<{
+        mrrCents: number;
+        dailyRevenue: {
+            date: string;
+            revenueCents: number;
+        }[];
+        revenueByPlan: {
+            planName: string;
+            planSlug: string;
+            revenueCents: number;
+            paymentCount: number;
+        }[];
+        boostSales: {
+            name: string;
+            credits: number;
+            priceCents: number;
+            soldCount: number;
+            totalRevenueCents: number;
+        }[];
+        arpuCents: number;
+        totalRevenueCents: number;
+        totalApiCostCents: number;
+        marginPercent: number;
+    }>;
+    getUserStats(dto: DateRangeDto): Promise<{
+        newUsersToday: number;
+        newUsersWeek: number;
+        newUsersMonth: number;
+        dailyNewUsers: {
+            date: string;
+            count: number;
+        }[];
+        planDistribution: {
+            planName: string;
+            planSlug: string;
+            userCount: number;
+        }[];
+        paidUsers: number;
+        canceledRecently: number;
+        topConsumers: {
+            userId: string;
+            email: string;
+            name: string;
+            totalCredits: number;
+        }[];
+        inactiveUsers: number;
+        totalUsers: number;
+        conversionRate: number;
+        churnRate: number;
+    }>;
+    getUsageStats(dto: DateRangeDto): Promise<{
+        dailyGenerations: {
+            date: string;
+            count: number;
+        }[];
+        byType: {
+            type: import(".prisma/client").$Enums.GenerationType;
+            count: number;
+        }[];
+        avgProcessingByModel: {
+            modelUsed: string;
+            avgMs: number;
+            p95Ms: number;
+            count: number;
+        }[];
+        errorRateByModel: {
+            modelUsed: string;
+            total: number;
+            failed: number;
+            errorRate: number;
+        }[];
+        peakHours: {
+            hour: number;
+            count: number;
+        }[];
+        stuckGenerations: {
+            id: string;
+            userId: string;
+            type: import(".prisma/client").$Enums.GenerationType;
+            modelUsed: string;
+            createdAt: Date;
+            processingStartedAt: Date | null;
+        }[];
+    }>;
+    getCreditStats(dto: DateRangeDto): Promise<{
+        consumedToday: number;
+        consumedWeek: number;
+        consumedMonth: number;
+        dailyConsumption: {
+            date: string;
+            consumed: number;
+        }[];
+        allocationVsUsage: {
+            totalAllocated: number;
+            totalUsed: number;
+            usagePercent: number;
+        };
+        nearLimitUsers: {
+            userId: string;
+            email: string;
+            name: string;
+            planCreditsRemaining: number;
+            creditsPerMonth: number;
+            usagePercent: number;
+        }[];
+        refunds: {
+            totalAmount: number;
+            count: number;
+        };
+    }>;
+    getHealthStats(): Promise<{
+        queue: {
+            processing: number;
+            pending: number;
+        };
+        stuckCount: number;
+        recentFailuresByModel: {
+            modelUsed: string;
+            failedCount: number;
+            errorCodes: string[];
+        }[];
+        failingPayments: number;
+        recentErrors: {
+            id: string;
+            userId: string;
+            type: import(".prisma/client").$Enums.GenerationType;
+            modelUsed: string;
+            errorMessage: string | null;
+            errorCode: string | null;
+            createdAt: Date;
+        }[];
+        alerts: {
+            level: "warning" | "critical";
+            message: string;
+        }[];
+    }>;
     getUsers(pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
         id: string;
         email: string;
@@ -109,6 +246,15 @@ export declare class AdminController {
         createdAt: Date;
         completedAt: Date | null;
     }>>;
+    getProviderStats(): Promise<{
+        providers: {
+            provider: string;
+            total: number;
+            completed: number;
+            failed: number;
+            creditsConsumed: number;
+        }[];
+    }>;
     getGenerations(pagination: PaginationDto): Promise<import("../common/dto").PaginatedResponseDto<{
         id: string;
         user: {

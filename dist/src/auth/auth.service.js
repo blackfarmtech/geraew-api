@@ -168,7 +168,7 @@ let AuthService = AuthService_1 = class AuthService {
             role: user.role,
         };
         const accessToken = await this.jwtService.signAsync(payload, {
-            secret: this.configService.get('JWT_ACCESS_SECRET') || 'default-access-secret',
+            secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
             expiresIn: '15m',
         });
         const refreshToken = (0, crypto_1.randomBytes)(32).toString('hex');
@@ -221,7 +221,7 @@ let AuthService = AuthService_1 = class AuthService {
             throw new common_1.UnauthorizedException('Email ou senha inválidos');
         }
         if (!user.emailVerified) {
-            throw new common_1.UnauthorizedException('Email não verificado. Verifique sua caixa de entrada.');
+            throw new common_1.UnauthorizedException({ message: 'Email ou senha inválidos', code: 'EMAIL_NOT_VERIFIED' });
         }
         const tokens = await this.generateTokens(user);
         return {
@@ -499,10 +499,7 @@ let AuthService = AuthService_1 = class AuthService {
         if (isDev) {
             this.logger.debug(`Reset token for ${email}: ${resetToken}`);
         }
-        return {
-            message: successMessage,
-            ...(isDev && { resetToken }),
-        };
+        return { message: successMessage };
     }
     async resetPassword(token, newPassword) {
         const tokenHash = (0, crypto_1.createHash)('sha256').update(token).digest('hex');

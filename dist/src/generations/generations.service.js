@@ -219,6 +219,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
+        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -264,6 +265,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(model);
+        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -331,6 +333,7 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         const hasAudio = dto.generate_audio ?? true;
         const sampleCount = dto.sample_count ?? 1;
         const modelVariant = dto.model_variant ?? getModelVariant(model);
+        await this.blockVeoForFreePlan(userId, modelVariant);
         const creditsRequired = await this.plansService.calculateGenerationCost(type, dto.resolution, dto.duration_seconds, hasAudio, sampleCount, modelVariant);
         await this.checkConcurrentLimit(userId);
         await this.ensureSufficientBalance(userId, creditsRequired);
@@ -446,6 +449,22 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
             creditsConsumed: creditsRequired,
         };
     }
+    async blockVeoForFreePlan(userId, modelVariant) {
+        if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
+            return;
+        }
+        const subscription = await this.prisma.subscription.findFirst({
+            where: { userId, status: 'ACTIVE' },
+            include: { plan: true },
+        });
+        if (!subscription || subscription.plan.slug === 'free') {
+            throw new common_1.ForbiddenException({
+                code: 'PLAN_UPGRADE_REQUIRED',
+                message: 'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
+                statusCode: 403,
+            });
+        }
+    }
     async checkConcurrentLimit(userId) {
         const [processingCount, subscription] = await Promise.all([
             this.prisma.generation.count({
@@ -541,8 +560,10 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
                 completed_at: 'completedAt',
                 credits_consumed: 'creditsConsumed',
             };
-            const mappedField = fieldMap[field] || field;
-            orderBy = { [mappedField]: direction };
+            const mappedField = fieldMap[field];
+            if (mappedField) {
+                orderBy = { [mappedField]: direction === 'asc' ? 'asc' : 'desc' };
+            }
         }
         const [generations, total] = await Promise.all([
             this.prisma.generation.findMany({
@@ -569,6 +590,22 @@ let GenerationsService = GenerationsService_1 = class GenerationsService {
         await this.prisma.generation.update({
             where: { id: generationId },
             data: { isDeleted: true },
+        });
+    }
+    async deleteOutput(userId, generationId, outputId) {
+        const generation = await this.prisma.generation.findFirst({
+            where: { id: generationId, userId },
+            include: { outputs: { select: { id: true } } },
+        });
+        if (!generation) {
+            throw new common_1.NotFoundException('Geração não encontrada');
+        }
+        const output = generation.outputs.find((o) => o.id === outputId);
+        if (!output) {
+            throw new common_1.NotFoundException('Output não encontrado nesta geração');
+        }
+        await this.prisma.generationOutput.delete({
+            where: { id: outputId },
         });
     }
     async toggleFavorite(userId, generationId, isFavorited) {

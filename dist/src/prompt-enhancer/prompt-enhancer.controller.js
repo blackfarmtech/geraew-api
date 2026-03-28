@@ -37,6 +37,7 @@ let PromptEnhancerController = class PromptEnhancerController {
 exports.PromptEnhancerController = PromptEnhancerController;
 __decorate([
     (0, common_1.Post)('enhance'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [enhance_prompt_dto_1.EnhancePromptDto]),
@@ -44,6 +45,7 @@ __decorate([
 ], PromptEnhancerController.prototype, "enhance", null);
 __decorate([
     (0, common_1.Post)('enhance-influencer'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [enhance_influencer_dto_1.EnhanceInfluencerDto]),

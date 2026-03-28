@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -33,6 +34,7 @@ export class AuthController {
 
   @Public()
   @Post('check-availability')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verifica se email/telefone já estão em uso' })
   @ApiResponse({ status: 200, description: 'Resultado da verificação' })
@@ -42,6 +44,7 @@ export class AuthController {
 
   @Public()
   @Post('send-verification')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Envia SMS de verificação via Twilio' })
   @ApiResponse({ status: 200, description: 'SMS enviado com sucesso' })
@@ -53,6 +56,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Registrar novo usuário' })
@@ -75,6 +79,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Login do usuário' })
@@ -195,6 +200,7 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Reenviar email de verificação' })
@@ -206,6 +212,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Solicitar reset de senha' })
@@ -217,12 +224,13 @@ export class AuthController {
     status: 400,
     description: 'Dados inválidos',
   })
-  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string; resetToken?: string }> {
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
     return this.authService.forgotPassword(dto.email);
   }
 
   @Public()
   @Post('reset-password')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Resetar senha com token' })

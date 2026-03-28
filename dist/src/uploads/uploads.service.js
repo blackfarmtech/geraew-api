@@ -57,7 +57,8 @@ let UploadsService = UploadsService_1 = class UploadsService {
         return `${this.publicUrlBase}/${fileKey}`;
     }
     async generatePresignedUrl(dto) {
-        const fileKey = `${dto.purpose}/${(0, crypto_1.randomUUID)()}/${dto.filename}`;
+        const sanitizedFilename = dto.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const fileKey = `${dto.purpose}/${(0, crypto_1.randomUUID)()}/${sanitizedFilename}`;
         if (!this.s3Client) {
             return {
                 uploadUrl: `https://mock-s3.local/${this.bucketName}/${fileKey}?X-Amz-Expires=900`,

@@ -221,7 +221,7 @@ export class AuthService {
 
     // Gera access token (15 minutos)
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET') || 'default-access-secret',
+      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       expiresIn: '15m',
     });
 
@@ -297,7 +297,7 @@ export class AuthService {
     }
 
     if (!user.emailVerified) {
-      throw new UnauthorizedException('Email não verificado. Verifique sua caixa de entrada.');
+      throw new UnauthorizedException({ message: 'Email ou senha inválidos', code: 'EMAIL_NOT_VERIFIED' });
     }
 
     const tokens = await this.generateTokens(user);
@@ -636,7 +636,7 @@ export class AuthService {
   /**
    * Solicita reset de senha — gera token e retorna (dev) ou envia email (prod)
    */
-  async forgotPassword(email: string): Promise<{ message: string; resetToken?: string }> {
+  async forgotPassword(email: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase(), isActive: true },
     });
@@ -671,16 +671,13 @@ export class AuthService {
       this.logger.error(`Failed to send password reset email: ${err.message}`);
     });
 
-    // Em dev, loga e retorna o token para testes
+    // Em dev, loga o token para testes
     const isDev = this.configService.get('NODE_ENV') !== 'production';
     if (isDev) {
       this.logger.debug(`Reset token for ${email}: ${resetToken}`);
     }
 
-    return {
-      message: successMessage,
-      ...(isDev && { resetToken }),
-    };
+    return { message: successMessage };
   }
 
   /**

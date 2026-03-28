@@ -27,6 +27,7 @@ export declare class GenerationsService {
     generateImageToVideo(userId: string, dto: GenerateVideoImageToVideoDto): Promise<CreateGenerationResponseDto>;
     generateVideoWithReferences(userId: string, dto: GenerateVideoWithReferencesDto): Promise<CreateGenerationResponseDto>;
     generateMotionControl(userId: string, dto: GenerateMotionControlDto): Promise<CreateGenerationResponseDto>;
+    private blockVeoForFreePlan;
     private checkConcurrentLimit;
     private ensureSufficientBalance;
     private debitCredits;
@@ -41,6 +42,7 @@ export declare class GenerationsService {
     }[]>;
     findAll(userId: string, filters: GenerationFiltersDto): Promise<PaginatedResponseDto<GenerationResponseDto>>;
     softDelete(userId: string, generationId: string): Promise<void>;
+    deleteOutput(userId: string, generationId: string, outputId: string): Promise<void>;
     toggleFavorite(userId: string, generationId: string, isFavorited: boolean): Promise<void>;
     private toResponseDto;
     private uploadBase64Image;

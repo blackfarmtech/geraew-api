@@ -70,7 +70,8 @@ export class UploadsService {
   async generatePresignedUrl(
     dto: PresignedUrlDto,
   ): Promise<PresignedUrlResponseDto> {
-    const fileKey = `${dto.purpose}/${randomUUID()}/${dto.filename}`;
+    const sanitizedFilename = dto.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileKey = `${dto.purpose}/${randomUUID()}/${sanitizedFilename}`;
 
     if (!this.s3Client) {
       return {

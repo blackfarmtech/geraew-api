@@ -82,13 +82,11 @@ let CreditsService = class CreditsService {
     }
     async debit(userId, amount, type, generationId, description) {
         await this.prisma.$transaction(async (tx) => {
-            const balance = await tx.creditBalance.findUnique({
-                where: { userId },
-            });
+            const [balance] = await tx.$queryRawUnsafe(`SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`, userId);
             if (!balance) {
                 throw new common_1.NotFoundException('Saldo de créditos não encontrado');
             }
-            const totalAvailable = balance.planCreditsRemaining + balance.bonusCreditsRemaining;
+            const totalAvailable = balance.plan_credits_remaining + balance.bonus_credits_remaining;
             if (totalAvailable < amount) {
                 throw new common_1.BadRequestException({
                     code: 'INSUFFICIENT_CREDITS',
@@ -99,21 +97,21 @@ let CreditsService = class CreditsService {
             let remainingDebit = amount;
             let planDebit = 0;
             let bonusDebit = 0;
-            if (balance.planCreditsRemaining >= remainingDebit) {
+            if (balance.plan_credits_remaining >= remainingDebit) {
                 planDebit = remainingDebit;
                 remainingDebit = 0;
             }
             else {
-                planDebit = balance.planCreditsRemaining;
+                planDebit = balance.plan_credits_remaining;
                 remainingDebit -= planDebit;
                 bonusDebit = remainingDebit;
             }
             await tx.creditBalance.update({
                 where: { userId },
                 data: {
-                    planCreditsRemaining: balance.planCreditsRemaining - planDebit,
-                    bonusCreditsRemaining: balance.bonusCreditsRemaining - bonusDebit,
-                    planCreditsUsed: balance.planCreditsUsed + planDebit,
+                    planCreditsRemaining: balance.plan_credits_remaining - planDebit,
+                    bonusCreditsRemaining: balance.bonus_credits_remaining - bonusDebit,
+                    planCreditsUsed: balance.plan_credits_used + planDebit,
                 },
             });
             if (planDebit > 0) {
@@ -164,18 +162,16 @@ let CreditsService = class CreditsService {
             if (debitTransactions.length === 0) {
                 bonusRefund = amount;
             }
-            const balance = await tx.creditBalance.findUnique({
-                where: { userId },
-            });
+            const [balance] = await tx.$queryRawUnsafe(`SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`, userId);
             if (!balance) {
                 throw new common_1.NotFoundException('Saldo de créditos não encontrado');
             }
             await tx.creditBalance.update({
                 where: { userId },
                 data: {
-                    planCreditsRemaining: balance.planCreditsRemaining + planRefund,
-                    bonusCreditsRemaining: balance.bonusCreditsRemaining + bonusRefund,
-                    planCreditsUsed: balance.planCreditsUsed - planRefund,
+                    planCreditsRemaining: balance.plan_credits_remaining + planRefund,
+                    bonusCreditsRemaining: balance.bonus_credits_remaining + bonusRefund,
+                    planCreditsUsed: balance.plan_credits_used - planRefund,
                 },
             });
             if (planRefund > 0) {
@@ -237,18 +233,16 @@ let CreditsService = class CreditsService {
             else {
                 bonusRefund = refundAmount;
             }
-            const balance = await tx.creditBalance.findUnique({
-                where: { userId },
-            });
+            const [balance] = await tx.$queryRawUnsafe(`SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`, userId);
             if (!balance) {
                 throw new common_1.NotFoundException('Saldo de créditos não encontrado');
             }
             await tx.creditBalance.update({
                 where: { userId },
                 data: {
-                    planCreditsRemaining: balance.planCreditsRemaining + planRefund,
-                    bonusCreditsRemaining: balance.bonusCreditsRemaining + bonusRefund,
-                    planCreditsUsed: balance.planCreditsUsed - planRefund,
+                    planCreditsRemaining: balance.plan_credits_remaining + planRefund,
+                    bonusCreditsRemaining: balance.bonus_credits_remaining + bonusRefund,
+                    planCreditsUsed: balance.plan_credits_used - planRefund,
                 },
             });
             const refundDesc = description || `Estorno parcial de ${refundAmount} créditos`;

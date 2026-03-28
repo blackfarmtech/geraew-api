@@ -19,36 +19,25 @@ const swagger_1 = require("@nestjs/swagger");
 const decorators_1 = require("../common/decorators");
 const stripe_webhook_service_1 = require("./webhooks/stripe-webhook.service");
 const mercadopago_webhook_service_1 = require("./webhooks/mercadopago-webhook.service");
-const payments_service_1 = require("./payments.service");
 let PaymentsController = PaymentsController_1 = class PaymentsController {
     stripeWebhookService;
     mercadoPagoWebhookService;
-    paymentsService;
     logger = new common_1.Logger(PaymentsController_1.name);
-    constructor(stripeWebhookService, mercadoPagoWebhookService, paymentsService) {
+    constructor(stripeWebhookService, mercadoPagoWebhookService) {
         this.stripeWebhookService = stripeWebhookService;
         this.mercadoPagoWebhookService = mercadoPagoWebhookService;
-        this.paymentsService = paymentsService;
     }
     async stripeWebhook(req, signature) {
         const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
         await this.stripeWebhookService.handleWebhook(rawBody, signature);
         return { received: true };
     }
-    async mercadoPagoWebhook(payload) {
+    async mercadoPagoWebhook(req, signature, payload) {
+        if (!signature) {
+            throw new common_1.BadRequestException('Missing x-signature header');
+        }
         await this.mercadoPagoWebhookService.handleWebhook(payload);
         return { received: true };
-    }
-    async simulateRenewal(body) {
-        if (process.env.NODE_ENV === 'production') {
-            return { success: false, message: 'Not available in production' };
-        }
-        const now = new Date();
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
-        this.logger.warn(`[TEST] Simulating renewal for subscription: ${body.stripeSubscriptionId}`);
-        await this.paymentsService.handleSubscriptionRenewal(body.stripeSubscriptionId, now, periodEnd, 0, `test_invoice_${Date.now()}`);
-        return { success: true, message: 'Renewal simulated successfully' };
     }
 };
 exports.PaymentsController = PaymentsController;
@@ -72,26 +61,17 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'MercadoPago webhook endpoint' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Webhook processed' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid payload' }),
-    __param(0, (0, common_1.Body)()),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Headers)('x-signature')),
+    __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], PaymentsController.prototype, "mercadoPagoWebhook", null);
-__decorate([
-    (0, decorators_1.Public)(),
-    (0, common_1.Post)('test/simulate-renewal'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    (0, swagger_1.ApiOperation)({ summary: '[DEV] Simula renovação de assinatura' }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], PaymentsController.prototype, "simulateRenewal", null);
 exports.PaymentsController = PaymentsController = PaymentsController_1 = __decorate([
     (0, swagger_1.ApiTags)('webhooks'),
     (0, common_1.Controller)('api/v1/webhooks'),
     __metadata("design:paramtypes", [stripe_webhook_service_1.StripeWebhookService,
-        mercadopago_webhook_service_1.MercadoPagoWebhookService,
-        payments_service_1.PaymentsService])
+        mercadopago_webhook_service_1.MercadoPagoWebhookService])
 ], PaymentsController);
 //# sourceMappingURL=payments.controller.js.map

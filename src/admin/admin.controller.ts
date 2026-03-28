@@ -24,6 +24,7 @@ import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
+import { DateRangeDto } from './dto/date-range.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -38,6 +39,40 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AdminStatsResponseDto })
   async getStats() {
     return this.adminService.getStats();
+  }
+
+  @Get('stats/financial')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Estatísticas financeiras (MRR, receita, margem)' })
+  async getFinancialStats(@Query() dto: DateRangeDto) {
+    return this.adminService.getFinancialStats(dto.days);
+  }
+
+  @Get('stats/users')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Estatísticas de usuários (novos, distribuição, churn)' })
+  async getUserStats(@Query() dto: DateRangeDto) {
+    return this.adminService.getUserStats(dto.days);
+  }
+
+  @Get('stats/usage')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Estatísticas de uso (gerações, processamento, erros)' })
+  async getUsageStats(@Query() dto: DateRangeDto) {
+    return this.adminService.getUsageStats(dto.days);
+  }
+
+  @Get('stats/credits')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Estatísticas de créditos (consumo, alocação, reembolsos)' })
+  async getCreditStats(@Query() dto: DateRangeDto) {
+    return this.adminService.getCreditStats(dto.days);
+  }
+
+  @Get('stats/health')
+  @ApiOperation({ summary: 'Saúde do sistema (filas, erros, alertas)' })
+  async getHealthStats() {
+    return this.adminService.getHealthStats();
   }
 
   @Get('users')
@@ -102,6 +137,12 @@ export class AdminController {
     @Query() pagination: PaginationDto,
   ) {
     return this.adminService.getUserGenerations(id, pagination);
+  }
+
+  @Get('generations/providers')
+  @ApiOperation({ summary: 'Contagem de gerações por provider (geraew vs nano-banana)' })
+  async getProviderStats() {
+    return this.adminService.getProviderStats();
   }
 
   @Get('generations')

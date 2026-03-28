@@ -54,7 +54,7 @@ const mockPlanStudio = {
   id: 'plan-studio',
   slug: 'studio',
   name: 'Studio',
-  priceCents: 36900,
+  priceCents: 36990,
   creditsPerMonth: 80000,
   maxConcurrentGenerations: 10,
   hasWatermark: false,

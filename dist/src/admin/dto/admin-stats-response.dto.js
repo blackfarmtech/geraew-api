@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AdminStatsResponseDto = exports.GenerationsByStatusDto = void 0;
+exports.AdminStatsResponseDto = exports.GenerationsByProviderDto = exports.KieBreakdownDto = exports.GenerationsByStatusDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class GenerationsByStatusDto {
     pending;
@@ -34,12 +34,49 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", Number)
 ], GenerationsByStatusDto.prototype, "failed", void 0);
+class KieBreakdownDto {
+    nanoBanana2;
+    nanoBananaPro;
+    kling;
+}
+exports.KieBreakdownDto = KieBreakdownDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Generations using Nano Banana 2' }),
+    __metadata("design:type", Number)
+], KieBreakdownDto.prototype, "nanoBanana2", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Generations using Nano Banana Pro' }),
+    __metadata("design:type", Number)
+], KieBreakdownDto.prototype, "nanoBananaPro", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Generations using Kling 2.6 Motion Control' }),
+    __metadata("design:type", Number)
+], KieBreakdownDto.prototype, "kling", void 0);
+class GenerationsByProviderDto {
+    geraew;
+    kie;
+    kieBreakdown;
+}
+exports.GenerationsByProviderDto = GenerationsByProviderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Generations via GeraEW provider (Gemini/Veo)' }),
+    __metadata("design:type", Number)
+], GenerationsByProviderDto.prototype, "geraew", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Generations via KIE API (Nano Banana/Kling)' }),
+    __metadata("design:type", Number)
+], GenerationsByProviderDto.prototype, "kie", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Breakdown of KIE API generations by model' }),
+    __metadata("design:type", KieBreakdownDto)
+], GenerationsByProviderDto.prototype, "kieBreakdown", void 0);
 class AdminStatsResponseDto {
     totalUsers;
     activeSubscriptions;
     totalRevenueCents;
     totalGenerations;
     generationsByStatus;
+    generationsByProvider;
 }
 exports.AdminStatsResponseDto = AdminStatsResponseDto;
 __decorate([
@@ -62,4 +99,8 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     __metadata("design:type", GenerationsByStatusDto)
 ], AdminStatsResponseDto.prototype, "generationsByStatus", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    __metadata("design:type", GenerationsByProviderDto)
+], AdminStatsResponseDto.prototype, "generationsByProvider", void 0);
 //# sourceMappingURL=admin-stats-response.dto.js.map

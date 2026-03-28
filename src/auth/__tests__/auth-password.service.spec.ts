@@ -8,6 +8,7 @@ import {
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TwilioVerifyService } from '../../twilio/twilio-verify.service';
+import { EmailService } from '../../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -113,11 +114,25 @@ const mockConfigService = {
     };
     return config[key];
   }),
+  getOrThrow: jest.fn((key: string) => {
+    const config: Record<string, string> = {
+      JWT_ACCESS_SECRET: 'test-secret',
+    };
+    const value = config[key];
+    if (!value) throw new Error(`Missing env var: ${key}`);
+    return value;
+  }),
 };
 
 const mockTwilioVerify = {
   sendVerification: jest.fn().mockResolvedValue(undefined),
   checkVerification: jest.fn().mockResolvedValue('+5511999999999'),
+};
+
+const mockEmailService = {
+  sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
 };
 
 // ── Test suite ─────────────────────────────────────────────
@@ -133,6 +148,7 @@ describe('AuthService — Password Reset & Google OAuth', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: TwilioVerifyService, useValue: mockTwilioVerify },
+        { provide: EmailService, useValue: mockEmailService },
       ],
     }).compile();
 
@@ -155,6 +171,14 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       };
       return config[key];
     });
+    mockConfigService.getOrThrow.mockImplementation((key: string) => {
+      const config: Record<string, string> = {
+        JWT_ACCESS_SECRET: 'test-secret',
+      };
+      const value = config[key];
+      if (!value) throw new Error(`Missing env var: ${key}`);
+      return value;
+    });
   });
 
   // ────────────────────────────────────────────────────────
@@ -162,7 +186,7 @@ describe('AuthService — Password Reset & Google OAuth', () => {
   // ────────────────────────────────────────────────────────
 
   describe('forgotPassword', () => {
-    it('should return success message and token for valid email in dev mode', async () => {
+    it('should return success message for valid email', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       mockPrisma.passwordResetToken.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.passwordResetToken.create.mockResolvedValue({
@@ -174,8 +198,8 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       expect(result.message).toBe(
         'Se o email existir, instruções de reset serão enviadas',
       );
-      expect(result.resetToken).toBeDefined();
-      expect(typeof result.resetToken).toBe('string');
+      // SECURITY FIX: resetToken is never returned in API response
+      expect((result as any).resetToken).toBeUndefined();
 
       // Should look up user by lowercase email
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
@@ -206,7 +230,6 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       expect(result.message).toBe(
         'Se o email existir, instruções de reset serão enviadas',
       );
-      expect(result.resetToken).toBeUndefined();
 
       // Should NOT create any reset token
       expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
@@ -220,7 +243,6 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       expect(result.message).toBe(
         'Se o email existir, instruções de reset serão enviadas',
       );
-      expect(result.resetToken).toBeUndefined();
 
       // Should NOT create any reset token
       expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
@@ -249,43 +271,20 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       });
     });
 
-    it('should return resetToken in dev mode (NODE_ENV !== production)', async () => {
+    it('should never return resetToken in response (security fix)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       mockPrisma.passwordResetToken.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.passwordResetToken.create.mockResolvedValue({
         id: 'prt-1',
       });
 
-      // NODE_ENV is already 'development' from mockConfigService
       const result = await service.forgotPassword('test@example.com');
 
-      expect(result.resetToken).toBeDefined();
-      expect(result.resetToken!.length).toBeGreaterThan(0);
-    });
-
-    it('should NOT return resetToken in production mode', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.passwordResetToken.updateMany.mockResolvedValue({ count: 0 });
-      mockPrisma.passwordResetToken.create.mockResolvedValue({
-        id: 'prt-1',
+      // SECURITY FIX: resetToken must never be in the API response
+      expect(result).toEqual({
+        message: 'Se o email existir, instruções de reset serão enviadas',
       });
-
-      // Override NODE_ENV to production
-      mockConfigService.get.mockImplementation((key: string) => {
-        const config: Record<string, string> = {
-          JWT_ACCESS_SECRET: 'test-secret',
-          NODE_ENV: 'production',
-          GOOGLE_CLIENT_ID: 'test-client-id',
-        };
-        return config[key];
-      });
-
-      const result = await service.forgotPassword('test@example.com');
-
-      expect(result.message).toBe(
-        'Se o email existir, instruções de reset serão enviadas',
-      );
-      expect(result.resetToken).toBeUndefined();
+      expect((result as any).resetToken).toBeUndefined();
     });
   });
 

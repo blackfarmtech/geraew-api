@@ -23,6 +23,7 @@ const adjust_credits_dto_1 = require("./dto/adjust-credits.dto");
 const toggle_user_status_dto_1 = require("./dto/toggle-user-status.dto");
 const change_user_plan_dto_1 = require("./dto/change-user-plan.dto");
 const admin_stats_response_dto_1 = require("./dto/admin-stats-response.dto");
+const date_range_dto_1 = require("./dto/date-range.dto");
 let AdminController = class AdminController {
     adminService;
     constructor(adminService) {
@@ -30,6 +31,21 @@ let AdminController = class AdminController {
     }
     async getStats() {
         return this.adminService.getStats();
+    }
+    async getFinancialStats(dto) {
+        return this.adminService.getFinancialStats(dto.days);
+    }
+    async getUserStats(dto) {
+        return this.adminService.getUserStats(dto.days);
+    }
+    async getUsageStats(dto) {
+        return this.adminService.getUsageStats(dto.days);
+    }
+    async getCreditStats(dto) {
+        return this.adminService.getCreditStats(dto.days);
+    }
+    async getHealthStats() {
+        return this.adminService.getHealthStats();
     }
     async getUsers(pagination) {
         return this.adminService.getUsers(pagination);
@@ -57,6 +73,9 @@ let AdminController = class AdminController {
     async getUserGenerations(id, pagination) {
         return this.adminService.getUserGenerations(id, pagination);
     }
+    async getProviderStats() {
+        return this.adminService.getProviderStats();
+    }
     async getGenerations(pagination) {
         return this.adminService.getGenerations(pagination);
     }
@@ -70,6 +89,49 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "getStats", null);
+__decorate([
+    (0, common_1.Get)('stats/financial'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Estatísticas financeiras (MRR, receita, margem)' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [date_range_dto_1.DateRangeDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getFinancialStats", null);
+__decorate([
+    (0, common_1.Get)('stats/users'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Estatísticas de usuários (novos, distribuição, churn)' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [date_range_dto_1.DateRangeDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getUserStats", null);
+__decorate([
+    (0, common_1.Get)('stats/usage'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Estatísticas de uso (gerações, processamento, erros)' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [date_range_dto_1.DateRangeDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getUsageStats", null);
+__decorate([
+    (0, common_1.Get)('stats/credits'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, swagger_1.ApiOperation)({ summary: 'Estatísticas de créditos (consumo, alocação, reembolsos)' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [date_range_dto_1.DateRangeDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getCreditStats", null);
+__decorate([
+    (0, common_1.Get)('stats/health'),
+    (0, swagger_1.ApiOperation)({ summary: 'Saúde do sistema (filas, erros, alertas)' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getHealthStats", null);
 __decorate([
     (0, common_1.Get)('users'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
@@ -135,6 +197,13 @@ __decorate([
     __metadata("design:paramtypes", [String, pagination_dto_1.PaginationDto]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "getUserGenerations", null);
+__decorate([
+    (0, common_1.Get)('generations/providers'),
+    (0, swagger_1.ApiOperation)({ summary: 'Contagem de gerações por provider (geraew vs nano-banana)' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "getProviderStats", null);
 __decorate([
     (0, common_1.Get)('generations'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),

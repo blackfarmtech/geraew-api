@@ -78,6 +78,9 @@ let GenerationsController = class GenerationsController {
     async softDelete(userId, id) {
         return this.generationsService.softDelete(userId, id);
     }
+    async deleteOutput(userId, id, outputId) {
+        return this.generationsService.deleteOutput(userId, id, outputId);
+    }
     async addFavorite(userId, id) {
         return this.generationsService.toggleFavorite(userId, id, true);
     }
@@ -228,6 +231,20 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], GenerationsController.prototype, "softDelete", null);
+__decorate([
+    (0, common_1.Delete)(':id/outputs/:outputId'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Deleta um output específico de uma geração' }),
+    (0, swagger_1.ApiResponse)({ status: 204, description: 'Output removido com sucesso' }),
+    (0, swagger_1.ApiParam)({ name: 'id', description: 'ID da geração' }),
+    (0, swagger_1.ApiParam)({ name: 'outputId', description: 'ID do output' }),
+    __param(0, (0, decorators_1.CurrentUser)('sub')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Param)('outputId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], GenerationsController.prototype, "deleteOutput", null);
 __decorate([
     (0, common_1.Post)(':id/favorite'),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),

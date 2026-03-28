@@ -8,13 +8,13 @@ import {
   HttpStatus,
   RawBodyRequest,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Public } from '../common/decorators';
 import { StripeWebhookService } from './webhooks/stripe-webhook.service';
 import { MercadoPagoWebhookService } from './webhooks/mercadopago-webhook.service';
-import { PaymentsService } from './payments.service';
 
 @ApiTags('webhooks')
 @Controller('api/v1/webhooks')
@@ -24,7 +24,6 @@ export class PaymentsController {
   constructor(
     private readonly stripeWebhookService: StripeWebhookService,
     private readonly mercadoPagoWebhookService: MercadoPagoWebhookService,
-    private readonly paymentsService: PaymentsService,
   ) {}
 
   @Public()
@@ -49,43 +48,16 @@ export class PaymentsController {
   @ApiResponse({ status: 200, description: 'Webhook processed' })
   @ApiResponse({ status: 400, description: 'Invalid payload' })
   async mercadoPagoWebhook(
+    @Req() req: Request,
+    @Headers('x-signature') signature: string,
     @Body() payload: any,
   ): Promise<{ received: true }> {
+    // TODO: Implement full MercadoPago HMAC signature verification
+    if (!signature) {
+      throw new BadRequestException('Missing x-signature header');
+    }
     await this.mercadoPagoWebhookService.handleWebhook(payload);
     return { received: true };
   }
 
-  /**
-   * ⚠️ ENDPOINT TEMPORÁRIO DE TESTE — remover antes de ir para produção.
-   * Simula uma renovação de assinatura (invoice.payment_succeeded).
-   */
-  @Public()
-  @Post('test/simulate-renewal')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '[DEV] Simula renovação de assinatura' })
-  async simulateRenewal(
-    @Body() body: { stripeSubscriptionId: string },
-  ): Promise<{ success: boolean; message: string }> {
-    if (process.env.NODE_ENV === 'production') {
-      return { success: false, message: 'Not available in production' };
-    }
-
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-    this.logger.warn(
-      `[TEST] Simulating renewal for subscription: ${body.stripeSubscriptionId}`,
-    );
-
-    await this.paymentsService.handleSubscriptionRenewal(
-      body.stripeSubscriptionId,
-      now,
-      periodEnd,
-      0, // amountCents — irrelevante para o teste
-      `test_invoice_${Date.now()}`,
-    );
-
-    return { success: true, message: 'Renewal simulated successfully' };
-  }
 }

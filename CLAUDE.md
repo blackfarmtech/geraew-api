@@ -53,9 +53,9 @@ Toda operação consome créditos fixos por geração (não por segundo).
 
 | | Free | Starter | Creator | Pro | Studio |
 |---|---|---|---|---|---|
-| Preço | R$ 0 | R$ 39 | R$ 89 | R$ 179 | R$ 369 |
+| Preço | R$ 0 | R$ 39,90 | R$ 89,90 | R$ 179,90 | R$ 369,90 |
 | Créditos | 300/dia | 4.000 | 12.000 | 30.000 | 80.000 |
-| R$/crédito | — | R$ 0,00975 | R$ 0,00742 | R$ 0,00597 | R$ 0,00461 |
+| R$/crédito | — | R$ 0,00998 | R$ 0,00749 | R$ 0,00600 | R$ 0,00462 |
 | Marca d'água | Sim | Não | Não | Não | Não |
 | Gerações simultâneas | 1 | 2 | 3 | 5 | 10 |
 | Retenção galeria | 30 dias | Ilimitado | Ilimitado | Ilimitado | Ilimitado |
@@ -66,9 +66,9 @@ Toda operação consome créditos fixos por geração (não por segundo).
 
 | Pacote | Preço | Créditos | R$/crédito | vs Starter |
 |---|---|---|---|---|
-| Boost P | R$ 14 | 700 | R$ 0,0200 | +105% |
-| Boost M | R$ 26 | 1.700 | R$ 0,0153 | +57% |
-| Boost G | R$ 36 | 3.200 | R$ 0,0113 | +16% |
+| Boost P | R$ 14,90 | 700 | R$ 0,0213 | +113% |
+| Boost M | R$ 26,90 | 1.700 | R$ 0,0158 | +58% |
+| Boost G | R$ 36,90 | 3.200 | R$ 0,0115 | +15% |
 
 Nota: Boosts são sempre mais caros por crédito que qualquer plano (por design, para incentivar compra de plano).
 
@@ -79,7 +79,7 @@ Nota: Boosts são sempre mais caros por crédito que qualquer plano (por design,
 - Créditos não acumulam ao trocar de plano — renovam na nova compra
 - Free plan: Veo Fast e Veo Max estão **bloqueados** (requer plano pago)
 - Boost packages são sempre mais caros por crédito que qualquer plano
-- Regra de ouro: Boost G (R$36/3.200cr) está R$3 abaixo do Starter (R$39/4.000cr) — UI destaca isso
+- Regra de ouro: Boost G (R$36,90/3.200cr) está R$3 abaixo do Starter (R$39,90/4.000cr) — UI destaca isso
 - Na hora do débito, consumir primeiro créditos do plano, depois os avulsos (bônus)
 - Gerações com status `failed` sempre devolvem créditos automaticamente
 
@@ -360,10 +360,10 @@ CREATE INDEX idx_webhook_logs_external ON webhook_logs(external_id);
 ```sql
 INSERT INTO plans (slug, name, price_cents, credits_per_month, max_concurrent_generations, has_watermark, gallery_retention_days, has_api_access, has_veo_access, sort_order) VALUES
 ('free', 'Free', 0, 300, 1, true, 30, false, false, 0),
-('starter', 'Starter', 3900, 4000, 2, false, null, false, true, 1),
-('creator', 'Creator', 8900, 12000, 3, false, null, false, true, 2),
-('pro', 'Pro', 17900, 30000, 5, false, null, false, true, 3),
-('studio', 'Studio', 36900, 80000, 10, false, null, true, true, 4);
+('starter', 'Starter', 3990, 4000, 2, false, null, false, true, 1),
+('creator', 'Creator', 8990, 12000, 3, false, null, false, true, 2),
+('pro', 'Pro', 17990, 30000, 5, false, null, false, true, 3),
+('studio', 'Studio', 36990, 80000, 10, false, null, true, true, 4);
 ```
 
 ### Seed dos Custos de Crédito
@@ -404,9 +404,9 @@ INSERT INTO credit_costs (generation_type, resolution, has_audio, credits_per_un
 
 ```sql
 INSERT INTO credit_packages (name, credits, price_cents, sort_order) VALUES
-('Boost P', 700, 1400, 0),
-('Boost M', 1700, 2600, 1),
-('Boost G', 3200, 3600, 2);
+('Boost P', 700, 1490, 0),
+('Boost M', 1700, 2690, 1),
+('Boost G', 3200, 3690, 2);
 ```
 
 ---
