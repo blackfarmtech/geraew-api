@@ -19,10 +19,13 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Enable CORS with restricted origins
+  const allowedOrigins = [
+    ...(process.env.FRONTEND_URL?.split(',').map(u => u.trim()) ?? []),
+    'http://localhost:3002',
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: [
-      process.env.FRONTEND_URL || 'http://localhost:3002',
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
