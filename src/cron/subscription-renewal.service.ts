@@ -111,7 +111,7 @@ export class SubscriptionRenewalService {
 
     const allUsers = await this.prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true },
+      select: { id: true, phoneVerified: true },
     });
 
     const implicitFreeUserIds = allUsers
@@ -122,22 +122,32 @@ export class SubscriptionRenewalService {
       ...new Set([...freeUserIds, ...implicitFreeUserIds]),
     ];
 
+    // Build a set of users with verified phone for quick lookup
+    const phoneVerifiedUserIds = new Set(
+      allUsers.filter((u) => u.phoneVerified).map((u) => u.id),
+    );
+
     let resetCount = 0;
 
     for (const userId of allFreeUserIds) {
       try {
+        // Only grant credits to users with verified phone
+        const credits = phoneVerifiedUserIds.has(userId)
+          ? freePlan.creditsPerMonth
+          : 0;
+
         await this.prisma.$transaction(async (tx) => {
           await tx.creditBalance.upsert({
             where: { userId },
             update: {
-              planCreditsRemaining: freePlan.creditsPerMonth,
+              planCreditsRemaining: credits,
               planCreditsUsed: 0,
               periodStart: startOfDay,
               periodEnd: endOfDay,
             },
             create: {
               userId,
-              planCreditsRemaining: freePlan.creditsPerMonth,
+              planCreditsRemaining: credits,
               bonusCreditsRemaining: 0,
               planCreditsUsed: 0,
               periodStart: startOfDay,

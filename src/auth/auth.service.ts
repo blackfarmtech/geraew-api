@@ -71,9 +71,43 @@ export class AuthService {
       throw new ConflictException('Telefone já cadastrado por outro usuário');
     }
 
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { phone: normalizedPhone, phoneVerified: true },
+    const user = await this.prisma.$transaction(async (tx) => {
+      // Marca telefone como verificado
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { phone: normalizedPhone, phoneVerified: true },
+      });
+
+      // Libera créditos do plano Free se ainda não foram concedidos
+      const subscription = await tx.subscription.findFirst({
+        where: { userId, status: 'ACTIVE' },
+        include: { plan: true },
+      });
+
+      if (subscription && subscription.plan.slug === 'free') {
+        const creditBalance = await tx.creditBalance.findFirst({
+          where: { userId },
+        });
+
+        if (creditBalance && creditBalance.planCreditsRemaining === 0 && creditBalance.planCreditsUsed === 0) {
+          await tx.creditBalance.update({
+            where: { id: creditBalance.id },
+            data: { planCreditsRemaining: subscription.plan.creditsPerMonth },
+          });
+
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: 'SUBSCRIPTION_RENEWAL',
+              amount: subscription.plan.creditsPerMonth,
+              source: 'plan',
+              description: `Créditos iniciais do plano ${subscription.plan.name} (telefone verificado)`,
+            },
+          });
+        }
+      }
+
+      return updatedUser;
     });
 
     const tokens = await this.generateTokens(user);
@@ -156,26 +190,15 @@ export class AuthService {
         },
       });
 
-      // Cria o saldo inicial de créditos
+      // Cria o saldo inicial de créditos (0 até verificar telefone)
       await tx.creditBalance.create({
         data: {
           userId: newUser.id,
-          planCreditsRemaining: freePlan.creditsPerMonth,
+          planCreditsRemaining: 0,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart: now,
           periodEnd: endOfMonth,
-        },
-      });
-
-      // Registra a transação de créditos iniciais
-      await tx.creditTransaction.create({
-        data: {
-          userId: newUser.id,
-          type: 'SUBSCRIPTION_RENEWAL',
-          amount: freePlan.creditsPerMonth,
-          source: 'plan',
-          description: `Créditos iniciais do plano ${freePlan.name}`,
         },
       });
 
@@ -447,26 +470,15 @@ export class AuthService {
           },
         });
 
-        // Cria o saldo inicial de créditos
+        // Cria o saldo inicial de créditos (0 até verificar telefone)
         await tx.creditBalance.create({
           data: {
             userId: newUser.id,
-            planCreditsRemaining: freePlan.creditsPerMonth,
+            planCreditsRemaining: 0,
             bonusCreditsRemaining: 0,
             planCreditsUsed: 0,
             periodStart: now,
             periodEnd: endOfMonth,
-          },
-        });
-
-        // Registra a transação de créditos iniciais
-        await tx.creditTransaction.create({
-          data: {
-            userId: newUser.id,
-            type: 'SUBSCRIPTION_RENEWAL',
-            amount: freePlan.creditsPerMonth,
-            source: 'plan',
-            description: `Créditos iniciais do plano ${freePlan.name}`,
           },
         });
 
