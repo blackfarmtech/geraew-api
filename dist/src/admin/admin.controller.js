@@ -218,7 +218,7 @@ exports.AdminController = AdminController = __decorate([
     (0, swagger_1.ApiBearerAuth)(),
     (0, common_1.Controller)('api/v1/admin'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
+    (0, roles_decorator_1.Roles)('ADMIN'),
     __metadata("design:paramtypes", [admin_service_1.AdminService])
 ], AdminController);
 //# sourceMappingURL=admin.controller.js.map

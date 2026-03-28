@@ -30,7 +30,7 @@ import { DateRangeDto } from './dto/date-range.dto';
 @ApiBearerAuth()
 @Controller('api/v1/admin')
 @UseGuards(RolesGuard)
-@Roles('admin')
+@Roles('ADMIN')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
