@@ -57,6 +57,17 @@ export class PaymentsService {
     amountCents: number,
     externalPaymentId: string,
   ): Promise<void> {
+    // Segunda camada contra duplicatas (alem do webhook_logs)
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { externalPaymentId },
+    });
+    if (existingPayment) {
+      this.logger.log(
+        `Payment ${externalPaymentId} already exists, skipping subscription creation`,
+      );
+      return;
+    }
+
     const plan = await this.prisma.plan.findUnique({
       where: { slug: planSlug },
     });
@@ -155,6 +166,17 @@ export class PaymentsService {
     amountCents: number,
     externalPaymentId: string,
   ): Promise<void> {
+    // Segunda camada contra duplicatas (alem do webhook_logs)
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { externalPaymentId },
+    });
+    if (existingPayment) {
+      this.logger.log(
+        `Payment ${externalPaymentId} already exists, skipping credit purchase`,
+      );
+      return;
+    }
+
     const creditPackage = await this.prisma.creditPackage.findUnique({
       where: { id: packageId },
     });
@@ -333,14 +355,35 @@ export class PaymentsService {
       return;
     }
 
+    const newRetryCount = subscription.paymentRetryCount + 1;
+    const maxRetries = 3;
+
     await this.prisma.$transaction(async (tx) => {
-      await tx.subscription.update({
-        where: { id: subscription.id },
-        data: {
-          status: 'PAST_DUE',
-          paymentRetryCount: { increment: 1 },
-        },
-      });
+      if (newRetryCount >= maxRetries) {
+        // Downgrade automatico apos 3 falhas: cancelar subscription
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: 'CANCELED',
+            paymentRetryCount: newRetryCount,
+            cancelAtPeriodEnd: false,
+          },
+        });
+
+        // Zerar creditos do plano
+        await tx.creditBalance.updateMany({
+          where: { userId: subscription.userId },
+          data: { planCreditsRemaining: 0, planCreditsUsed: 0 },
+        });
+      } else {
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: 'PAST_DUE',
+            paymentRetryCount: newRetryCount,
+          },
+        });
+      }
 
       await tx.payment.create({
         data: {
@@ -356,9 +399,15 @@ export class PaymentsService {
       });
     });
 
-    this.logger.warn(
-      `Payment failed for subscription ${subscription.id}, retry count: ${subscription.paymentRetryCount + 1}`,
-    );
+    if (newRetryCount >= maxRetries) {
+      this.logger.warn(
+        `Subscription ${subscription.id} canceled after ${maxRetries} failed payment attempts`,
+      );
+    } else {
+      this.logger.warn(
+        `Payment failed for subscription ${subscription.id}, retry count: ${newRetryCount}`,
+      );
+    }
   }
 
   /**

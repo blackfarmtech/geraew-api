@@ -8,6 +8,7 @@ import { SubscriptionsService } from '../subscriptions.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlansService } from '../../plans/plans.service';
 import { StripeService } from '../../payments/stripe.service';
+import { CreditsService } from '../../credits/credits.service';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -83,6 +84,8 @@ const buildSubscription = (plan: any, overrides: any = {}) => ({
   paymentProvider: 'stripe',
   paymentRetryCount: 0,
   scheduledPlanId: null,
+  retentionOfferAcceptedAt: null,
+  pausedUntil: null,
   createdAt: now,
   plan,
   scheduledPlan: null,
@@ -95,6 +98,7 @@ const mockPrisma = {
   subscription: {
     findFirst: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   user: {
     findUniqueOrThrow: jest.fn(),
@@ -111,6 +115,13 @@ const mockStripeService = {
   cancelSubscription: jest.fn(),
   reactivateSubscription: jest.fn(),
   scheduleSubscriptionPlanChange: jest.fn(),
+  applyRetentionDiscount: jest.fn(),
+  pauseSubscription: jest.fn(),
+  getSubscriptionDiscount: jest.fn(),
+};
+
+const mockCreditsService = {
+  addBonusCredits: jest.fn(),
 };
 
 // ── Test Suite ───────────────────────────────────────────────────────
@@ -127,6 +138,7 @@ describe('SubscriptionsService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: PlansService, useValue: mockPlansService },
         { provide: StripeService, useValue: mockStripeService },
+        { provide: CreditsService, useValue: mockCreditsService },
       ],
     }).compile();
 
@@ -147,13 +159,14 @@ describe('SubscriptionsService', () => {
       expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
         where: { userId: 'user-1', status: { in: ['ACTIVE', 'PAST_DUE', 'TRIALING'] } },
         orderBy: { createdAt: 'desc' },
-        include: { plan: true },
+        include: { plan: true, scheduledPlan: true },
       });
     });
 
     it('deve retornar DTO da assinatura quando existe', async () => {
       const subscription = buildSubscription(mockPlanStarter);
       mockPrisma.subscription.findFirst.mockResolvedValue(subscription);
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue(null);
 
       const result = await service.getCurrentSubscription('user-1');
 
@@ -173,6 +186,7 @@ describe('SubscriptionsService', () => {
         scheduledPlan: mockPlanStarter,
       });
       mockPrisma.subscription.findFirst.mockResolvedValue(subscription);
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue(null);
 
       const result = await service.getCurrentSubscription('user-1');
 
@@ -287,7 +301,7 @@ describe('SubscriptionsService', () => {
       expect(mockStripeService.cancelSubscription).not.toHaveBeenCalled();
     });
 
-    it('deve fazer upgrade de Starter para Pro com desconto do preço do Starter', async () => {
+    it('deve fazer upgrade de Starter para Pro com desconto do preço do Starter (sem retencao)', async () => {
       const currentSub = buildSubscription(mockPlanStarter);
       mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
       mockPlansService.findPlanBySlug
@@ -297,12 +311,13 @@ describe('SubscriptionsService', () => {
       mockPrisma.user.findUniqueOrThrow.mockResolvedValue(mockUser);
       mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
       mockStripeService.cancelSubscription.mockResolvedValue(undefined);
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue(null);
       mockStripeService.createSubscriptionCheckout.mockResolvedValue('https://checkout.stripe.com/upgrade_pro');
 
       const result = await service.upgrade('user-1', 'pro');
 
       expect(result).toEqual({ checkoutUrl: 'https://checkout.stripe.com/upgrade_pro' });
-      // Starter -> Pro: desconto = priceCents do Starter (2990)
+      // Starter -> Pro: desconto = priceCents do Starter (2990) sem retencao ativa
       expect(mockStripeService.createSubscriptionCheckout).toHaveBeenCalledWith(
         'cus_123',
         'pro',
@@ -311,6 +326,40 @@ describe('SubscriptionsService', () => {
         'user-1',
         'price_pro_123',
         2990,
+      );
+    });
+
+    it('deve usar desconto real quando retencao esta ativa no upgrade', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPlansService.findPlanBySlug
+        .mockResolvedValueOnce(mockPlanPro)
+        .mockResolvedValueOnce(mockPlanPro);
+      mockPrisma.subscription.update.mockResolvedValue({ ...currentSub, cancelAtPeriodEnd: true });
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue(mockUser);
+      mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
+      mockStripeService.cancelSubscription.mockResolvedValue(undefined);
+      // Retencao ativa: 15% OFF com 1 mes restante
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue({
+        percentOff: 15,
+        amountOffCents: null,
+        durationMonths: 2,
+        remainingMonths: 1,
+      });
+      mockStripeService.createSubscriptionCheckout.mockResolvedValue('https://checkout.stripe.com/upgrade_discount');
+
+      const result = await service.upgrade('user-1', 'pro');
+
+      expect(result).toEqual({ checkoutUrl: 'https://checkout.stripe.com/upgrade_discount' });
+      // Starter (R$29.90) com 15% OFF = R$25.42 (2542 centavos) = Math.round(2990 * 0.85)
+      expect(mockStripeService.createSubscriptionCheckout).toHaveBeenCalledWith(
+        'cus_123',
+        'pro',
+        'Pro',
+        8990,
+        'user-1',
+        'price_pro_123',
+        2542,  // 2990 * 0.85 = 2541.5, rounded to 2542
       );
     });
 
@@ -335,6 +384,7 @@ describe('SubscriptionsService', () => {
       mockPrisma.user.findUniqueOrThrow.mockResolvedValue(mockUser);
       mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
       mockStripeService.cancelSubscription.mockResolvedValue(undefined);
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue(null);
       mockStripeService.createSubscriptionCheckout.mockResolvedValue('https://checkout.stripe.com/session');
 
       await service.upgrade('user-1', 'pro');
@@ -498,7 +548,7 @@ describe('SubscriptionsService', () => {
   // ══════════════════════════════════════════════════════════════════
 
   describe('cancel', () => {
-    it('deve cancelar assinatura marcando cancelAtPeriodEnd', async () => {
+    it('deve cancelar assinatura marcando cancelAtPeriodEnd e limpando scheduledPlanId', async () => {
       const currentSub = buildSubscription(mockPlanStarter);
       mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
       mockStripeService.cancelSubscription.mockResolvedValue(undefined);
@@ -511,9 +561,53 @@ describe('SubscriptionsService', () => {
       expect(mockStripeService.cancelSubscription).toHaveBeenCalledWith('sub_stripe_123');
       expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: { cancelAtPeriodEnd: true },
-        include: { plan: true },
+        data: { cancelAtPeriodEnd: true, scheduledPlanId: null },
+        include: { plan: true, scheduledPlan: true },
       });
+    });
+
+    it('deve reverter preço no Stripe quando há downgrade pago pendente antes de cancelar', async () => {
+      const currentSub = buildSubscription(mockPlanPro, {
+        scheduledPlanId: mockPlanStarter.id,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.scheduleSubscriptionPlanChange.mockResolvedValue(undefined);
+      mockStripeService.cancelSubscription.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanPro, {
+        cancelAtPeriodEnd: true,
+        scheduledPlanId: null,
+        scheduledPlan: null,
+      });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      const result = await service.cancel('user-1');
+
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.scheduledPlan).toBeUndefined();
+      // Deve reverter o preço do Stripe para o plano atual (Pro)
+      expect(mockStripeService.scheduleSubscriptionPlanChange).toHaveBeenCalledWith(
+        'sub_stripe_123',
+        'price_pro_123',
+      );
+      // Depois cancelar no Stripe
+      expect(mockStripeService.cancelSubscription).toHaveBeenCalledWith('sub_stripe_123');
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { cancelAtPeriodEnd: true, scheduledPlanId: null },
+        include: { plan: true, scheduledPlan: true },
+      });
+    });
+
+    it('não deve reverter preço no Stripe quando não há downgrade pendente', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.cancelSubscription.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanStarter, { cancelAtPeriodEnd: true });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      await service.cancel('user-1');
+
+      expect(mockStripeService.scheduleSubscriptionPlanChange).not.toHaveBeenCalled();
     });
 
     it('deve lançar NotFoundException quando não há assinatura ativa', async () => {
@@ -541,7 +635,7 @@ describe('SubscriptionsService', () => {
   // ══════════════════════════════════════════════════════════════════
 
   describe('reactivate', () => {
-    it('deve reativar assinatura removendo cancelAtPeriodEnd', async () => {
+    it('deve reativar assinatura removendo cancelAtPeriodEnd e limpando scheduledPlanId', async () => {
       const currentSub = buildSubscription(mockPlanStarter, { cancelAtPeriodEnd: true });
       mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
       mockStripeService.reactivateSubscription.mockResolvedValue(undefined);
@@ -554,9 +648,53 @@ describe('SubscriptionsService', () => {
       expect(mockStripeService.reactivateSubscription).toHaveBeenCalledWith('sub_stripe_123');
       expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: { cancelAtPeriodEnd: false },
-        include: { plan: true },
+        data: { cancelAtPeriodEnd: false, scheduledPlanId: null },
+        include: { plan: true, scheduledPlan: true },
       });
+    });
+
+    it('deve reverter preço no Stripe quando há downgrade pendente ao reativar', async () => {
+      const currentSub = buildSubscription(mockPlanPro, {
+        cancelAtPeriodEnd: true,
+        scheduledPlanId: mockPlanStarter.id,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.reactivateSubscription.mockResolvedValue(undefined);
+      mockStripeService.scheduleSubscriptionPlanChange.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanPro, {
+        cancelAtPeriodEnd: false,
+        scheduledPlanId: null,
+        scheduledPlan: null,
+      });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      const result = await service.reactivate('user-1');
+
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      // Deve reativar no Stripe
+      expect(mockStripeService.reactivateSubscription).toHaveBeenCalledWith('sub_stripe_123');
+      // Deve reverter o preço do Stripe para o plano atual (Pro)
+      expect(mockStripeService.scheduleSubscriptionPlanChange).toHaveBeenCalledWith(
+        'sub_stripe_123',
+        'price_pro_123',
+      );
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { cancelAtPeriodEnd: false, scheduledPlanId: null },
+        include: { plan: true, scheduledPlan: true },
+      });
+    });
+
+    it('não deve reverter preço no Stripe quando não há downgrade pendente', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, { cancelAtPeriodEnd: true });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.reactivateSubscription.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanStarter, { cancelAtPeriodEnd: false });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      await service.reactivate('user-1');
+
+      expect(mockStripeService.scheduleSubscriptionPlanChange).not.toHaveBeenCalled();
     });
 
     it('deve lançar NotFoundException quando não há assinatura com cancelamento pendente', async () => {
@@ -565,6 +703,308 @@ describe('SubscriptionsService', () => {
       await expect(service.reactivate('user-1')).rejects.toThrow(NotFoundException);
       await expect(service.reactivate('user-1')).rejects.toThrow(
         'Nenhuma assinatura ativa com cancelamento pendente encontrada',
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // cancelDowngrade
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('cancelDowngrade', () => {
+    it('deve cancelar downgrade de plano pago revertendo preço no Stripe', async () => {
+      const currentSub = buildSubscription(mockPlanPro, {
+        scheduledPlanId: mockPlanStarter.id,
+        scheduledPlan: mockPlanStarter,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.scheduleSubscriptionPlanChange.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanPro, {
+        scheduledPlanId: null,
+        scheduledPlan: null,
+        cancelAtPeriodEnd: false,
+      });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      const result = await service.cancelDowngrade('user-1');
+
+      expect(result.plan.slug).toBe('pro');
+      expect(result.scheduledPlan).toBeUndefined();
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      // Deve reverter o preço no Stripe para o plano atual
+      expect(mockStripeService.scheduleSubscriptionPlanChange).toHaveBeenCalledWith(
+        'sub_stripe_123',
+        'price_pro_123',
+      );
+      // Não deve chamar reactivateSubscription (não é downgrade para free)
+      expect(mockStripeService.reactivateSubscription).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { scheduledPlanId: null, cancelAtPeriodEnd: false },
+        include: { plan: true, scheduledPlan: true },
+      });
+    });
+
+    it('deve cancelar downgrade para Free reativando no Stripe', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, {
+        scheduledPlanId: mockPlanFree.id,
+        scheduledPlan: mockPlanFree,
+        cancelAtPeriodEnd: true,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockStripeService.reactivateSubscription.mockResolvedValue(undefined);
+      const updatedSub = buildSubscription(mockPlanStarter, {
+        scheduledPlanId: null,
+        scheduledPlan: null,
+        cancelAtPeriodEnd: false,
+      });
+      mockPrisma.subscription.update.mockResolvedValue(updatedSub);
+
+      const result = await service.cancelDowngrade('user-1');
+
+      expect(result.plan.slug).toBe('starter');
+      expect(result.scheduledPlan).toBeUndefined();
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      // Deve reativar no Stripe (revert cancel_at_period_end)
+      expect(mockStripeService.reactivateSubscription).toHaveBeenCalledWith('sub_stripe_123');
+      // Não deve chamar scheduleSubscriptionPlanChange (cancelAtPeriodEnd was true)
+      expect(mockStripeService.scheduleSubscriptionPlanChange).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { scheduledPlanId: null, cancelAtPeriodEnd: false },
+        include: { plan: true, scheduledPlan: true },
+      });
+    });
+
+    it('deve lançar NotFoundException quando não há downgrade agendado', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+
+      await expect(service.cancelDowngrade('user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.cancelDowngrade('user-1')).rejects.toThrow(
+        'Nenhum downgrade agendado encontrado',
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // acceptOffer
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('acceptOffer', () => {
+    it('deve aplicar 15% OFF por 2 meses para reason "expensive"', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockStripeService.applyRetentionDiscount.mockResolvedValue(undefined);
+
+      const result = await service.acceptOffer('user-1', 'expensive');
+
+      expect(result).toEqual({
+        offerType: 'discount',
+        detail: '15% OFF por 2 meses aplicado',
+      });
+      expect(mockStripeService.applyRetentionDiscount).toHaveBeenCalledWith(
+        'sub_stripe_123',
+        15,
+        2,
+        'user-1',
+        'expensive',
+      );
+      // Claim atomico via updateMany
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', retentionOfferAcceptedAt: null },
+        data: { retentionOfferAcceptedAt: expect.any(Date) },
+      });
+    });
+
+    it('deve adicionar +50 créditos bonus para reason "not_using"', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockCreditsService.addBonusCredits.mockResolvedValue(undefined);
+
+      const result = await service.acceptOffer('user-1', 'not_using');
+
+      expect(result).toEqual({
+        offerType: 'bonus_credits',
+        detail: '+50 creditos bonus adicionados',
+      });
+      expect(mockCreditsService.addBonusCredits).toHaveBeenCalledWith(
+        'user-1',
+        50,
+        'Bonus de retencao: +50 creditos para explorar a plataforma',
+      );
+    });
+
+    it('deve adicionar +30 créditos bonus para reason "quality"', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockCreditsService.addBonusCredits.mockResolvedValue(undefined);
+
+      const result = await service.acceptOffer('user-1', 'quality');
+
+      expect(result).toEqual({
+        offerType: 'bonus_credits',
+        detail: '+30 creditos bonus adicionados',
+      });
+      expect(mockCreditsService.addBonusCredits).toHaveBeenCalledWith(
+        'user-1',
+        30,
+        'Bonus de retencao: +30 creditos para testar melhorias',
+      );
+    });
+
+    it('deve adicionar +100 créditos bonus para reason "competitor"', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockCreditsService.addBonusCredits.mockResolvedValue(undefined);
+
+      const result = await service.acceptOffer('user-1', 'competitor');
+
+      expect(result).toEqual({
+        offerType: 'bonus_credits',
+        detail: '+100 creditos bonus adicionados',
+      });
+      expect(mockCreditsService.addBonusCredits).toHaveBeenCalledWith(
+        'user-1',
+        100,
+        'Bonus de retencao: +100 creditos para comparar com concorrentes',
+      );
+    });
+
+    it('deve pausar assinatura para reason "temporary"', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      // findFirst é chamado 2x: uma no acceptOffer e outra no pause()
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce(currentSub)   // acceptOffer
+        .mockResolvedValueOnce(currentSub);  // pause()
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockStripeService.pauseSubscription.mockResolvedValue(undefined);
+      const pausedSub = buildSubscription(mockPlanStarter, { pausedUntil: new Date() });
+      mockPrisma.subscription.update.mockResolvedValue(pausedSub);
+
+      const result = await service.acceptOffer('user-1', 'temporary');
+
+      expect(result).toEqual({
+        offerType: 'pause',
+        detail: 'Assinatura pausada por 30 dias',
+      });
+    });
+
+    it('deve aplicar 20% OFF na próxima renovação para reason desconhecido (default)', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockStripeService.applyRetentionDiscount.mockResolvedValue(undefined);
+
+      const result = await service.acceptOffer('user-1', 'other_reason');
+
+      expect(result).toEqual({
+        offerType: 'discount',
+        detail: '20% OFF na proxima renovacao aplicado',
+      });
+      expect(mockStripeService.applyRetentionDiscount).toHaveBeenCalledWith(
+        'sub_stripe_123',
+        20,
+        1,
+        'user-1',
+        'other_reason',
+      );
+    });
+
+    it('deve bloquear oferta se já aceitou uma nesta assinatura', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, {
+        retentionOfferAcceptedAt: new Date('2026-03-15'),
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        'Voce ja aceitou uma oferta de retencao nesta assinatura.',
+      );
+    });
+
+    it('deve bloquear oferta via updateMany quando race condition (claim count = 0)', async () => {
+      const currentSub = buildSubscription(mockPlanStarter);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      // Simula race condition: in-memory check passa mas updateMany retorna 0
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        'Voce ja aceitou uma oferta de retencao nesta assinatura.',
+      );
+    });
+
+    it('deve bloquear oferta em assinatura marcada para cancelamento', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, {
+        cancelAtPeriodEnd: true,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        'Nao e possivel aceitar oferta em assinatura marcada para cancelamento.',
+      );
+    });
+
+    it('deve bloquear oferta em assinatura pausada', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, {
+        pausedUntil: new Date('2026-04-15'),
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        'Nao e possivel aceitar oferta em assinatura pausada.',
+      );
+    });
+
+    it('deve fazer rollback do claim se aplicacao da oferta falhar', async () => {
+      const currentSub = buildSubscription(mockPlanStarter, {
+        externalSubscriptionId: null,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscription.update.mockResolvedValue(currentSub);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      // Deve fazer rollback limpando retentionOfferAcceptedAt
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { retentionOfferAcceptedAt: null },
+      });
+    });
+
+    it('deve lançar NotFoundException quando não há assinatura ativa', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('deve lançar BadRequestException para plano Free', async () => {
+      const currentSub = buildSubscription(mockPlanFree);
+      mockPrisma.subscription.findFirst.mockResolvedValue(currentSub);
+
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.acceptOffer('user-1', 'expensive')).rejects.toThrow(
+        'Plano Free nao possui ofertas de retencao',
       );
     });
   });
