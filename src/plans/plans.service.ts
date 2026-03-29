@@ -85,12 +85,25 @@ export class PlansService {
     hasAudio: boolean,
     modelVariant?: string | null,
   ) {
+    // Default to NB2 for image-based types when no variant is specified,
+    // since all image credit_costs rows require a model variant.
+    const IMAGE_TYPES: GenerationType[] = [
+      GenerationType.TEXT_TO_IMAGE,
+      GenerationType.IMAGE_TO_IMAGE,
+      GenerationType.VIRTUAL_TRY_ON,
+      GenerationType.FACE_SWAP,
+    ];
+    const resolvedVariant =
+      !modelVariant && IMAGE_TYPES.includes(generationType)
+        ? 'NB2'
+        : (modelVariant ?? null);
+
     const cost = await this.prisma.creditCost.findFirst({
       where: {
         generationType,
         resolution,
         hasAudio,
-        modelVariant: modelVariant ?? null,
+        modelVariant: resolvedVariant,
         isActive: true,
       },
     });

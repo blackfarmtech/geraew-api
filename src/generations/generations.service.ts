@@ -775,7 +775,7 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
     const creditsRequired = await this.plansService.calculateGenerationCost(
-      GenerationType.IMAGE_TO_IMAGE,
+      type,
       resolution,
       undefined,
       false,
@@ -897,7 +897,7 @@ CRITICAL REQUIREMENTS:
 
     const modelVariant = getModelVariant('nano-banana-2');
     const creditsRequired = await this.plansService.calculateGenerationCost(
-      GenerationType.IMAGE_TO_IMAGE,
+      type,
       resolution,
       undefined,
       false,

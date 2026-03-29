@@ -252,6 +252,21 @@ async function main() {
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'VEO_MAX', creditsPerUnit: 2000, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2800, isPerSecond: false },
+
+    // Virtual Try-On — NB2 (mirrors IMAGE_TO_IMAGE NB2 pricing)
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 190, isPerSecond: false },
+
+    // Virtual Try-On — NBP (mirrors IMAGE_TO_IMAGE NBP pricing)
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 250, isPerSecond: false },
+
+    // Face Swap — NB2 (mirrors IMAGE_TO_IMAGE NB2 pricing)
+    { generationType: 'FACE_SWAP', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
+    { generationType: 'FACE_SWAP', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'FACE_SWAP', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 190, isPerSecond: false },
   ];
 
   // Deactivate all existing credit costs, then upsert new ones
