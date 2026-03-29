@@ -150,6 +150,20 @@ export class SubscriptionsController {
     return this.subscriptionsService.acceptOffer(userId, dto.reason);
   }
 
+  @Post('billing-portal')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Abre o Stripe Customer Portal para gerenciar cartoes e faturas' })
+  @ApiResponse({
+    status: 200,
+    description: 'URL do portal retornada com sucesso',
+  })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  async billingPortal(
+    @CurrentUser('sub') userId: string,
+  ): Promise<{ portalUrl: string }> {
+    return this.subscriptionsService.createBillingPortalSession(userId);
+  }
+
   @Post('cancel-downgrade')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancelar downgrade agendado' })

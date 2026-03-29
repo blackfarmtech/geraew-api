@@ -158,6 +158,9 @@ export class StripeService {
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [lineItem],
+      payment_intent_data: {
+        setup_future_usage: 'off_session',
+      },
       metadata: {
         userId,
         packageId,
@@ -407,6 +410,21 @@ export class StripeService {
     );
 
     return coupon.id;
+  }
+
+  /**
+   * Cria sessao do Stripe Customer Portal para o usuario gerenciar cartoes e faturas.
+   */
+  async createBillingPortalSession(
+    customerId: string,
+    returnUrl: string,
+  ): Promise<string> {
+    const session = await this.stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl,
+    });
+
+    return session.url;
   }
 
   /**

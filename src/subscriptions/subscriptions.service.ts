@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
 import { StripeService } from '../payments/stripe.service';
@@ -22,6 +23,7 @@ export class SubscriptionsService {
     private readonly plansService: PlansService,
     private readonly stripeService: StripeService,
     private readonly creditsService: CreditsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getCurrentSubscription(
@@ -53,6 +55,34 @@ export class SubscriptionsService {
     }
 
     return dto;
+  }
+
+  /**
+   * Cria sessao do Stripe Billing Portal para o usuario gerenciar cartoes e faturas.
+   */
+  async createBillingPortalSession(
+    userId: string,
+  ): Promise<{ portalUrl: string }> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+
+    const customerId = await this.stripeService.getOrCreateCustomer(
+      userId,
+      user.email,
+      user.name,
+    );
+
+    const returnUrl = this.configService.get<string>('FRONTEND_URL')?.split(',')[0]?.trim()
+      ?? 'http://localhost:3001';
+
+    const portalUrl = await this.stripeService.createBillingPortalSession(
+      customerId,
+      returnUrl,
+    );
+
+    return { portalUrl };
   }
 
   /**
