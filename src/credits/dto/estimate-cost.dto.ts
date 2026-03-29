@@ -43,4 +43,10 @@ export class EstimateCostResponseDto {
 
   @ApiProperty()
   hasSufficientBalance: boolean;
+
+  @ApiProperty()
+  canUseFreeGeneration: boolean;
+
+  @ApiProperty()
+  freeVeoGenerationsRemaining: number;
 }

@@ -88,6 +88,7 @@ export class GenerationProcessingService {
       data.userId,
       data.creditsConsumed,
       error,
+      data.usedFreeGeneration,
     );
   }
 
@@ -559,6 +560,7 @@ export class GenerationProcessingService {
         quantity: true,
         creditsConsumed: true,
         userId: true,
+        usedFreeGeneration: true,
       },
     });
 
@@ -609,7 +611,7 @@ export class GenerationProcessingService {
       }),
     ]);
 
-    if (creditsRefunded > 0 && generation) {
+    if (creditsRefunded > 0 && generation && !generation.usedFreeGeneration) {
       await this.creditsService.partialRefund(
         generation.userId,
         creditsRefunded,
@@ -647,6 +649,7 @@ export class GenerationProcessingService {
     userId: string,
     creditsConsumed: number,
     error: Error,
+    usedFreeGeneration?: boolean,
   ): Promise<void> {
     // Idempotency: skip if already completed/failed
     const current = await this.prisma.generation.findUnique({
@@ -686,7 +689,11 @@ export class GenerationProcessingService {
       },
     });
 
-    await this.creditsService.refund(userId, creditsConsumed, generationId);
+    if (usedFreeGeneration) {
+      await this.creditsService.refundFreeVeoGeneration(userId, generationId);
+    } else {
+      await this.creditsService.refund(userId, creditsConsumed, generationId);
+    }
 
     this.generationEvents.emit({
       userId,
@@ -695,7 +702,7 @@ export class GenerationProcessingService {
       data: {
         errorMessage: userMessage,
         errorCode,
-        creditsRefunded: creditsConsumed,
+        creditsRefunded: usedFreeGeneration ? 0 : creditsConsumed,
       },
     });
 

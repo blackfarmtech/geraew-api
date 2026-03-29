@@ -65,6 +65,26 @@ export class StuckGenerationsService {
         },
       });
 
+      // Free generation: restore the free generation slot instead of refunding credits
+      if (generation.usedFreeGeneration) {
+        const balance = await tx.creditBalance.findUnique({
+          where: { userId: generation.userId },
+        });
+        if (balance) {
+          await tx.creditBalance.update({
+            where: { userId: generation.userId },
+            data: {
+              freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining + 1,
+            },
+          });
+        }
+        await tx.generation.update({
+          where: { id: generation.id },
+          data: { usedFreeGeneration: false },
+        });
+        return;
+      }
+
       if (generation.creditsConsumed <= 0) {
         return;
       }

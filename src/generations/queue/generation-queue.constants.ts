@@ -16,6 +16,7 @@ interface BaseJobData {
   generationId: string;
   userId: string;
   creditsConsumed: number;
+  usedFreeGeneration?: boolean;
 }
 
 export interface ImageJobData extends BaseJobData {

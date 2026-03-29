@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Param,
@@ -17,14 +18,17 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
+import { AdjustFreeGenerationsDto } from './dto/adjust-free-generations.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { DateRangeDto } from './dto/date-range.dto';
+import { AdminUploadDto } from './dto/admin-upload.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -32,7 +36,10 @@ import { DateRangeDto } from './dto/date-range.dto';
 @UseGuards(RolesGuard)
 @Roles('ADMIN')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   @Get('stats')
   @ApiOperation({ summary: 'Dashboard de estatísticas do admin' })
@@ -118,6 +125,17 @@ export class AdminController {
     return { success: true, message: 'Créditos ajustados com sucesso' };
   }
 
+  @Patch('users/:id/free-generations')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Ajustar gerações gratuitas de vídeo de um usuário' })
+  async adjustFreeGenerations(
+    @Param('id') id: string,
+    @Body() dto: AdjustFreeGenerationsDto,
+  ) {
+    await this.adminService.adjustFreeGenerations(id, dto.amount);
+    return { success: true, message: 'Gerações gratuitas ajustadas com sucesso' };
+  }
+
   @Patch('users/:id/plan')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Alterar plano de um usuário' })
@@ -150,5 +168,19 @@ export class AdminController {
   @ApiOperation({ summary: 'Lista todas as gerações (monitoramento)' })
   async getGenerations(@Query() pagination: PaginationDto) {
     return this.adminService.getGenerations(pagination);
+  }
+
+  @Post('upload')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera URL pré-assinada para upload de assets do admin (landing page, galeria, etc.)' })
+  async generateAdminUploadUrl(@Body() dto: AdminUploadDto) {
+    const sanitizedFilename = dto.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const { uploadUrl, fileKey } = await this.uploadsService.generatePresignedUrl({
+      filename: sanitizedFilename,
+      contentType: dto.contentType as any,
+      purpose: `admin_assets/${dto.folder}` as any,
+    });
+    const publicUrl = this.uploadsService.getPublicUrl(fileKey);
+    return { uploadUrl, fileKey, publicUrl };
   }
 }

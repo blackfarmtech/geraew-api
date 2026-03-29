@@ -13,6 +13,9 @@ export class CreditBalanceResponseDto {
   @ApiProperty()
   planCreditsUsed: number;
 
+  @ApiProperty()
+  freeVeoGenerationsRemaining: number;
+
   @ApiPropertyOptional()
   periodStart: Date | null;
 

@@ -215,6 +215,7 @@ export class AdminService {
             planCreditsRemaining: user.creditBalance.planCreditsRemaining,
             bonusCreditsRemaining: user.creditBalance.bonusCreditsRemaining,
             planCreditsUsed: user.creditBalance.planCreditsUsed,
+            freeVeoGenerationsRemaining: user.creditBalance.freeVeoGenerationsRemaining,
             periodStart: user.creditBalance.periodStart,
             periodEnd: user.creditBalance.periodEnd,
           }
@@ -281,6 +282,27 @@ export class AdminService {
           description,
         },
       });
+    });
+  }
+
+  async adjustFreeGenerations(userId: string, amount: number): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    await this.prisma.creditBalance.upsert({
+      where: { userId },
+      create: {
+        userId,
+        freeVeoGenerationsRemaining: amount,
+        planCreditsRemaining: 0,
+        bonusCreditsRemaining: 0,
+        planCreditsUsed: 0,
+      },
+      update: {
+        freeVeoGenerationsRemaining: amount,
+      },
     });
   }
 

@@ -371,20 +371,25 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
 
-    // Block VEO for free plan users
-    await this.blockVeoForFreePlan(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
 
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      dto.duration_seconds,
-      hasAudio,
-      sampleCount,
-      modelVariant,
-    );
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          dto.duration_seconds,
+          hasAudio,
+          sampleCount,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -400,10 +405,15 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
       },
     });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.TEXT_TO_VIDEO,
@@ -411,6 +421,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model,
         resolution: dto.resolution,
@@ -443,20 +454,25 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
-    // Block VEO for free plan users
-    await this.blockVeoForFreePlan(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
 
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      dto.duration_seconds,
-      hasAudio,
-      sampleCount,
-      modelVariant,
-    );
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          dto.duration_seconds,
+          hasAudio,
+          sampleCount,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -472,6 +488,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
       },
     });
 
@@ -511,7 +528,11 @@ export class GenerationsService {
     }
     await this.prisma.generationInputImage.createMany({ data: inputImageData });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.IMAGE_TO_VIDEO,
@@ -519,6 +540,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model ?? model,
         resolution: dto.resolution,
@@ -552,20 +574,25 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
-    // Block VEO for free plan users
-    await this.blockVeoForFreePlan(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
 
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      dto.duration_seconds,
-      hasAudio,
-      sampleCount,
-      modelVariant,
-    );
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          dto.duration_seconds,
+          hasAudio,
+          sampleCount,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -581,6 +608,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
       },
     });
 
@@ -602,7 +630,11 @@ export class GenerationsService {
       });
     }
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.REFERENCE_VIDEO,
@@ -610,6 +642,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model ?? model,
         resolution: dto.resolution,
@@ -945,12 +978,12 @@ CRITICAL REQUIREMENTS:
 
   // ─── Shared helpers ───────────────────────────────────────
 
-  private async blockVeoForFreePlan(
+  private async checkVeoAccess(
     userId: string,
     modelVariant: string | null,
-  ): Promise<void> {
+  ): Promise<'paid' | 'free_generation'> {
     if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
-      return;
+      return 'paid';
     }
 
     const subscription = await this.prisma.subscription.findFirst({
@@ -958,14 +991,23 @@ CRITICAL REQUIREMENTS:
       include: { plan: true },
     });
 
-    if (!subscription || subscription.plan.slug === 'free') {
-      throw new ForbiddenException({
-        code: 'PLAN_UPGRADE_REQUIRED',
-        message:
-          'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
-        statusCode: 403,
-      });
+    // Paid plan user — normal credit flow
+    if (subscription && subscription.plan.slug !== 'free') {
+      return 'paid';
     }
+
+    // Free plan user — check for free generations
+    const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
+    if (hasFree) {
+      return 'free_generation';
+    }
+
+    throw new ForbiddenException({
+      code: 'PLAN_UPGRADE_REQUIRED',
+      message:
+        'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
+      statusCode: 403,
+    });
   }
 
   private async checkConcurrentLimit(userId: string): Promise<void> {

@@ -30,6 +30,7 @@ export class CreditsService {
         bonusCreditsRemaining: 0,
         totalCreditsAvailable: 0,
         planCreditsUsed: 0,
+        freeVeoGenerationsRemaining: 0,
         periodStart: null,
         periodEnd: null,
       };
@@ -41,6 +42,7 @@ export class CreditsService {
       totalCreditsAvailable:
         balance.planCreditsRemaining + balance.bonusCreditsRemaining,
       planCreditsUsed: balance.planCreditsUsed,
+      freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining,
       periodStart: balance.periodStart,
       periodEnd: balance.periodEnd,
     };
@@ -105,9 +107,15 @@ export class CreditsService {
 
     const balance = await this.getBalance(userId);
 
+    // Check if user can use a free Veo generation
+    const isVeoModel = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
+    const canUseFreeGeneration = isVeoModel && balance.freeVeoGenerationsRemaining > 0;
+
     return {
       creditsRequired,
-      hasSufficientBalance: balance.totalCreditsAvailable >= creditsRequired,
+      hasSufficientBalance: canUseFreeGeneration || balance.totalCreditsAvailable >= creditsRequired,
+      canUseFreeGeneration,
+      freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining,
     };
   }
 
@@ -298,6 +306,71 @@ export class CreditsService {
           },
         });
       }
+    });
+  }
+
+  async hasFreeVeoGenerations(userId: string): Promise<boolean> {
+    const balance = await this.prisma.creditBalance.findUnique({
+      where: { userId },
+      select: { freeVeoGenerationsRemaining: true },
+    });
+    return (balance?.freeVeoGenerationsRemaining ?? 0) > 0;
+  }
+
+  async consumeFreeVeoGeneration(
+    userId: string,
+    generationId: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const [balance] = await tx.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
+        userId,
+      );
+
+      if (!balance || balance.free_veo_generations_remaining <= 0) {
+        throw new BadRequestException({
+          code: 'NO_FREE_GENERATIONS',
+          message: 'Nenhuma geração gratuita disponível.',
+        });
+      }
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          freeVeoGenerationsRemaining: balance.free_veo_generations_remaining - 1,
+        },
+      });
+
+      await tx.generation.update({
+        where: { id: generationId },
+        data: { usedFreeGeneration: true },
+      });
+    });
+  }
+
+  async refundFreeVeoGeneration(
+    userId: string,
+    generationId: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const [balance] = await tx.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
+        userId,
+      );
+
+      if (!balance) return;
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          freeVeoGenerationsRemaining: balance.free_veo_generations_remaining + 1,
+        },
+      });
+
+      await tx.generation.update({
+        where: { id: generationId },
+        data: { usedFreeGeneration: false },
+      });
     });
   }
 

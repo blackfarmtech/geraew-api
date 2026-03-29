@@ -223,9 +223,10 @@ model CreditBalance {
   userId                String    @unique @map("user_id")
   planCreditsRemaining  Int       @default(0) @map("plan_credits_remaining")
   bonusCreditsRemaining Int       @default(0) @map("bonus_credits_remaining")
-  planCreditsUsed       Int       @default(0) @map("plan_credits_used")
-  periodStart           DateTime? @map("period_start")
-  periodEnd             DateTime? @map("period_end")
+  planCreditsUsed               Int       @default(0) @map("plan_credits_used")
+  freeVeoGenerationsRemaining   Int       @default(0) @map("free_veo_generations_remaining")
+  periodStart                   DateTime? @map("period_start")
+  periodEnd                     DateTime? @map("period_end")
 
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -284,7 +285,8 @@ model Generation {
   hasWatermark Boolean @default(false) @map("has_watermark")
 
   // Costs
-  creditsConsumed Int @default(0) @map("credits_consumed")
+  creditsConsumed    Int     @default(0) @map("credits_consumed")
+  usedFreeGeneration Boolean @default(false) @map("used_free_generation")
 
   // Metadata
   processingStartedAt DateTime? @map("processing_started_at")
