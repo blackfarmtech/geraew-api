@@ -288,9 +288,13 @@ export class StripeWebhookService {
   ): Promise<void> {
     const stripeSub = event.data.object as Stripe.Subscription;
 
+    // O portal do Stripe usa cancel_at (data fixa) em vez de cancel_at_period_end.
+    // Tratar ambos como indicação de cancelamento agendado.
+    const isCanceling = stripeSub.cancel_at_period_end || stripeSub.cancel_at !== null;
+
     await this.paymentsService.handleSubscriptionUpdated(
       stripeSub.id,
-      stripeSub.cancel_at_period_end,
+      isCanceling,
       stripeSub.status,
     );
   }
