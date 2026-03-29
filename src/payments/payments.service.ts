@@ -57,17 +57,6 @@ export class PaymentsService {
     amountCents: number,
     externalPaymentId: string,
   ): Promise<void> {
-    // Segunda camada contra duplicatas (alem do webhook_logs)
-    const existingPayment = await this.prisma.payment.findFirst({
-      where: { externalPaymentId },
-    });
-    if (existingPayment) {
-      this.logger.log(
-        `Payment ${externalPaymentId} already exists, skipping subscription creation`,
-      );
-      return;
-    }
-
     const plan = await this.prisma.plan.findUnique({
       where: { slug: planSlug },
     });
@@ -81,6 +70,17 @@ export class PaymentsService {
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     await this.prisma.$transaction(async (tx) => {
+      // Idempotência: check DENTRO da transaction para evitar race condition
+      const existingPayment = await tx.payment.findFirst({
+        where: { externalPaymentId },
+      });
+      if (existingPayment) {
+        this.logger.log(
+          `Payment ${externalPaymentId} already exists, skipping subscription creation`,
+        );
+        return;
+      }
+
       // Cancelar subscriptions anteriores do usuário
       await tx.subscription.updateMany({
         where: {
@@ -166,17 +166,6 @@ export class PaymentsService {
     amountCents: number,
     externalPaymentId: string,
   ): Promise<void> {
-    // Segunda camada contra duplicatas (alem do webhook_logs)
-    const existingPayment = await this.prisma.payment.findFirst({
-      where: { externalPaymentId },
-    });
-    if (existingPayment) {
-      this.logger.log(
-        `Payment ${externalPaymentId} already exists, skipping credit purchase`,
-      );
-      return;
-    }
-
     const creditPackage = await this.prisma.creditPackage.findUnique({
       where: { id: packageId },
     });
@@ -186,6 +175,17 @@ export class PaymentsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      // Idempotência: check DENTRO da transaction para evitar race condition
+      const existingPayment = await tx.payment.findFirst({
+        where: { externalPaymentId },
+      });
+      if (existingPayment) {
+        this.logger.log(
+          `Payment ${externalPaymentId} already exists, skipping credit purchase`,
+        );
+        return;
+      }
+
       // Adicionar créditos bônus
       await tx.creditBalance.upsert({
         where: { userId },
@@ -255,6 +255,17 @@ export class PaymentsService {
       return;
     }
 
+    // Idempotência: verificar se este pagamento já foi processado
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { externalPaymentId },
+    });
+    if (existingPayment) {
+      this.logger.log(
+        `Renewal payment ${externalPaymentId} already exists, skipping`,
+      );
+      return;
+    }
+
     // Se tem downgrade agendado, aplicar o novo plano
     const hasScheduledPlan = !!subscription.scheduledPlanId;
     let activePlan = subscription.plan;
@@ -265,6 +276,16 @@ export class PaymentsService {
       });
       if (scheduled) {
         activePlan = scheduled;
+      } else {
+        this.logger.error(
+          `Scheduled plan ${subscription.scheduledPlanId} not found for subscription ${subscription.id}. ` +
+          `Keeping current plan ${subscription.plan.slug} to avoid charging wrong tier.`,
+        );
+        // Limpar o scheduledPlanId inválido para não repetir o erro
+        await this.prisma.subscription.update({
+          where: { id: subscription.id },
+          data: { scheduledPlanId: null },
+        });
       }
     }
 
@@ -491,6 +512,48 @@ export class PaymentsService {
     });
 
     this.logger.log(`Refund processed for payment ${payment.id}, user ${payment.userId}`);
+  }
+
+  /**
+   * Sincroniza estado da subscription com o Stripe (customer.subscription.updated).
+   * Cobre cancelamentos e reativações feitos pelo Customer Portal.
+   */
+  async handleSubscriptionUpdated(
+    stripeSubscriptionId: string,
+    cancelAtPeriodEnd: boolean,
+    stripeStatus: string,
+  ): Promise<void> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { externalSubscriptionId: stripeSubscriptionId },
+    });
+
+    if (!subscription) {
+      this.logger.warn(
+        `Subscription not found for Stripe ID ${stripeSubscriptionId} (updated event)`,
+      );
+      return;
+    }
+
+    // Mapear status do Stripe para o status local (enum do Prisma)
+    const statusMap: Record<string, 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIALING'> = {
+      active: 'ACTIVE',
+      past_due: 'PAST_DUE',
+      canceled: 'CANCELED',
+      trialing: 'TRIALING',
+    };
+    const localStatus = statusMap[stripeStatus] ?? undefined;
+
+    await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        cancelAtPeriodEnd,
+        ...(localStatus ? { status: localStatus } : {}),
+      },
+    });
+
+    this.logger.log(
+      `Synced subscription ${subscription.id}: cancelAtPeriodEnd=${cancelAtPeriodEnd}, status=${stripeStatus}`,
+    );
   }
 
   /**

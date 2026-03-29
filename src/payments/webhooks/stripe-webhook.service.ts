@@ -35,20 +35,36 @@ export class StripeWebhookService {
     const eventType = event.type;
     const externalId = event.id;
 
-    // Idempotência: verificar se o evento já foi processado
+    // Idempotência: tentar criar o log atomicamente.
+    // Se já existe e foi processado, pular. Se já existe e falhou, reprocessar.
     const existingLog = await this.webhookLogsService.findByExternalId(externalId);
     if (existingLog?.processed) {
       this.logger.log(`Event ${externalId} already processed, skipping`);
       return;
     }
 
-    // Log the webhook event
-    const log = await this.webhookLogsService.create(
-      'stripe',
-      eventType,
-      externalId,
-      JSON.parse(JSON.stringify(event)) as Prisma.InputJsonValue,
-    );
+    // Tentar claim atômico: marcar como processing antes de criar.
+    // Se dois webhooks chegam ao mesmo tempo, o segundo vê o log do primeiro.
+    let log: { id: string };
+    if (existingLog) {
+      // Reprocessamento de evento que falhou anteriormente
+      log = existingLog;
+    } else {
+      log = await this.webhookLogsService.create(
+        'stripe',
+        eventType,
+        externalId,
+        JSON.parse(JSON.stringify(event)) as Prisma.InputJsonValue,
+      );
+
+      // Double-check: outro processo pode ter criado entre o findByExternalId e o create.
+      // Verificar se existe outro log processado para o mesmo evento.
+      const doubleCheck = await this.webhookLogsService.findProcessedByExternalId(externalId);
+      if (doubleCheck && doubleCheck.id !== log.id) {
+        this.logger.log(`Event ${externalId} already processed by another worker, skipping`);
+        return;
+      }
+    }
 
     try {
       await this.routeEvent(eventType, event);
@@ -78,6 +94,9 @@ export class StripeWebhookService {
       case 'invoice.payment_failed':
       case 'invoice_payment.failed':
         await this.handleInvoicePaymentFailed(event);
+        break;
+      case 'customer.subscription.updated':
+        await this.handleSubscriptionUpdated(event);
         break;
       case 'customer.subscription.deleted':
         await this.handleSubscriptionDeleted(event);
@@ -126,6 +145,18 @@ export class StripeWebhookService {
         session.amount_total ?? 0,
         session.payment_intent as string ?? session.id,
       );
+
+      // Se é upgrade, cancelar a sub antiga no Stripe agora que a nova foi criada
+      const oldExternalSubscriptionId = metadata.oldExternalSubscriptionId;
+      if (oldExternalSubscriptionId) {
+        await this.stripeService.cancelSubscriptionImmediately(
+          oldExternalSubscriptionId,
+        ).catch((err) => {
+          this.logger.warn(
+            `Failed to cancel old subscription ${oldExternalSubscriptionId}: ${err instanceof Error ? err.message : err}`,
+          );
+        });
+      }
     } else if (type === 'credit_purchase') {
       const userId = metadata.userId;
       const packageId = metadata.packageId;
@@ -245,6 +276,22 @@ export class StripeWebhookService {
       stripeSubscriptionId,
       invoice.amount_due ?? 0,
       invoice.id,
+    );
+  }
+
+  /**
+   * Subscription atualizada no Stripe — sincroniza cancel_at_period_end e pause.
+   * Cobre cancelamentos feitos pelo Customer Portal do Stripe.
+   */
+  private async handleSubscriptionUpdated(
+    event: Stripe.Event,
+  ): Promise<void> {
+    const stripeSub = event.data.object as Stripe.Subscription;
+
+    await this.paymentsService.handleSubscriptionUpdated(
+      stripeSub.id,
+      stripeSub.cancel_at_period_end,
+      stripeSub.status,
     );
   }
 

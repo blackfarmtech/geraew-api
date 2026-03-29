@@ -68,6 +68,7 @@ export class StripeService {
     userId: string,
     stripePriceId?: string | null,
     discountAmountCents?: number,
+    oldExternalSubscriptionId?: string,
   ): Promise<string> {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
@@ -103,6 +104,7 @@ export class StripeService {
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
+      payment_method_collection: 'if_required',
       line_items: [lineItem],
       ...(discounts ? { discounts } : {}),
       metadata: {
@@ -110,6 +112,7 @@ export class StripeService {
         planSlug,
         type: 'subscription',
         ...(couponId ? { upgradeCouponId: couponId } : {}),
+        ...(oldExternalSubscriptionId ? { oldExternalSubscriptionId } : {}),
       },
       subscription_data: {
         metadata: {
@@ -157,6 +160,7 @@ export class StripeService {
       customer: customerId,
       mode: 'payment',
       payment_method_types: ['card'],
+      payment_method_collection: 'if_required',
       line_items: [lineItem],
       payment_intent_data: {
         setup_future_usage: 'off_session',
@@ -301,6 +305,17 @@ export class StripeService {
 
     this.logger.log(
       `Marked Stripe subscription ${externalSubscriptionId} for cancellation at period end`,
+    );
+  }
+
+  /**
+   * Cancela subscription no Stripe imediatamente (usado no upgrade após checkout concluído).
+   */
+  async cancelSubscriptionImmediately(externalSubscriptionId: string): Promise<void> {
+    await this.stripe.subscriptions.cancel(externalSubscriptionId);
+
+    this.logger.log(
+      `Immediately canceled Stripe subscription ${externalSubscriptionId}`,
     );
   }
 

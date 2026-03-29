@@ -41,4 +41,10 @@ export class WebhookLogsService {
       where: { externalId },
     });
   }
+
+  async findProcessedByExternalId(externalId: string) {
+    return this.prisma.webhookLog.findFirst({
+      where: { externalId, processed: true },
+    });
+  }
 }

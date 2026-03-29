@@ -187,21 +187,13 @@ export class SubscriptionsService {
 
         discountAmountCents = actualPriceCents;
       }
-
-      // Cancelar assinatura antiga no Stripe (soft cancel)
-      if (current.externalSubscriptionId) {
-        await this.stripeService.cancelSubscription(
-          current.externalSubscriptionId,
-        ).catch(() => {});
-      }
-      await this.prisma.subscription.update({
-        where: { id: current.id },
-        data: { cancelAtPeriodEnd: true },
-      });
     }
 
     // Redirecionar para Stripe Checkout (com desconto se upgrade de plano pago)
-    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents);
+    // A sub antiga NÃO é cancelada aqui — só será cancelada no webhook
+    // checkout.session.completed, evitando que o usuário fique sem plano se desistir.
+    const oldExternalSubscriptionId = current?.externalSubscriptionId ?? undefined;
+    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents, oldExternalSubscriptionId);
     return { checkoutUrl };
   }
 
@@ -596,6 +588,7 @@ export class SubscriptionsService {
     userId: string,
     planSlug: string,
     discountAmountCents = 0,
+    oldExternalSubscriptionId?: string,
   ): Promise<string> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -615,6 +608,7 @@ export class SubscriptionsService {
       userId,
       plan.stripePriceId,
       discountAmountCents > 0 ? discountAmountCents : undefined,
+      oldExternalSubscriptionId,
     );
   }
 
