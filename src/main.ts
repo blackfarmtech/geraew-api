@@ -11,8 +11,10 @@ async function bootstrap() {
     bodyParser: false,
   });
 
-  // Security headers
-  app.use(helmet());
+  // Security headers (configured to not interfere with CORS)
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
 
   // Body parsers that preserve rawBody for Stripe webhook verification
   app.use(express.json({ limit: '10mb', verify: (req: any, _res, buf) => { req.rawBody = buf; } }));
@@ -21,11 +23,34 @@ async function bootstrap() {
   // Enable CORS with restricted origins
   const allowedOrigins = [
     ...(process.env.FRONTEND_URL?.split(',').map(u => u.trim()) ?? []),
-    'http://localhost:3000', "http://localhost:3001"
+    'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
   ].filter(Boolean);
 
+  // Build a set of all allowed origins including www/non-www and http/https variants
+  const allAllowedOrigins = new Set<string>();
+  for (const origin of allowedOrigins) {
+    allAllowedOrigins.add(origin);
+    try {
+      const url = new URL(origin);
+      // Add www variant if not present, and vice-versa
+      if (url.hostname.startsWith('www.')) {
+        url.hostname = url.hostname.slice(4);
+      } else {
+        url.hostname = `www.${url.hostname}`;
+      }
+      allAllowedOrigins.add(url.origin);
+    } catch {}
+  }
+
   app.enableCors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allAllowedOrigins.has(origin)) return callback(null, true);
+
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
