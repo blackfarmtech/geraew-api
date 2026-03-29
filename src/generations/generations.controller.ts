@@ -36,6 +36,8 @@ import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
 import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with-references.dto';
 import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
+import { GenerateVirtualTryOnDto } from './dto/generate-virtual-try-on.dto';
+import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -152,6 +154,32 @@ export class GenerationsController {
     @Body() dto: GenerateMotionControlDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateMotionControl(userId, dto);
+  }
+
+  @Post('virtual-try-on')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Provador Virtual — veste a roupa na influencer de IA',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async virtualTryOn(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateVirtualTryOnDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateVirtualTryOn(userId, dto);
+  }
+
+  @Post('face-swap')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Face Swap — substitui o rosto/corpo na cena usando IA',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async faceSwap(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateFaceSwapDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateFaceSwap(userId, dto);
   }
 
   @Get()

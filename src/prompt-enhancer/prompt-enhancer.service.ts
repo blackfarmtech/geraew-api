@@ -746,16 +746,47 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
   }
 
   async enhanceInfluencer(selections: EnhanceInfluencerDto): Promise<string> {
-    const userMessage = JSON.stringify(selections);
+    const { referenceImageBase64, referenceImageMimeType, ...characterSelections } = selections;
+    const hasReferenceImage = !!referenceImageBase64;
 
-    this.logger.log(`[INFLUENCER] Input selections: ${userMessage}`);
+    this.logger.log(`[INFLUENCER] Has reference image: ${hasReferenceImage}`);
+
+    let systemPrompt = INFLUENCER_SYSTEM_PROMPT;
+    const messageContent: Anthropic.Messages.ContentBlockParam[] = [];
+
+    if (hasReferenceImage) {
+      // Compress the reference image for vision
+      const compressed = await this.compressImageForVision(referenceImageBase64);
+
+      systemPrompt = INFLUENCER_SYSTEM_PROMPT + `\n\n## REFERENCE IMAGE MODE\n\nThe user has provided a reference image instead of selecting characteristics manually. You MUST:\n1. Analyze the person in the reference image carefully\n2. Generate a NEW, ORIGINAL character inspired by the person in the image\n3. Capture the overall aesthetic, facial structure, and vibe but create a UNIQUE individual — NOT a copy or clone\n4. Retain the general energy, style, and look while introducing subtle differences\n5. IGNORE the characterSelections JSON — use ONLY the reference image as inspiration\n6. Still follow ALL other rules (candid iPhone photo, variety, eye contact, etc.)\n7. NEVER use words like: deepfake, clone, replica, copy, identical, same person`;
+
+      messageContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: (compressed.mime_type || referenceImageMimeType || 'image/png') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: compressed.base64,
+        },
+      });
+      messageContent.push({
+        type: 'text',
+        text: 'Generate a new, original character inspired by the person in this reference image. Capture a similar overall aesthetic, facial structure, and vibe, but create a unique individual — not a copy. Retain the general energy and style while introducing subtle differences that make this person distinctly their own.',
+      });
+    } else {
+      messageContent.push({
+        type: 'text',
+        text: JSON.stringify(characterSelections),
+      });
+    }
+
+    this.logger.log(`[INFLUENCER] Input: ${hasReferenceImage ? '[reference image]' : JSON.stringify(characterSelections)}`);
 
     const response = await this.anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
-      system: INFLUENCER_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
-        { role: 'user', content: userMessage },
+        { role: 'user', content: messageContent },
       ],
       temperature: 1.0,
     });

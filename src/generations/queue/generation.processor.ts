@@ -10,6 +10,7 @@ import {
   mapGeminiToNanoBanana,
 } from '../providers/nano-banana.provider';
 import { WanProvider } from '../providers/wan.provider';
+import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -27,6 +28,8 @@ import {
   ImageToVideoJobData,
   ReferenceVideoJobData,
   MotionControlJobData,
+  VirtualTryOnJobData,
+  FaceSwapJobData,
 } from './generation-queue.constants';
 
 @Processor(GENERATION_QUEUE, {
@@ -43,6 +46,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly geraewProvider: GeraewProvider,
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly wanProvider: WanProvider,
+    private readonly faceSwapProvider: FaceSwapProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {
@@ -69,6 +73,10 @@ export class GenerationProcessor extends WorkerHost {
         return this.processReferenceVideo(job.data as ReferenceVideoJobData);
       case GenerationJobName.MOTION_CONTROL:
         return this.processMotionControl(job.data as MotionControlJobData);
+      case GenerationJobName.VIRTUAL_TRY_ON:
+        return this.processVirtualTryOn(job.data as VirtualTryOnJobData);
+      case GenerationJobName.FACE_SWAP:
+        return this.processFaceSwap(job.data as FaceSwapJobData);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
@@ -381,6 +389,47 @@ export class GenerationProcessor extends WorkerHost {
       id: data.generationId,
       videoUrl: data.videoUrl,
       imageUrl: data.imageUrl,
+      resolution: data.resolution,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processVirtualTryOn(data: VirtualTryOnJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[VIRTUAL_TRY_ON] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio}`,
+    );
+
+    const images = await this.loadInputImagesAsBase64(data.generationId);
+
+    const result = await this.geraewProvider.generateImage({
+      id: data.generationId,
+      prompt: data.prompt,
+      model: data.model,
+      resolution: data.resolution,
+      aspectRatio: data.aspectRatio,
+      mimeType: data.mimeType,
+      images,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processFaceSwap(data: FaceSwapJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[FACE_SWAP] ${data.generationId} resolution=${data.resolution} sourceImage=${data.sourceImageUrl} targetImage=${data.targetImageUrl}`,
+    );
+
+    const result = await this.faceSwapProvider.generateFaceSwap({
+      id: data.generationId,
+      sourceImageUrl: data.sourceImageUrl,
+      targetImageUrl: data.targetImageUrl,
       resolution: data.resolution,
     });
 

@@ -111,6 +111,37 @@ export class CreditsService {
     };
   }
 
+  async addBonusCredits(
+    userId: string,
+    amount: number,
+    description: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.creditBalance.upsert({
+        where: { userId },
+        create: {
+          userId,
+          bonusCreditsRemaining: amount,
+          planCreditsRemaining: 0,
+          planCreditsUsed: 0,
+        },
+        update: {
+          bonusCreditsRemaining: { increment: amount },
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          type: CreditTransactionType.REFERRAL_BONUS,
+          amount,
+          source: 'bonus',
+          description,
+        },
+      });
+    });
+  }
+
   async debit(
     userId: string,
     amount: number,

@@ -20,6 +20,13 @@ export class ScheduledPlanDto {
   @ApiProperty() creditsPerMonth: number;
 }
 
+export class SubscriptionDiscountDto {
+  @ApiPropertyOptional() percentOff?: number | null;
+  @ApiPropertyOptional() amountOffCents?: number | null;
+  @ApiPropertyOptional() durationMonths?: number | null;
+  @ApiPropertyOptional() remainingMonths?: number | null;
+}
+
 export class SubscriptionResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() status: string;
@@ -31,4 +38,7 @@ export class SubscriptionResponseDto {
   @ApiProperty() createdAt: Date;
   @ApiProperty() plan: SubscriptionPlanDto;
   @ApiPropertyOptional() scheduledPlan?: ScheduledPlanDto;
+  @ApiPropertyOptional() pausedUntil?: Date | null;
+  @ApiPropertyOptional() discount?: SubscriptionDiscountDto | null;
+  @ApiPropertyOptional() retentionOfferAcceptedAt?: Date | null;
 }

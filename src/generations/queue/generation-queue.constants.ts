@@ -8,6 +8,8 @@ export enum GenerationJobName {
   IMAGE_TO_VIDEO = 'image-to-video',
   REFERENCE_VIDEO = 'reference-video',
   MOTION_CONTROL = 'motion-control',
+  VIRTUAL_TRY_ON = 'virtual-try-on',
+  FACE_SWAP = 'face-swap',
 }
 
 interface BaseJobData {
@@ -60,13 +62,29 @@ export interface MotionControlJobData extends BaseJobData {
   resolution: string;
 }
 
+export interface VirtualTryOnJobData extends BaseJobData {
+  prompt: string;
+  model: string;
+  resolution: string;
+  aspectRatio?: string;
+  mimeType?: string;
+}
+
+export interface FaceSwapJobData extends BaseJobData {
+  sourceImageUrl: string;
+  targetImageUrl: string;
+  resolution: string;
+}
+
 export type GenerationJobData =
   | ImageJobData
   | ImageNanoBananaJobData
   | TextToVideoJobData
   | ImageToVideoJobData
   | ReferenceVideoJobData
-  | MotionControlJobData;
+  | MotionControlJobData
+  | VirtualTryOnJobData
+  | FaceSwapJobData;
 
 export const IMAGE_JOB_TIMEOUT = 5 * 60 * 1000; // 5 min
 export const VIDEO_JOB_TIMEOUT = 12 * 60 * 1000; // 12 min

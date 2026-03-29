@@ -34,6 +34,8 @@ enum GenerationType {
   IMAGE_TO_VIDEO
   MOTION_CONTROL
   REFERENCE_VIDEO
+  FACE_SWAP
+  VIRTUAL_TRY_ON
 }
 
 enum GenerationStatus {
@@ -198,6 +200,8 @@ model Subscription {
   externalSubscriptionId String?            @map("external_subscription_id")
   paymentRetryCount      Int                @default(0) @map("payment_retry_count")
   scheduledPlanId        String?            @map("scheduled_plan_id")
+  pausedUntil            DateTime?          @map("paused_until")
+  retentionOfferAcceptedAt DateTime?        @map("retention_offer_accepted_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

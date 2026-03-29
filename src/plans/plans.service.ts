@@ -1,16 +1,58 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerationType, Resolution } from '@prisma/client';
 
+/**
+ * Maps plan slugs to env var names for Stripe price IDs.
+ * Allows dev/test to use different price IDs without touching the database.
+ */
+const PLAN_PRICE_ENV: Record<string, string> = {
+  starter: 'STRIPE_PRICE_PLAN_STARTER',
+  creator: 'STRIPE_PRICE_PLAN_CREATOR',
+  pro: 'STRIPE_PRICE_PLAN_PRO',
+  studio: 'STRIPE_PRICE_PLAN_STUDIO',
+};
+
+const PACKAGE_PRICE_ENV: Record<string, string> = {
+  'boost p': 'STRIPE_PRICE_BOOST_P',
+  'boost m': 'STRIPE_PRICE_BOOST_M',
+  'boost g': 'STRIPE_PRICE_BOOST_G',
+};
+
 @Injectable()
 export class PlansService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Override stripePriceId with env var value when available.
+   * This allows test mode to use different Stripe prices without touching the DB.
+   */
+  private overridePriceId<T extends { slug?: string; name?: string; stripePriceId: string | null }>(
+    record: T,
+    envMap: Record<string, string>,
+    key: 'slug' | 'name' = 'slug',
+  ): T {
+    const lookup = (record[key] ?? '').toLowerCase();
+    const envVar = envMap[lookup];
+    if (envVar) {
+      const envValue = this.configService.get<string>(envVar);
+      if (envValue) {
+        return { ...record, stripePriceId: envValue };
+      }
+    }
+    return record;
+  }
 
   async findAllPlans() {
-    return this.prisma.plan.findMany({
+    const plans = await this.prisma.plan.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+    return plans.map((p) => this.overridePriceId(p, PLAN_PRICE_ENV));
   }
 
   async findPlanBySlug(slug: string) {
@@ -22,7 +64,7 @@ export class PlansService {
       throw new NotFoundException(`Plano "${slug}" não encontrado`);
     }
 
-    return plan;
+    return this.overridePriceId(plan, PLAN_PRICE_ENV);
   }
 
   async findPlanById(id: string) {
@@ -34,7 +76,7 @@ export class PlansService {
       throw new NotFoundException('Plano não encontrado');
     }
 
-    return plan;
+    return this.overridePriceId(plan, PLAN_PRICE_ENV);
   }
 
   async getCreditCost(
@@ -83,10 +125,11 @@ export class PlansService {
   }
 
   async findAllPackages() {
-    return this.prisma.creditPackage.findMany({
+    const packages = await this.prisma.creditPackage.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+    return packages.map((p) => this.overridePriceId(p, PACKAGE_PRICE_ENV, 'name'));
   }
 
   async findPackageById(id: string) {
@@ -98,6 +141,6 @@ export class PlansService {
       throw new NotFoundException('Pacote de créditos não encontrado');
     }
 
-    return pkg;
+    return this.overridePriceId(pkg, PACKAGE_PRICE_ENV, 'name');
   }
 }

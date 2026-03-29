@@ -175,6 +175,12 @@ export class StripeService {
   /**
    * Verifica assinatura do webhook e retorna o evento Stripe.
    */
+  async retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice> {
+    return this.stripe.invoices.retrieve(invoiceId, {
+      expand: ['lines.data', 'parent.subscription_details'],
+    });
+  }
+
   constructWebhookEvent(payload: Buffer, signature: string): Stripe.Event {
     return this.stripe.webhooks.constructEvent(
       payload,
@@ -305,6 +311,114 @@ export class StripeService {
 
     this.logger.log(
       `Reactivated Stripe subscription ${externalSubscriptionId}`,
+    );
+  }
+
+  /**
+   * Pausa a cobranca da subscription no Stripe por um periodo.
+   * Usa pause_collection com behavior=void (nao gera invoice durante a pausa).
+   */
+  async pauseSubscription(
+    externalSubscriptionId: string,
+    resumesAt: Date,
+  ): Promise<void> {
+    await this.stripe.subscriptions.update(externalSubscriptionId, {
+      pause_collection: {
+        behavior: 'void',
+        resumes_at: Math.floor(resumesAt.getTime() / 1000),
+      },
+    });
+
+    this.logger.log(
+      `Paused Stripe subscription ${externalSubscriptionId} until ${resumesAt.toISOString()}`,
+    );
+  }
+
+  /**
+   * Busca informacoes de desconto ativo em uma subscription no Stripe.
+   */
+  async getSubscriptionDiscount(
+    externalSubscriptionId: string,
+  ): Promise<{
+    percentOff: number | null;
+    amountOffCents: number | null;
+    durationMonths: number | null;
+    remainingMonths: number | null;
+  } | null> {
+    try {
+      const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId, {
+        expand: ['discounts.coupon'],
+      });
+      const firstDiscount = sub.discounts?.[0] as any;
+      if (!firstDiscount || typeof firstDiscount === 'string') return null;
+      const coupon = firstDiscount.coupon as Stripe.Coupon | null;
+      if (!coupon) return null;
+      if (!coupon.percent_off && !coupon.amount_off) return null;
+
+      let remainingMonths: number | null = null;
+
+      if (coupon.duration === 'repeating' && coupon.duration_in_months) {
+        const startTs = firstDiscount.start ? firstDiscount.start * 1000 : Date.now();
+        const monthsElapsed = Math.floor((Date.now() - startTs) / (30 * 24 * 60 * 60 * 1000));
+        remainingMonths = Math.max(0, coupon.duration_in_months - monthsElapsed);
+      } else if (coupon.duration === 'once') {
+        remainingMonths = 1;
+      }
+
+      return {
+        percentOff: coupon.percent_off ?? null,
+        amountOffCents: coupon.amount_off ?? null,
+        durationMonths: coupon.duration_in_months ?? (coupon.duration === 'once' ? 1 : null),
+        remainingMonths,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Aplica desconto de retencao a uma subscription existente.
+   * Cria um cupom e aplica direto na subscription (sem checkout).
+   */
+  async applyRetentionDiscount(
+    externalSubscriptionId: string,
+    percentOff: number,
+    durationMonths: number,
+    userId: string,
+    reason: string,
+  ): Promise<string> {
+    const duration = durationMonths === 1 ? 'once' as const : 'repeating' as const;
+
+    const coupon = await this.stripe.coupons.create({
+      percent_off: percentOff,
+      currency: 'brl',
+      duration,
+      ...(duration === 'repeating' ? { duration_in_months: durationMonths } : {}),
+      name: `Retencao ${percentOff}% OFF${durationMonths > 1 ? ` (${durationMonths} meses)` : ''}`,
+      metadata: { userId, type: 'retention_discount', reason },
+    });
+
+    await this.stripe.subscriptions.update(externalSubscriptionId, {
+      discounts: [{ coupon: coupon.id }],
+    });
+
+    this.logger.log(
+      `Applied ${percentOff}% retention discount to subscription ${externalSubscriptionId} for ${durationMonths} month(s)`,
+    );
+
+    return coupon.id;
+  }
+
+  /**
+   * Resume uma subscription pausada no Stripe.
+   */
+  async resumeSubscription(externalSubscriptionId: string): Promise<void> {
+    await this.stripe.subscriptions.update(externalSubscriptionId, {
+      pause_collection: '',
+    } as any);
+
+    this.logger.log(
+      `Resumed Stripe subscription ${externalSubscriptionId}`,
     );
   }
 }

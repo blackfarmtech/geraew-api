@@ -86,4 +86,12 @@ export class EnhanceInfluencerDto {
   @IsString()
   @IsOptional()
   renderingStyle?: string;
+
+  @IsString()
+  @IsOptional()
+  referenceImageBase64?: string;
+
+  @IsString()
+  @IsOptional()
+  referenceImageMimeType?: string;
 }

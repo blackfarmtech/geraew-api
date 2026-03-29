@@ -33,6 +33,8 @@ import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.d
 import { getVideoDurationSeconds } from './utils/video-duration.util';
 import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
+import { GenerateVirtualTryOnDto } from './dto/generate-virtual-try-on.dto';
+import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 
 /**
  * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
@@ -62,6 +64,8 @@ import {
   ImageToVideoJobData,
   ReferenceVideoJobData,
   MotionControlJobData,
+  VirtualTryOnJobData,
+  FaceSwapJobData,
 } from './queue/generation-queue.constants';
 
 type GenerationWithRelations = {
@@ -717,6 +721,219 @@ export class GenerationsService {
         imageUrl: imagePublicUrl,
         resolution,
       } satisfies MotionControlJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Virtual Try-On ──────────────────────────────────────
+
+  async generateVirtualTryOn(
+    userId: string,
+    dto: GenerateVirtualTryOnDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.VIRTUAL_TRY_ON;
+    const model = dto.model ?? 'gemini-3.1-flash-image-preview';
+    const resolution = dto.resolution ?? Resolution.RES_2K;
+
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      GenerationType.IMAGE_TO_IMAGE,
+      resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const prompt = this.buildVirtualTryOnPrompt(dto.additional_instructions);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt,
+        modelUsed: model,
+        resolution,
+        aspectRatio: dto.aspect_ratio ?? '3:4',
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: {
+          feature: 'virtual_try_on',
+          mimeType: dto.output_mime_type ?? 'image/png',
+        },
+      },
+    });
+
+    // Upload influencer image
+    const influencerUrl = await this.uploadBase64Image(
+      dto.influencer_image,
+      dto.influencer_image_mime_type ?? 'image/png',
+      generation.id,
+    );
+
+    // Upload clothing image
+    const clothingUrl = await this.uploadBase64Image(
+      dto.clothing_image,
+      dto.clothing_image_mime_type ?? 'image/png',
+      generation.id,
+    );
+
+    await this.prisma.generationInputImage.createMany({
+      data: [
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: dto.influencer_image_mime_type ?? 'image/png',
+          order: 0,
+          url: influencerUrl,
+        },
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: dto.clothing_image_mime_type ?? 'image/png',
+          order: 1,
+          url: clothingUrl,
+        },
+      ],
+    });
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+
+    await this.generationQueue.add(
+      GenerationJobName.VIRTUAL_TRY_ON,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        prompt,
+        model,
+        resolution,
+        aspectRatio: dto.aspect_ratio ?? '3:4',
+        mimeType: dto.output_mime_type ?? 'image/png',
+      } satisfies VirtualTryOnJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  private buildVirtualTryOnPrompt(additionalInstructions?: string): string {
+    let prompt = `Virtual try-on: Using the provided images, dress the person from the first image (the model/influencer) in the exact clothing item shown in the second image.
+
+CRITICAL REQUIREMENTS:
+- The person's face, body proportions, skin tone, hair, and overall appearance MUST remain exactly the same — do NOT alter them.
+- The clothing from the second image must be placed naturally on the person's body, respecting the body's pose, proportions, and perspective.
+- Preserve the exact design, color, pattern, texture, and style of the clothing item. Do not modify, simplify, or reinterpret the garment.
+- The clothing must fit naturally on the body — proper draping, folds, and shadows that match the body's pose and lighting.
+- Maintain the lighting, shadows, and overall photographic quality of the original person image.
+- The result should look like a real, high-quality photograph — not a collage or digital overlay.
+- Keep the background and environment from the first image (the person's photo).`;
+
+    if (additionalInstructions) {
+      prompt += `\n\nAdditional instructions: ${additionalInstructions}`;
+    }
+
+    return prompt;
+  }
+
+  // ─── Face Swap ──────────────────────────────────────────
+
+  async generateFaceSwap(
+    userId: string,
+    dto: GenerateFaceSwapDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.FACE_SWAP;
+    const resolutionMap: Record<string, Resolution> = {
+      '1K': Resolution.RES_1K,
+      '2K': Resolution.RES_2K,
+      '4K': Resolution.RES_4K,
+    };
+    const resolution = resolutionMap[dto.resolution ?? '2K'] ?? Resolution.RES_2K;
+
+    const modelVariant = getModelVariant('nano-banana-2');
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      GenerationType.IMAGE_TO_IMAGE,
+      resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: 'Face Swap',
+        modelUsed: 'nano-banana-2',
+        resolution,
+        hasAudio: false,
+        creditsConsumed: creditsRequired,
+        parameters: { feature: 'face_swap' },
+      },
+    });
+
+    // Upload source image (face)
+    const sourceUrl = await this.uploadBase64Image(
+      dto.source_image,
+      dto.source_image_mime_type ?? 'image/jpeg',
+      generation.id,
+    );
+
+    // Upload target image (scene/body)
+    const targetUrl = await this.uploadBase64Image(
+      dto.target_image,
+      dto.target_image_mime_type ?? 'image/jpeg',
+      generation.id,
+    );
+
+    await this.prisma.generationInputImage.createMany({
+      data: [
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: dto.source_image_mime_type ?? 'image/jpeg',
+          order: 0,
+          url: sourceUrl,
+        },
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: dto.target_image_mime_type ?? 'image/jpeg',
+          order: 1,
+          url: targetUrl,
+        },
+      ],
+    });
+
+    await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+
+    await this.generationQueue.add(
+      GenerationJobName.FACE_SWAP,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        sourceImageUrl: sourceUrl,
+        targetImageUrl: targetUrl,
+        resolution: dto.resolution ?? '2K',
+      } satisfies FaceSwapJobData,
     );
 
     return {

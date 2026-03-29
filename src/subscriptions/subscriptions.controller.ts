@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { AcceptOfferDto } from './dto/accept-offer.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { CurrentUser } from '../common/decorators';
 
@@ -112,6 +113,56 @@ export class SubscriptionsController {
     @CurrentUser('sub') userId: string,
   ): Promise<SubscriptionResponseDto> {
     return this.subscriptionsService.cancel(userId);
+  }
+
+  @Post('pause')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Pausar assinatura por 30 dias (sem cobranca)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Assinatura pausada com sucesso',
+    type: SubscriptionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Assinatura nao pode ser pausada' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Nenhuma assinatura ativa' })
+  async pause(
+    @CurrentUser('sub') userId: string,
+  ): Promise<SubscriptionResponseDto> {
+    return this.subscriptionsService.pause(userId);
+  }
+
+  @Post('accept-offer')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Aceitar oferta de retencao (desconto, creditos bonus, pausa)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Oferta aceita e aplicada com sucesso',
+  })
+  @ApiResponse({ status: 400, description: 'Oferta nao pode ser aplicada' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Nenhuma assinatura ativa' })
+  async acceptOffer(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: AcceptOfferDto,
+  ): Promise<{ offerType: string; detail: string }> {
+    return this.subscriptionsService.acceptOffer(userId, dto.reason);
+  }
+
+  @Post('cancel-downgrade')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancelar downgrade agendado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Downgrade cancelado com sucesso',
+    type: SubscriptionResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Nenhum downgrade agendado' })
+  async cancelDowngrade(
+    @CurrentUser('sub') userId: string,
+  ): Promise<SubscriptionResponseDto> {
+    return this.subscriptionsService.cancelDowngrade(userId);
   }
 
   @Post('reactivate')

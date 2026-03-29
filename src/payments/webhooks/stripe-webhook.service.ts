@@ -72,9 +72,11 @@ export class StripeWebhookService {
         await this.handleCheckoutSessionCompleted(event);
         break;
       case 'invoice.payment_succeeded':
+      case 'invoice_payment.paid':
         await this.handleInvoicePaymentSucceeded(event);
         break;
       case 'invoice.payment_failed':
+      case 'invoice_payment.failed':
         await this.handleInvoicePaymentFailed(event);
         break;
       case 'customer.subscription.deleted':
@@ -148,13 +150,32 @@ export class StripeWebhookService {
 
   /**
    * Pagamento de invoice bem-sucedido — renovação de assinatura.
+   * Suporta tanto invoice.payment_succeeded (objeto Invoice direto)
+   * quanto invoice_payment.paid (objeto InvoicePayment, precisa buscar invoice).
    * Ignorar o primeiro pagamento (billing_reason = subscription_create),
    * pois já foi tratado pelo checkout.session.completed.
    */
   private async handleInvoicePaymentSucceeded(
     event: Stripe.Event,
   ): Promise<void> {
-    const invoice = event.data.object as Stripe.Invoice;
+    let invoice: Stripe.Invoice;
+
+    if (event.type === 'invoice_payment.paid') {
+      // InvoicePayment object — precisa buscar o invoice completo
+      const invoicePayment = event.data.object as any;
+      const invoiceId = typeof invoicePayment.invoice === 'string'
+        ? invoicePayment.invoice
+        : invoicePayment.invoice?.id;
+
+      if (!invoiceId) {
+        this.logger.warn(`No invoice ID in invoice_payment ${invoicePayment.id}`);
+        return;
+      }
+
+      invoice = await this.stripeService.retrieveInvoice(invoiceId);
+    } else {
+      invoice = event.data.object as Stripe.Invoice;
+    }
 
     // Ignorar o primeiro pagamento — já tratado pelo checkout
     if (invoice.billing_reason === 'subscription_create') {
@@ -189,11 +210,29 @@ export class StripeWebhookService {
 
   /**
    * Pagamento de invoice falhou — marcar subscription como PAST_DUE.
+   * Suporta tanto invoice.payment_failed quanto invoice_payment.failed.
    */
   private async handleInvoicePaymentFailed(
     event: Stripe.Event,
   ): Promise<void> {
-    const invoice = event.data.object as Stripe.Invoice;
+    let invoice: Stripe.Invoice;
+
+    const eventType = event.type as string;
+    if (eventType === 'invoice_payment.failed') {
+      const invoicePayment = event.data.object as any;
+      const invoiceId = typeof invoicePayment.invoice === 'string'
+        ? invoicePayment.invoice
+        : invoicePayment.invoice?.id;
+
+      if (!invoiceId) {
+        this.logger.warn(`No invoice ID in invoice_payment ${invoicePayment.id}`);
+        return;
+      }
+
+      invoice = await this.stripeService.retrieveInvoice(invoiceId);
+    } else {
+      invoice = event.data.object as Stripe.Invoice;
+    }
 
     const stripeSubscriptionId = this.extractSubscriptionId(invoice);
 

@@ -3,6 +3,6 @@ node_modules
 .env
 
 /generated/prisma
-./dist
-./build
-.distgeraew-90549-firebase-adminsdk-fbsvc-8a5fa1eed4.json
+/dist
+/build
+geraew-90549-firebase-adminsdk-fbsvc-8a5fa1eed4.json
