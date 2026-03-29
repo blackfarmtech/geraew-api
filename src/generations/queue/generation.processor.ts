@@ -640,19 +640,6 @@ export class GenerationProcessor extends WorkerHost {
       }
     }
 
-    const requestedCount = generation?.quantity ?? result.outputUrls.length;
-    const actualCount = result.outputUrls.length;
-    let creditsRefunded = 0;
-
-    if (actualCount < requestedCount && generation) {
-      const costPerUnit = Math.floor(
-        generation.creditsConsumed / requestedCount,
-      );
-      const missingCount = requestedCount - actualCount;
-      creditsRefunded = costPerUnit * missingCount;
-      updateData.creditsConsumed = generation.creditsConsumed - creditsRefunded;
-    }
-
     const [updatedGeneration] = await this.prisma.$transaction([
       this.prisma.generation.update({
         where: { id: generationId },
@@ -669,19 +656,6 @@ export class GenerationProcessor extends WorkerHost {
       }),
     ]);
 
-    if (creditsRefunded > 0 && generation) {
-      await this.creditsService.partialRefund(
-        generation.userId,
-        creditsRefunded,
-        generationId,
-        `Estorno parcial: ${actualCount}/${requestedCount} vídeos gerados`,
-      );
-
-      this.logger.log(
-        `Partial refund of ${creditsRefunded} credits for generation ${generationId} — ${actualCount}/${requestedCount} outputs`,
-      );
-    }
-
     this.generationEvents.emit({
       userId: updatedGeneration.userId,
       generationId,
@@ -689,11 +663,6 @@ export class GenerationProcessor extends WorkerHost {
       data: {
         outputUrls: result.outputUrls,
         processingTimeMs,
-        ...(creditsRefunded > 0 && {
-          creditsRefunded,
-          requestedCount,
-          actualCount,
-        }),
       },
     });
 

@@ -92,7 +92,10 @@ export class AuthService {
         if (creditBalance && creditBalance.planCreditsRemaining === 0 && creditBalance.planCreditsUsed === 0) {
           await tx.creditBalance.update({
             where: { id: creditBalance.id },
-            data: { planCreditsRemaining: subscription.plan.creditsPerMonth },
+            data: {
+              planCreditsRemaining: subscription.plan.creditsPerMonth,
+              freeVeoGenerationsRemaining: 2,
+            },
           });
 
           await tx.creditTransaction.create({
@@ -197,7 +200,7 @@ export class AuthService {
           planCreditsRemaining: 0,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
-          freeVeoGenerationsRemaining: 2,
+          freeVeoGenerationsRemaining: 0,
           periodStart: now,
           periodEnd: endOfMonth,
         },
@@ -478,7 +481,7 @@ export class AuthService {
             planCreditsRemaining: 0,
             bonusCreditsRemaining: 0,
             planCreditsUsed: 0,
-            freeVeoGenerationsRemaining: 2,
+            freeVeoGenerationsRemaining: 0,
             periodStart: now,
             periodEnd: endOfMonth,
           },
