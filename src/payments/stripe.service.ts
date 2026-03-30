@@ -106,7 +106,7 @@ export class StripeService {
       payment_method_types: ['card'],
       payment_method_collection: 'if_required',
       line_items: [lineItem],
-      ...(discounts ? { discounts } : {}),
+      ...(discounts ? { discounts } : { allow_promotion_codes: true }),
       metadata: {
         userId,
         planSlug,
@@ -162,6 +162,7 @@ export class StripeService {
       payment_method_types: ['card'],
       payment_method_collection: 'if_required',
       line_items: [lineItem],
+      allow_promotion_codes: true,
       payment_intent_data: {
         setup_future_usage: 'off_session',
       },
