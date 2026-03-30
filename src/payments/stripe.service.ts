@@ -160,7 +160,6 @@ export class StripeService {
       customer: customerId,
       mode: 'payment',
       payment_method_types: ['card'],
-      payment_method_collection: 'if_required',
       line_items: [lineItem],
       allow_promotion_codes: true,
       payment_intent_data: {
