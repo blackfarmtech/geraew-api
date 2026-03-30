@@ -19,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Observable, map, merge, interval } from 'rxjs';
 import { GenerationsService } from './generations.service';
 import { GenerationEventsService } from './generation-events.service';
@@ -48,6 +49,7 @@ export class GenerationsController {
     private readonly generationEvents: GenerationEventsService,
   ) {}
 
+  @SkipThrottle()
   @Sse('events')
   @ApiOperation({ summary: 'SSE — recebe eventos de todas as gerações do usuário em tempo real' })
   sseAll(@CurrentUser('sub') userId: string): Observable<MessageEvent> {
@@ -60,6 +62,7 @@ export class GenerationsController {
     return merge(events$, heartbeat$);
   }
 
+  @SkipThrottle()
   @Sse(':id/events')
   @ApiOperation({ summary: 'SSE — recebe eventos de uma geração específica em tempo real' })
   @ApiParam({ name: 'id', description: 'ID da geração' })
@@ -193,6 +196,7 @@ export class GenerationsController {
     return this.generationsService.findAll(userId, filters);
   }
 
+  @SkipThrottle()
   @Get(':id')
   @ApiOperation({ summary: 'Status e detalhes de uma geração' })
   @ApiResponse({ status: 200, type: GenerationResponseDto })
