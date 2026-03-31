@@ -14,6 +14,7 @@ import { AffiliatesService } from './affiliates.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
+import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
 import { MarkEarningsPaidDto } from './dto/mark-paid.dto';
 
 @ApiTags('affiliates')
@@ -41,6 +42,13 @@ export class AffiliatesController {
   @ApiOperation({ summary: 'Listar todos os afiliados' })
   async findAll() {
     return this.affiliatesService.findAll();
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Editar afiliado' })
+  async update(@Param('id') id: string, @Body() dto: UpdateAffiliateDto) {
+    return this.affiliatesService.update(id, dto);
   }
 
   @Get(':id')

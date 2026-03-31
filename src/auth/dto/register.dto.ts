@@ -53,5 +53,7 @@ export class RegisterDto {
   })
   @IsString()
   @IsOptional()
+  @MaxLength(50, { message: 'Código de indicação deve ter no máximo 50 caracteres' })
+  @Matches(/^[A-Za-z0-9_-]+$/, { message: 'Código de indicação contém caracteres inválidos' })
   referralCode?: string;
 }
