@@ -701,6 +701,7 @@ export class GenerationProcessor extends WorkerHost {
       job.data.userId,
       job.data.creditsConsumed,
       error,
+      job.data.usedFreeGeneration,
     );
   }
 
@@ -709,6 +710,7 @@ export class GenerationProcessor extends WorkerHost {
     userId: string,
     creditsConsumed: number,
     error: Error,
+    usedFreeGeneration?: boolean,
   ): Promise<void> {
     // Idempotency: skip if already completed/failed
     const current = await this.prisma.generation.findUnique({
@@ -748,7 +750,11 @@ export class GenerationProcessor extends WorkerHost {
       },
     });
 
-    await this.creditsService.refund(userId, creditsConsumed, generationId);
+    if (usedFreeGeneration) {
+      await this.creditsService.refundFreeVeoGeneration(userId, generationId);
+    } else {
+      await this.creditsService.refund(userId, creditsConsumed, generationId);
+    }
 
     this.generationEvents.emit({
       userId,
@@ -757,12 +763,14 @@ export class GenerationProcessor extends WorkerHost {
       data: {
         errorMessage: userMessage,
         errorCode,
-        creditsRefunded: creditsConsumed,
+        creditsRefunded: usedFreeGeneration ? 0 : creditsConsumed,
       },
     });
 
     this.logger.log(
-      `Refunded ${creditsConsumed} credits for failed generation ${generationId}`,
+      usedFreeGeneration
+        ? `Refunded free generation slot for failed generation ${generationId}`
+        : `Refunded ${creditsConsumed} credits for failed generation ${generationId}`,
     );
 
     // Fire-and-forget: delete input files from S3 to save storage
