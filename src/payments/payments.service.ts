@@ -652,8 +652,12 @@ export class PaymentsService {
 
     if (!affiliate?.isActive) return;
 
+    // Calcula valor líquido após taxa Stripe (3.99% + R$0,39)
+    const stripeFee = Math.round(amountCents * 0.0399) + 39;
+    const netAmountCents = amountCents - stripeFee;
+
     const commissionCents = Math.round(
-      (amountCents * affiliate.commissionPercent) / 100,
+      (netAmountCents * affiliate.commissionPercent) / 100,
     );
 
     if (commissionCents <= 0) return;
@@ -663,14 +667,14 @@ export class PaymentsService {
         affiliateId: affiliate.id,
         paymentId,
         userId,
-        amountCents,
+        amountCents: netAmountCents,
         commissionCents,
         status: 'PENDING',
       },
     });
 
     this.logger.log(
-      `Affiliate earning recorded: ${commissionCents} centavos for affiliate ${affiliate.id} (${affiliate.commissionPercent}% of ${amountCents})`,
+      `Affiliate earning recorded: ${commissionCents} centavos for affiliate ${affiliate.id} (${affiliate.commissionPercent}% of net ${netAmountCents}, original ${amountCents}, stripe fee ${stripeFee})`,
     );
   }
 }

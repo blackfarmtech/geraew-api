@@ -185,8 +185,29 @@ export class AffiliatesService {
       _count: true,
     });
 
+    const maturationDate = new Date();
+    maturationDate.setDate(maturationDate.getDate() - 30);
+
     const pendingTotals = await this.prisma.affiliateEarning.aggregate({
       where: { affiliateId: affiliate.id, status: 'PENDING' },
+      _sum: { commissionCents: true },
+    });
+
+    const availableTotals = await this.prisma.affiliateEarning.aggregate({
+      where: {
+        affiliateId: affiliate.id,
+        status: 'PENDING',
+        createdAt: { lte: maturationDate },
+      },
+      _sum: { commissionCents: true },
+    });
+
+    const maturingTotals = await this.prisma.affiliateEarning.aggregate({
+      where: {
+        affiliateId: affiliate.id,
+        status: 'PENDING',
+        createdAt: { gt: maturationDate },
+      },
       _sum: { commissionCents: true },
     });
 
@@ -241,7 +262,10 @@ export class AffiliatesService {
         totalRevenueCents: totals._sum.amountCents ?? 0,
         totalCommissionCents: totals._sum.commissionCents ?? 0,
         pendingCommissionCents: pendingTotals._sum.commissionCents ?? 0,
+        availableCommissionCents: availableTotals._sum.commissionCents ?? 0,
+        maturingCommissionCents: maturingTotals._sum.commissionCents ?? 0,
         paidCommissionCents: paidTotals._sum.commissionCents ?? 0,
+        maturationDays: 30,
       },
       earnings,
     };
