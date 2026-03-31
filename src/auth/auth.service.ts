@@ -52,6 +52,18 @@ export class AuthService {
    * Envia SMS de verificação via Twilio Verify
    */
   async sendVerification(phone: string): Promise<void> {
+    // Verifica se o telefone já está em uso antes de gastar SMS
+    let normalized = phone.replace(/\D/g, '');
+    if (!normalized.startsWith('55')) {
+      normalized = `55${normalized}`;
+    }
+    const existing = await this.prisma.user.findFirst({
+      where: { phone: normalized, phoneVerified: true },
+    });
+    if (existing) {
+      throw new ConflictException('Este telefone já está cadastrado');
+    }
+
     await this.twilioVerify.sendVerification(phone);
   }
 
