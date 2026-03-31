@@ -271,6 +271,41 @@ export class AffiliatesService {
     };
   }
 
+  async getReferredUsers(affiliateId: string) {
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { id: affiliateId },
+    });
+    if (!affiliate) {
+      throw new NotFoundException('Afiliado não encontrado');
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { referredByCode: affiliate.code },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        subscriptions: {
+          where: { status: 'ACTIVE' },
+          take: 1,
+          select: {
+            plan: { select: { name: true, slug: true } },
+          },
+        },
+      },
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      createdAt: u.createdAt,
+      plan: u.subscriptions[0]?.plan?.name ?? 'Free',
+    }));
+  }
+
   async getDashboard() {
     const totalAffiliates = await this.prisma.affiliate.count();
     const activeAffiliates = await this.prisma.affiliate.count({

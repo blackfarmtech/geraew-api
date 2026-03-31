@@ -526,6 +526,11 @@ export class PaymentsService {
           },
         });
       }
+
+      // Cancelar comissão do afiliado vinculada a esse pagamento
+      await tx.affiliateEarning.deleteMany({
+        where: { paymentId: payment.id, status: 'PENDING' },
+      });
     });
 
     this.logger.log(`Refund processed for payment ${payment.id}, user ${payment.userId}`);

@@ -63,6 +63,12 @@ export class AffiliatesController {
     return this.affiliatesService.getEarnings(id);
   }
 
+  @Get(':id/referred-users')
+  @ApiOperation({ summary: 'Usuários indicados por um afiliado' })
+  async getReferredUsers(@Param('id') id: string) {
+    return this.affiliatesService.getReferredUsers(id);
+  }
+
   @Patch(':id/toggle-active')
   @ApiOperation({ summary: 'Ativar/desativar afiliado' })
   async toggleActive(@Param('id') id: string) {
