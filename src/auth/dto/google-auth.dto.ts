@@ -9,6 +9,10 @@ export class GoogleAuthDto {
   @IsString()
   @IsNotEmpty()
   googleToken: string;
+
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }
 
 export class GoogleUserDto {

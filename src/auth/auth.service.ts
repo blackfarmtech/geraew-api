@@ -126,7 +126,7 @@ export class AuthService {
    * Registra um novo usuário (telefone salvo sem verificação — verificação acontece dentro da plataforma)
    */
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, password, name, phone } = registerDto;
+    const { email, password, name, phone, referralCode } = registerDto;
 
     // Normaliza o telefone
     let normalizedVerified = phone.replace(/\D/g, '');
@@ -158,6 +158,18 @@ export class AuthService {
     // Cria o usuário e o saldo de créditos em uma transação
     const user = await this.prisma.$transaction(async (tx) => {
       // Cria o usuário
+      // Validar código de referral se fornecido
+      let validReferralCode: string | undefined;
+      if (referralCode) {
+        const affiliate = await tx.affiliate.findUnique({
+          where: { code: referralCode.toUpperCase() },
+          select: { isActive: true },
+        });
+        if (affiliate?.isActive) {
+          validReferralCode = referralCode.toUpperCase();
+        }
+      }
+
       const newUser = await tx.user.create({
         data: {
           email: email.toLowerCase(),
@@ -167,6 +179,7 @@ export class AuthService {
           phoneVerified: false,
           isActive: true,
           role: 'USER',
+          ...(validReferralCode && { referredByCode: validReferralCode }),
         },
       });
 
@@ -339,7 +352,7 @@ export class AuthService {
   /**
    * Login/Cadastro via Google OAuth (verifica ID token ou access token)
    */
-  async googleAuthWithToken(googleToken: string): Promise<AuthResponseDto> {
+  async googleAuthWithToken(googleToken: string, referralCode?: string): Promise<AuthResponseDto> {
     try {
       const { OAuth2Client } = await import('google-auth-library');
       const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
@@ -363,6 +376,7 @@ export class AuthService {
           name: payload.name || payload.email.split('@')[0],
           avatarUrl: payload.picture,
           provider: 'google',
+          referralCode,
         });
       } catch {
         // Se falhar como ID token, tenta como access token
@@ -386,6 +400,7 @@ export class AuthService {
           name: userInfo.name || userInfo.email.split('@')[0],
           avatarUrl: userInfo.picture,
           provider: 'google',
+          referralCode,
         });
       }
     } catch (error) {
@@ -403,6 +418,7 @@ export class AuthService {
     name: string;
     avatarUrl?: string;
     provider: string;
+    referralCode?: string;
   }): Promise<AuthResponseDto> {
     // Busca usuário existente por email ou Google ID
     let user = await this.prisma.user.findFirst({
@@ -438,6 +454,18 @@ export class AuthService {
       isNewUser = true;
       // Cria novo usuário via Google OAuth
       user = await this.prisma.$transaction(async (tx) => {
+        // Validar código de referral se fornecido
+        let validReferralCode: string | undefined;
+        if (googleUser.referralCode) {
+          const affiliate = await tx.affiliate.findUnique({
+            where: { code: googleUser.referralCode.toUpperCase() },
+            select: { isActive: true },
+          });
+          if (affiliate?.isActive) {
+            validReferralCode = googleUser.referralCode.toUpperCase();
+          }
+        }
+
         // Cria o usuário
         const newUser = await tx.user.create({
           data: {
@@ -448,6 +476,7 @@ export class AuthService {
             oauthProviderId: googleUser.googleId,
             emailVerified: true, // Google já verifica o email
             role: 'USER',
+            ...(validReferralCode && { referredByCode: validReferralCode }),
           },
         });
 

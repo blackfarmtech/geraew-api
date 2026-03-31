@@ -1,5 +1,5 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches, IsNotEmpty } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength, MaxLength, Matches, IsNotEmpty, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
   @ApiProperty({
@@ -47,4 +47,11 @@ export class RegisterDto {
   })
   phone: string;
 
+  @ApiPropertyOptional({
+    example: 'INFLUENCER123',
+    description: 'Código de indicação do afiliado',
+  })
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }

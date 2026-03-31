@@ -118,7 +118,7 @@ export class SubscriptionsService {
 
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, referredByCode: true },
     });
 
     const customerId = await this.stripeService.getOrCreateCustomer(
@@ -134,6 +134,9 @@ export class SubscriptionsService {
       plan.priceCents,
       userId,
       plan.stripePriceId,
+      undefined,
+      undefined,
+      user.referredByCode ?? undefined,
     );
 
     return { checkoutUrl };
@@ -593,7 +596,7 @@ export class SubscriptionsService {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, referredByCode: true },
     });
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
@@ -609,6 +612,7 @@ export class SubscriptionsService {
       plan.stripePriceId,
       discountAmountCents > 0 ? discountAmountCents : undefined,
       oldExternalSubscriptionId,
+      user.referredByCode ?? undefined,
     );
   }
 

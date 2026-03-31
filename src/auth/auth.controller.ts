@@ -141,7 +141,7 @@ export class AuthController {
     description: 'Token Google inválido',
   })
   async googleAuthMobile(@Body() googleAuthDto: GoogleAuthDto): Promise<AuthResponseDto> {
-    return this.authService.googleAuthWithToken(googleAuthDto.googleToken);
+    return this.authService.googleAuthWithToken(googleAuthDto.googleToken, googleAuthDto.referralCode);
   }
 
   @Public()

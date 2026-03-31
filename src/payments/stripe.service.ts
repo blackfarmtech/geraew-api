@@ -69,6 +69,7 @@ export class StripeService {
     stripePriceId?: string | null,
     discountAmountCents?: number,
     oldExternalSubscriptionId?: string,
+    referredByCode?: string,
   ): Promise<string> {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
@@ -113,11 +114,13 @@ export class StripeService {
         type: 'subscription',
         ...(couponId ? { upgradeCouponId: couponId } : {}),
         ...(oldExternalSubscriptionId ? { oldExternalSubscriptionId } : {}),
+        ...(referredByCode ? { referredByCode } : {}),
       },
       subscription_data: {
         metadata: {
           userId,
           planSlug,
+          ...(referredByCode ? { referredByCode } : {}),
         },
       },
       success_url: this.configService.get<string>('STRIPE_SUCCESS_URL') ??
@@ -141,6 +144,7 @@ export class StripeService {
     priceCents: number,
     userId: string,
     stripePriceId?: string | null,
+    referredByCode?: string,
   ): Promise<string> {
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
       ? { price: stripePriceId, quantity: 1 }
@@ -169,6 +173,7 @@ export class StripeService {
         userId,
         packageId,
         type: 'credit_purchase',
+        ...(referredByCode ? { referredByCode } : {}),
       },
       success_url: this.configService.get<string>('STRIPE_SUCCESS_URL') ??
         'http://localhost:3000/payment/success?session_id={CHECKOUT_SESSION_ID}',

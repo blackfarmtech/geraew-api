@@ -144,6 +144,7 @@ export class StripeWebhookService {
         stripeSubscriptionId,
         session.amount_total ?? 0,
         session.payment_intent as string ?? session.id,
+        metadata.referredByCode,
       );
 
       // Se é upgrade, cancelar a sub antiga no Stripe agora que a nova foi criada
@@ -173,6 +174,7 @@ export class StripeWebhookService {
         packageId,
         session.amount_total ?? 0,
         session.payment_intent as string ?? session.id,
+        metadata.referredByCode,
       );
     } else {
       this.logger.warn(`Unknown checkout type: ${type}`);

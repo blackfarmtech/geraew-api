@@ -88,7 +88,7 @@ export class CreditsController {
 
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, referredByCode: true },
     });
 
     const customerId = await this.stripeService.getOrCreateCustomer(
@@ -105,6 +105,7 @@ export class CreditsController {
       pkg.priceCents,
       userId,
       pkg.stripePriceId,
+      user.referredByCode ?? undefined,
     );
 
     return { checkoutUrl };

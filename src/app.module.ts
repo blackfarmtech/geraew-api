@@ -23,6 +23,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { FoldersModule } from './folders/folders.module';
 import { VideoEditorModule } from './video-editor/video-editor.module';
 import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
+import { AffiliatesModule } from './affiliates/affiliates.module';
 
 
 @Module({
@@ -72,6 +73,7 @@ import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
     FoldersModule,
     VideoEditorModule,
     PromptEnhancerModule,
+    AffiliatesModule,
   ],
   controllers: [AppController],
   providers: [

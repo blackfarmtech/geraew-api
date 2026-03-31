@@ -56,6 +56,7 @@ export class PaymentsService {
     stripeSubscriptionId: string,
     amountCents: number,
     externalPaymentId: string,
+    referredByCode?: string,
   ): Promise<void> {
     const plan = await this.prisma.plan.findUnique({
       where: { slug: planSlug },
@@ -149,6 +150,9 @@ export class PaymentsService {
           paymentId: payment.id,
         },
       });
+
+      // Registrar comissão do afiliado se o usuário foi indicado
+      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
     });
 
     this.logger.log(
@@ -165,6 +169,7 @@ export class PaymentsService {
     packageId: string,
     amountCents: number,
     externalPaymentId: string,
+    referredByCode?: string,
   ): Promise<void> {
     const creditPackage = await this.prisma.creditPackage.findUnique({
       where: { id: packageId },
@@ -225,6 +230,9 @@ export class PaymentsService {
           paymentId: payment.id,
         },
       });
+
+      // Registrar comissão do afiliado se o usuário foi indicado
+      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
     });
 
     this.logger.log(
@@ -349,6 +357,15 @@ export class PaymentsService {
           paymentId: payment.id,
         },
       });
+
+      // Registrar comissão do afiliado nas renovações
+      const user = await tx.user.findUnique({
+        where: { id: subscription.userId },
+        select: { referredByCode: true },
+      });
+      if (user?.referredByCode) {
+        await this.recordAffiliateEarning(tx, subscription.userId, payment.id, amountCents, user.referredByCode);
+      }
     });
 
     this.logger.log(
@@ -612,6 +629,48 @@ export class PaymentsService {
 
     this.logger.log(
       `Subscription ${subscription.id} deleted for user ${subscription.userId}`,
+    );
+  }
+
+  /**
+   * Registra comissão do afiliado para um pagamento.
+   * Busca o afiliado pelo código, calcula a comissão e cria o registro.
+   */
+  private async recordAffiliateEarning(
+    tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
+    userId: string,
+    paymentId: string,
+    amountCents: number,
+    referredByCode?: string,
+  ): Promise<void> {
+    if (!referredByCode || amountCents <= 0) return;
+
+    const affiliate = await tx.affiliate.findUnique({
+      where: { code: referredByCode },
+      select: { id: true, isActive: true, commissionPercent: true },
+    });
+
+    if (!affiliate?.isActive) return;
+
+    const commissionCents = Math.round(
+      (amountCents * affiliate.commissionPercent) / 100,
+    );
+
+    if (commissionCents <= 0) return;
+
+    await tx.affiliateEarning.create({
+      data: {
+        affiliateId: affiliate.id,
+        paymentId,
+        userId,
+        amountCents,
+        commissionCents,
+        status: 'PENDING',
+      },
+    });
+
+    this.logger.log(
+      `Affiliate earning recorded: ${commissionCents} centavos for affiliate ${affiliate.id} (${affiliate.commissionPercent}% of ${amountCents})`,
     );
   }
 }
