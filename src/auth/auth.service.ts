@@ -206,7 +206,8 @@ export class AuthService {
 
       // Cria a assinatura Free
       const now = new Date();
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      const periodEnd = new Date(now);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
 
       await tx.subscription.create({
         data: {
@@ -214,7 +215,7 @@ export class AuthService {
           planId: freePlan.id,
           status: 'ACTIVE',
           currentPeriodStart: now,
-          currentPeriodEnd: endOfMonth,
+          currentPeriodEnd: periodEnd,
         },
       });
 
@@ -227,7 +228,7 @@ export class AuthService {
           planCreditsUsed: 0,
           freeVeoGenerationsRemaining: 0,
           periodStart: now,
-          periodEnd: endOfMonth,
+          periodEnd: periodEnd,
         },
       });
 
@@ -503,7 +504,8 @@ export class AuthService {
 
         // Cria a assinatura Free
         const now = new Date();
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
 
         await tx.subscription.create({
           data: {
@@ -511,7 +513,7 @@ export class AuthService {
             planId: freePlan.id,
             status: 'ACTIVE',
             currentPeriodStart: now,
-            currentPeriodEnd: endOfMonth,
+            currentPeriodEnd: periodEnd,
           },
         });
 
@@ -524,7 +526,7 @@ export class AuthService {
             planCreditsUsed: 0,
             freeVeoGenerationsRemaining: 0,
             periodStart: now,
-            periodEnd: endOfMonth,
+            periodEnd: periodEnd,
           },
         });
 

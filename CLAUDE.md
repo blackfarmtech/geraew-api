@@ -74,7 +74,7 @@ Nota: Boosts são sempre mais caros por crédito que qualquer plano (por design,
 
 ### Regras de Créditos
 
-- Free plan: **300 créditos por dia**, não acumula, reset diário à meia-noite
+- Free plan: **300 créditos por mês**, renova mensalmente a partir da data de assinatura do usuário (igual planos pagos)
 - Paid plans: créditos renovam na compra/renovação do plano
 - Créditos não acumulam ao trocar de plano — renovam na nova compra
 - Free plan: Veo Fast e Veo Max estão **bloqueados** (requer plano pago)

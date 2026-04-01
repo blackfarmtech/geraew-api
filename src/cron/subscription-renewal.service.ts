@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreditTransactionType, Plan, Subscription, SubscriptionStatus } from '@prisma/client';
+import { CreditTransactionType, Plan, Subscription, SubscriptionStatus, User } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionRenewalService {
@@ -20,7 +20,7 @@ export class SubscriptionRenewalService {
           currentPeriodEnd: { lte: now },
           cancelAtPeriodEnd: false,
         },
-        include: { plan: true },
+        include: { plan: true, user: { select: { phoneVerified: true } } },
       });
 
       this.logger.log(
@@ -70,111 +70,18 @@ export class SubscriptionRenewalService {
     }
   }
 
-  @Cron('0 0 * * *') // midnight every day
-  async handleFreePlanDailyReset() {
-    this.logger.log('Starting daily free plan credit reset...');
-
-    const freePlan = await this.prisma.plan.findUnique({
-      where: { slug: 'free' },
-    });
-
-    if (!freePlan) {
-      this.logger.warn('Free plan not found, skipping daily reset');
-      return;
-    }
-
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-
-    // Find all users on free plan (users with active free subscription OR no active subscription at all)
-    const freeSubscriptions = await this.prisma.subscription.findMany({
-      where: {
-        plan: { slug: 'free' },
-        status: 'ACTIVE',
-      },
-      select: { userId: true },
-    });
-
-    const freeUserIds = freeSubscriptions.map((s) => s.userId);
-
-    // Also find users with no active subscription (they're implicitly free)
-    const usersWithActiveSubscription =
-      await this.prisma.subscription.findMany({
-        where: { status: 'ACTIVE' },
-        select: { userId: true },
-      });
-    const activeSubUserIds = new Set(
-      usersWithActiveSubscription.map((s) => s.userId),
-    );
-
-    const allUsers = await this.prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, phoneVerified: true },
-    });
-
-    const implicitFreeUserIds = allUsers
-      .filter((u) => !activeSubUserIds.has(u.id))
-      .map((u) => u.id);
-
-    const allFreeUserIds = [
-      ...new Set([...freeUserIds, ...implicitFreeUserIds]),
-    ];
-
-    // Build a set of users with verified phone for quick lookup
-    const phoneVerifiedUserIds = new Set(
-      allUsers.filter((u) => u.phoneVerified).map((u) => u.id),
-    );
-
-    let resetCount = 0;
-
-    for (const userId of allFreeUserIds) {
-      try {
-        // Only grant credits to users with verified phone
-        const credits = phoneVerifiedUserIds.has(userId)
-          ? freePlan.creditsPerMonth
-          : 0;
-
-        await this.prisma.$transaction(async (tx) => {
-          await tx.creditBalance.upsert({
-            where: { userId },
-            update: {
-              planCreditsRemaining: credits,
-              planCreditsUsed: 0,
-              periodStart: startOfDay,
-              periodEnd: endOfDay,
-            },
-            create: {
-              userId,
-              planCreditsRemaining: credits,
-              bonusCreditsRemaining: 0,
-              planCreditsUsed: 0,
-              periodStart: startOfDay,
-              periodEnd: endOfDay,
-            },
-          });
-        });
-        resetCount++;
-      } catch (error) {
-        this.logger.error(
-          `Failed to reset credits for user ${userId}:`,
-          error,
-        );
-      }
-    }
-
-    this.logger.log(
-      `Daily free plan reset complete: ${resetCount} users reset`,
-    );
-  }
-
   private async renewSubscription(
-    subscription: Subscription & { plan: Plan },
+    subscription: Subscription & { plan: Plan; user: Pick<User, 'phoneVerified'> },
   ) {
     const newPeriodStart = subscription.currentPeriodEnd;
     const newPeriodEnd = new Date(newPeriodStart);
     newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
+
+    // Free plan: only grant credits if phone is verified
+    const credits =
+      subscription.plan.slug === 'free' && !subscription.user.phoneVerified
+        ? 0
+        : subscription.plan.creditsPerMonth;
 
     await this.prisma.$transaction(async (tx) => {
       // Update subscription period
@@ -191,14 +98,14 @@ export class SubscriptionRenewalService {
         where: { userId: subscription.userId },
         create: {
           userId: subscription.userId,
-          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsRemaining: credits,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart: newPeriodStart,
           periodEnd: newPeriodEnd,
         },
         update: {
-          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsRemaining: credits,
           planCreditsUsed: 0,
           periodStart: newPeriodStart,
           periodEnd: newPeriodEnd,
@@ -206,19 +113,21 @@ export class SubscriptionRenewalService {
       });
 
       // Record the credit transaction
-      await tx.creditTransaction.create({
-        data: {
-          userId: subscription.userId,
-          type: CreditTransactionType.SUBSCRIPTION_RENEWAL,
-          amount: subscription.plan.creditsPerMonth,
-          source: 'plan',
-          description: `Renovação do plano ${subscription.plan.name} — ${subscription.plan.creditsPerMonth} créditos`,
-        },
-      });
+      if (credits > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId: subscription.userId,
+            type: CreditTransactionType.SUBSCRIPTION_RENEWAL,
+            amount: credits,
+            source: 'plan',
+            description: `Renovação do plano ${subscription.plan.name} — ${credits} créditos`,
+          },
+        });
+      }
     });
 
     this.logger.log(
-      `Renewed subscription ${subscription.id} for user ${subscription.userId}`,
+      `Renewed subscription ${subscription.id} for user ${subscription.userId} (${credits} credits)`,
     );
   }
 }
