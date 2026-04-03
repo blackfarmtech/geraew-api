@@ -20,12 +20,12 @@ export class GenerateVideoImageToVideoDto {
 
   @ApiPropertyOptional({
     description: 'Modelo do Vertex AI',
-    default: 'veo-3.1-generate-preview',
-    example: 'veo-3.1-generate-preview',
+    default: 'veo-3.1-generate-001',
+    example: 'veo-3.1-generate-001',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview'])
+  @IsIn(['veo-3.1-generate-001', 'veo-3.1-fast-generate-001'])
   model?: string;
 
   @ApiProperty({ enum: Resolution })

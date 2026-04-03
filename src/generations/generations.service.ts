@@ -40,8 +40,8 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
  * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
  * NBP = gemini-3-pro-image-preview (Nano Banana Pro)
  * NB2 = gemini-3.1-flash-image-preview (Nano Banana 2)
- * VEO_FAST = veo-3.1-fast-generate-preview
- * VEO_MAX = veo-3.1-generate-preview
+ * VEO_FAST = veo-3.1-fast-generate-001
+ * VEO_MAX = veo-3.1-generate-001
  */
 function getModelVariant(model: string | undefined | null): string | null {
   if (!model) return null;
@@ -50,8 +50,8 @@ function getModelVariant(model: string | undefined | null): string | null {
     'gemini-3.1-flash-image-preview': 'NB2',
     'nano-banana-pro': 'NBP',
     'nano-banana-2': 'NB2',
-    'veo-3.1-fast-generate-preview': 'VEO_FAST',
-    'veo-3.1-generate-preview': 'VEO_MAX',
+    'veo-3.1-fast-generate-001': 'VEO_FAST',
+    'veo-3.1-generate-001': 'VEO_MAX',
   };
   return MODEL_TO_VARIANT[model] ?? null;
 }
@@ -447,7 +447,7 @@ export class GenerationsService {
     dto: GenerateVideoImageToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.IMAGE_TO_VIDEO;
-    const model = dto.model ?? 'veo-3.1-generate-preview';
+    const model = dto.model ?? 'veo-3.1-generate-001';
     const hasAudio = dto.generate_audio ?? true;
 
     const sampleCount = dto.sample_count ?? 1;
@@ -567,7 +567,7 @@ export class GenerationsService {
     dto: GenerateVideoWithReferencesDto,
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.REFERENCE_VIDEO;
-    const model = dto.model ?? 'veo-3.1-generate-preview';
+    const model = dto.model ?? 'veo-3.1-generate-001';
     const hasAudio = dto.generate_audio ?? true;
 
     const sampleCount = dto.sample_count ?? 1;

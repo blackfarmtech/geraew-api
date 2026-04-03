@@ -28,12 +28,12 @@ export class AdminService {
     'gemini-3-pro-image-preview:RES_1K': 51,
     'gemini-3-pro-image-preview:RES_2K': 51,
     'gemini-3-pro-image-preview:RES_4K': 68,
-    'veo-3.1-fast-generate-preview:RES_720P': 13,
-    'veo-3.1-fast-generate-preview:RES_1080P': 13,
-    'veo-3.1-fast-generate-preview:RES_4K': 40,
-    'veo-3.1-generate-preview:RES_720P': 27,
-    'veo-3.1-generate-preview:RES_1080P': 27,
-    'veo-3.1-generate-preview:RES_4K': 53,
+    'veo-3.1-fast-generate-001:RES_720P': 13,
+    'veo-3.1-fast-generate-001:RES_1080P': 13,
+    'veo-3.1-fast-generate-001:RES_4K': 40,
+    'veo-3.1-generate-001:RES_720P': 27,
+    'veo-3.1-generate-001:RES_1080P': 27,
+    'veo-3.1-generate-001:RES_4K': 53,
   };
 
   private isGeraewModel(modelUsed: string | null): boolean {
