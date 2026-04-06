@@ -11,6 +11,7 @@ import {
 } from '../providers/nano-banana.provider';
 import { WanProvider } from '../providers/wan.provider';
 import { FaceSwapProvider } from '../providers/face-swap.provider';
+import { VeoProvider } from '../providers/veo.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -30,6 +31,9 @@ import {
   MotionControlJobData,
   VirtualTryOnJobData,
   FaceSwapJobData,
+  TextToVideoKieJobData,
+  ImageToVideoKieJobData,
+  ReferenceToVideoKieJobData,
 } from './generation-queue.constants';
 
 @Processor(GENERATION_QUEUE, {
@@ -47,6 +51,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly wanProvider: WanProvider,
     private readonly faceSwapProvider: FaceSwapProvider,
+    private readonly veoProvider: VeoProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {
@@ -77,6 +82,12 @@ export class GenerationProcessor extends WorkerHost {
         return this.processVirtualTryOn(job.data as VirtualTryOnJobData);
       case GenerationJobName.FACE_SWAP:
         return this.processFaceSwap(job.data as FaceSwapJobData);
+      case GenerationJobName.TEXT_TO_VIDEO_KIE:
+        return this.processTextToVideoKie(job.data as TextToVideoKieJobData);
+      case GenerationJobName.IMAGE_TO_VIDEO_KIE:
+        return this.processImageToVideoKie(job.data as ImageToVideoKieJobData);
+      case GenerationJobName.REFERENCE_TO_VIDEO_KIE:
+        return this.processReferenceToVideoKie(job.data as ReferenceToVideoKieJobData);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
@@ -431,6 +442,73 @@ export class GenerationProcessor extends WorkerHost {
       sourceImageUrl: data.sourceImageUrl,
       targetImageUrl: data.targetImageUrl,
       resolution: data.resolution,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  // ─── Kie Veo process methods ────────────────────────────────
+
+  private async processTextToVideoKie(data: TextToVideoKieJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[TEXT_TO_VIDEO_KIE] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} audio=${data.generateAudio} prompt="${data.prompt}"`,
+    );
+
+    const result = await this.veoProvider.generateTextToVideo({
+      id: data.generationId,
+      prompt: data.prompt,
+      model: data.model,
+      resolution: data.resolution,
+      aspectRatio: data.aspectRatio,
+      generateAudio: data.generateAudio,
+      seed: data.seed,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processImageToVideoKie(data: ImageToVideoKieJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[IMAGE_TO_VIDEO_KIE] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} audio=${data.generateAudio} imageUrls=${data.imageUrls.length} prompt="${data.prompt}"`,
+    );
+
+    const result = await this.veoProvider.generateImageToVideo({
+      id: data.generationId,
+      prompt: data.prompt,
+      model: data.model,
+      resolution: data.resolution,
+      aspectRatio: data.aspectRatio,
+      generateAudio: data.generateAudio,
+      seed: data.seed,
+      imageUrls: data.imageUrls,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processReferenceToVideoKie(data: ReferenceToVideoKieJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[REFERENCE_TO_VIDEO_KIE] ${data.generationId} model=veo3_fast resolution=${data.resolution} aspectRatio=${data.aspectRatio} audio=${data.generateAudio} imageUrls=${data.imageUrls.length} prompt="${data.prompt}"`,
+    );
+
+    const result = await this.veoProvider.generateReferenceToVideo({
+      id: data.generationId,
+      prompt: data.prompt,
+      model: 'veo3_fast',
+      resolution: data.resolution,
+      aspectRatio: data.aspectRatio,
+      generateAudio: data.generateAudio,
+      seed: data.seed,
+      imageUrls: data.imageUrls,
     });
 
     await this.completeGeneration(data.generationId, result, startTime);

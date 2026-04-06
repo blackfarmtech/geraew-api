@@ -107,9 +107,9 @@ export class CreditsService {
 
     const balance = await this.getBalance(userId);
 
-    // Check if user can use a free Veo generation
-    const isVeoModel = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
-    const canUseFreeGeneration = isVeoModel && balance.freeVeoGenerationsRemaining > 0;
+    // Free generations only apply to GeraEW models (not KIE/Veo 3.1)
+    const isGeraewModel = modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
+    const canUseFreeGeneration = isGeraewModel && balance.freeVeoGenerationsRemaining > 0;
 
     return {
       creditsRequired,

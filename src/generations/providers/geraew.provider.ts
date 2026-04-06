@@ -246,12 +246,21 @@ export class GeraewProvider {
 
   // ─── Shared helpers ───────────────────────────────────────
 
+  /** Maps frontend model IDs to actual geraew-provider API model names */
+  private resolveModel(model: string): string {
+    const MAP: Record<string, string> = {
+      'geraew-fast': 'veo-3.1-fast-generate-001',
+      'geraew-quality': 'veo-3.1-generate-001',
+    };
+    return MAP[model] ?? model;
+  }
+
   private buildVideoBody(input: TextToVideoInput): Record<string, unknown> {
     const resolution = VIDEO_RESOLUTION_MAP[input.resolution] ?? '1080p';
 
     return {
       prompt: input.prompt,
-      model: input.model,
+      model: this.resolveModel(input.model),
       duration_seconds: input.durationSeconds,
       aspect_ratio: input.aspectRatio,
       resolution,

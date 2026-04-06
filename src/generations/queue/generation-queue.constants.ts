@@ -10,6 +10,9 @@ export enum GenerationJobName {
   MOTION_CONTROL = 'motion-control',
   VIRTUAL_TRY_ON = 'virtual-try-on',
   FACE_SWAP = 'face-swap',
+  TEXT_TO_VIDEO_KIE = 'text-to-video-kie',
+  IMAGE_TO_VIDEO_KIE = 'image-to-video-kie',
+  REFERENCE_TO_VIDEO_KIE = 'reference-to-video-kie',
 }
 
 interface BaseJobData {
@@ -77,6 +80,23 @@ export interface FaceSwapJobData extends BaseJobData {
   resolution: string;
 }
 
+export interface TextToVideoKieJobData extends BaseJobData {
+  prompt: string;
+  model: string;
+  resolution: string;
+  aspectRatio?: string;
+  generateAudio: boolean;
+  seed?: number;
+}
+
+export interface ImageToVideoKieJobData extends TextToVideoKieJobData {
+  imageUrls: string[];
+}
+
+export interface ReferenceToVideoKieJobData extends TextToVideoKieJobData {
+  imageUrls: string[];
+}
+
 export type GenerationJobData =
   | ImageJobData
   | ImageNanoBananaJobData
@@ -85,7 +105,10 @@ export type GenerationJobData =
   | ReferenceVideoJobData
   | MotionControlJobData
   | VirtualTryOnJobData
-  | FaceSwapJobData;
+  | FaceSwapJobData
+  | TextToVideoKieJobData
+  | ImageToVideoKieJobData
+  | ReferenceToVideoKieJobData;
 
 export const IMAGE_JOB_TIMEOUT = 5 * 60 * 1000; // 5 min
 export const VIDEO_JOB_TIMEOUT = 12 * 60 * 1000; // 12 min

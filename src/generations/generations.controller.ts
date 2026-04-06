@@ -39,6 +39,9 @@ import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with
 import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 import { GenerateVirtualTryOnDto } from './dto/generate-virtual-try-on.dto';
 import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
+import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
+import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
+import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -183,6 +186,39 @@ export class GenerationsController {
     @Body() dto: GenerateFaceSwapDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateFaceSwap(userId, dto);
+  }
+
+  @Post('text-to-video-kie')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera vídeo a partir de texto via Kie Veo API — modo TEXT_2_VIDEO (veo3, veo3_fast)' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async textToVideoKie(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateVeoKieTextToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateTextToVideoKie(userId, dto);
+  }
+
+  @Post('image-to-video-kie')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera vídeo a partir de imagem via Kie Veo API — modo FIRST_AND_LAST_FRAMES_2_VIDEO (veo3, veo3_fast)' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async imageToVideoKie(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateVeoKieImageToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateImageToVideoKie(userId, dto);
+  }
+
+  @Post('reference-to-video-kie')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera vídeo a partir de imagens de referência via Kie Veo API — modo REFERENCE_2_VIDEO (veo3_fast only, 1-3 imagens)' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async referenceToVideoKie(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateVeoKieReferenceToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateReferenceToVideoKie(userId, dto);
   }
 
   @Get()

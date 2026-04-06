@@ -24,7 +24,7 @@ export class GenerateVideoTextToVideoDto {
     example: 'veo-3.1-generate-001',
   })
   @IsString()
-  @IsIn(['veo-3.1-generate-001', 'veo-3.1-fast-generate-001'])
+  @IsIn(['veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'geraew-fast', 'geraew-quality'])
   model: string;
 
   @ApiProperty({ enum: Resolution })

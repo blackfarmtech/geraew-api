@@ -35,23 +35,35 @@ import { GenerateImageDto } from './dto/generate-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import { GenerateVirtualTryOnDto } from './dto/generate-virtual-try-on.dto';
 import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
+import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
+import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
+import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
 
 /**
  * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
  * NBP = gemini-3-pro-image-preview (Nano Banana Pro)
  * NB2 = gemini-3.1-flash-image-preview (Nano Banana 2)
- * VEO_FAST = veo-3.1-fast-generate-001
- * VEO_MAX = veo-3.1-generate-001
+ * GERAEW_FAST = geraew-fast (geraew-provider)
+ * GERAEW_QUALITY = geraew-quality (geraew-provider)
+ * VEO_FAST = veo3_fast (KIE API)
+ * VEO_MAX = veo3 (KIE API)
  */
 function getModelVariant(model: string | undefined | null): string | null {
   if (!model) return null;
   const MODEL_TO_VARIANT: Record<string, string> = {
+    // Images
     'gemini-3-pro-image-preview': 'NBP',
     'gemini-3.1-flash-image-preview': 'NB2',
     'nano-banana-pro': 'NBP',
     'nano-banana-2': 'NB2',
-    'veo-3.1-fast-generate-001': 'VEO_FAST',
-    'veo-3.1-generate-001': 'VEO_MAX',
+    // GeraEW provider (video)
+    'geraew-fast': 'GERAEW_FAST',
+    'geraew-quality': 'GERAEW_QUALITY',
+    'veo-3.1-fast-generate-001': 'GERAEW_FAST',  // backward compat
+    'veo-3.1-generate-001': 'GERAEW_QUALITY',     // backward compat
+    // KIE API (Veo 3.1)
+    'veo3_fast': 'VEO_FAST',
+    'veo3': 'VEO_MAX',
   };
   return MODEL_TO_VARIANT[model] ?? null;
 }
@@ -66,6 +78,9 @@ import {
   MotionControlJobData,
   VirtualTryOnJobData,
   FaceSwapJobData,
+  TextToVideoKieJobData,
+  ImageToVideoKieJobData,
+  ReferenceToVideoKieJobData,
 } from './queue/generation-queue.constants';
 
 type GenerationWithRelations = {
@@ -976,13 +991,316 @@ CRITICAL REQUIREMENTS:
     };
   }
 
+  // ─── Kie Veo — Text to Video ─────────────────────────────
+
+  async generateTextToVideoKie(
+    userId: string,
+    dto: GenerateVeoKieTextToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.TEXT_TO_VIDEO;
+    const model = dto.model ?? 'veo3_fast';
+    const hasAudio = dto.generate_audio ?? true;
+
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          hasAudio,
+          1,
+          modelVariant,
+        );
+
+    await this.checkConcurrentLimit(userId);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        parameters: { provider: 'kie', seed: dto.seed },
+      },
+    });
+
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
+
+    await this.generationQueue.add(
+      GenerationJobName.TEXT_TO_VIDEO_KIE,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        prompt: dto.prompt,
+        model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        generateAudio: hasAudio,
+        seed: dto.seed,
+      } satisfies TextToVideoKieJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Kie Veo — Image to Video ──────────────────────────────
+
+  async generateImageToVideoKie(
+    userId: string,
+    dto: GenerateVeoKieImageToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.IMAGE_TO_VIDEO;
+    const model = dto.model ?? 'veo3_fast';
+    const hasAudio = dto.generate_audio ?? true;
+
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          hasAudio,
+          1,
+          modelVariant,
+        );
+
+    await this.checkConcurrentLimit(userId);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        parameters: { provider: 'kie', seed: dto.seed },
+      },
+    });
+
+    // Upload frames to S3 and get public URLs for Kie API
+    const firstFrameUrl = await this.uploadBase64ImagePublic(
+      dto.first_frame,
+      dto.first_frame_mime_type ?? 'image/jpeg',
+      generation.id,
+    );
+
+    const inputImageData: Array<{
+      generationId: string;
+      role: GenerationImageRole;
+      mimeType: string;
+      order: number;
+      url: string;
+    }> = [
+      {
+        generationId: generation.id,
+        role: GenerationImageRole.FIRST_FRAME,
+        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+        order: 0,
+        url: firstFrameUrl,
+      },
+    ];
+
+    const imageUrls: string[] = [firstFrameUrl];
+
+    if (dto.last_frame) {
+      const lastFrameUrl = await this.uploadBase64ImagePublic(
+        dto.last_frame,
+        dto.last_frame_mime_type ?? 'image/jpeg',
+        generation.id,
+      );
+      inputImageData.push({
+        generationId: generation.id,
+        role: GenerationImageRole.LAST_FRAME,
+        mimeType: dto.last_frame_mime_type ?? 'image/jpeg',
+        order: 1,
+        url: lastFrameUrl,
+      });
+      imageUrls.push(lastFrameUrl);
+    }
+
+    await this.prisma.generationInputImage.createMany({ data: inputImageData });
+
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
+
+    await this.generationQueue.add(
+      GenerationJobName.IMAGE_TO_VIDEO_KIE,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        prompt: dto.prompt,
+        model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        generateAudio: hasAudio,
+        seed: dto.seed,
+        imageUrls,
+      } satisfies ImageToVideoKieJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Kie Veo — Reference to Video ───────────────────────────
+
+  async generateReferenceToVideoKie(
+    userId: string,
+    dto: GenerateVeoKieReferenceToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.IMAGE_TO_VIDEO;
+    const model = 'veo3_fast'; // REFERENCE_2_VIDEO only supports veo3_fast
+    const hasAudio = dto.generate_audio ?? true;
+
+    const modelVariant = dto.model_variant ?? 'VEO_FAST';
+
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const isFreeGeneration = veoAccess === 'free_generation';
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          hasAudio,
+          1,
+          modelVariant,
+        );
+
+    await this.checkConcurrentLimit(userId);
+
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        hasAudio,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        parameters: { provider: 'kie', seed: dto.seed, generationType: 'REFERENCE_2_VIDEO' },
+      },
+    });
+
+    // Upload reference images to S3 and get public URLs for Kie API
+    const mimeTypes = dto.reference_images_mime_types ?? [];
+    const imageUrls: string[] = [];
+
+    for (let i = 0; i < dto.reference_images.length; i++) {
+      const mime = mimeTypes[i] ?? 'image/jpeg';
+      const publicUrl = await this.uploadBase64ImagePublic(
+        dto.reference_images[i],
+        mime,
+        generation.id,
+      );
+      imageUrls.push(publicUrl);
+    }
+
+    await this.prisma.generationInputImage.createMany({
+      data: dto.reference_images.map((_, i) => ({
+        generationId: generation.id,
+        role: GenerationImageRole.REFERENCE,
+        mimeType: mimeTypes[i] ?? 'image/jpeg',
+        order: i,
+        url: imageUrls[i],
+      })),
+    });
+
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
+
+    await this.generationQueue.add(
+      GenerationJobName.REFERENCE_TO_VIDEO_KIE,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
+        prompt: dto.prompt,
+        model,
+        resolution: dto.resolution,
+        aspectRatio: dto.aspect_ratio,
+        generateAudio: hasAudio,
+        seed: dto.seed,
+        imageUrls,
+      } satisfies ReferenceToVideoKieJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
   // ─── Shared helpers ───────────────────────────────────────
 
   private async checkVeoAccess(
     userId: string,
     modelVariant: string | null,
   ): Promise<'paid' | 'free_generation'> {
-    if (modelVariant !== 'VEO_FAST' && modelVariant !== 'VEO_MAX') {
+    const isGeraew = modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
+    const isVeo = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
+
+    if (!isGeraew && !isVeo) {
       return 'paid';
     }
 
@@ -996,7 +1314,17 @@ CRITICAL REQUIREMENTS:
       return 'paid';
     }
 
-    // Free plan user — check for free generations
+    // Free plan — KIE (Veo 3.1) is blocked
+    if (isVeo) {
+      throw new ForbiddenException({
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message:
+          'Veo 3.1 está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
+        statusCode: 403,
+      });
+    }
+
+    // Free plan — GeraEW models: check for free generations
     const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
     if (hasFree) {
       return 'free_generation';
@@ -1005,7 +1333,7 @@ CRITICAL REQUIREMENTS:
     throw new ForbiddenException({
       code: 'PLAN_UPGRADE_REQUIRED',
       message:
-        'Veo está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
+        'Suas gerações gratuitas acabaram. Faça upgrade para Starter ou superior.',
       statusCode: 403,
     });
   }
@@ -1277,5 +1605,21 @@ CRITICAL REQUIREMENTS:
       `input.${ext}`,
       mimeType,
     );
+  }
+
+  private async uploadBase64ImagePublic(
+    base64: string,
+    mimeType: string,
+    generationId: string,
+  ): Promise<string> {
+    const buffer = Buffer.from(base64, 'base64');
+    const ext = mimeType.split('/')[1] ?? 'jpg';
+    const { publicUrl } = await this.uploadsService.uploadBufferPublic(
+      buffer,
+      `inputs/${generationId}`,
+      `input_${Date.now()}.${ext}`,
+      mimeType,
+    );
+    return publicUrl;
   }
 }

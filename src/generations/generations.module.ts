@@ -13,6 +13,7 @@ import { GeraewProvider } from './providers/geraew.provider';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { WanProvider } from './providers/wan.provider';
 import { FaceSwapProvider } from './providers/face-swap.provider';
+import { VeoProvider } from './providers/veo.provider';
 import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
 
 @Module({
@@ -41,6 +42,7 @@ import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module'
     NanoBananaProvider,
     WanProvider,
     FaceSwapProvider,
+    VeoProvider,
   ],
   exports: [GenerationsService],
 })
