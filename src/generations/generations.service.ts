@@ -1314,28 +1314,13 @@ CRITICAL REQUIREMENTS:
       return 'paid';
     }
 
-    // Free plan — KIE (Veo 3.1) is blocked
-    if (isVeo) {
-      throw new ForbiddenException({
-        code: 'PLAN_UPGRADE_REQUIRED',
-        message:
-          'Veo 3.1 está disponível apenas para planos pagos. Faça upgrade para Starter ou superior.',
-        statusCode: 403,
-      });
-    }
-
-    // Free plan — GeraEW models: check for free generations
+    // Free plan — check for free generations first, then use regular credits
     const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
     if (hasFree) {
       return 'free_generation';
     }
 
-    throw new ForbiddenException({
-      code: 'PLAN_UPGRADE_REQUIRED',
-      message:
-        'Suas gerações gratuitas acabaram. Faça upgrade para Starter ou superior.',
-      statusCode: 403,
-    });
+    return 'paid';
   }
 
   private async checkConcurrentLimit(userId: string): Promise<void> {
