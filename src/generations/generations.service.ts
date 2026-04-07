@@ -1305,34 +1305,15 @@ CRITICAL REQUIREMENTS:
       return 'paid';
     }
 
-    const subscription = await this.prisma.subscription.findFirst({
-      where: { userId, status: 'ACTIVE' },
-      include: { plan: true },
-    });
-
-    // Paid plan user — normal credit flow
-    if (subscription && subscription.plan.slug !== 'free') {
-      return 'paid';
+    // Free generations (2 iniciais) → apenas GeraEW provider
+    if (provider === 'geraew') {
+      const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
+      if (hasFree) {
+        return 'free_generation';
+      }
     }
 
-    // Free plan + KIE provider → blocked (free video generations only via GeraEW provider)
-    if (provider === 'kie') {
-      throw new HttpException(
-        {
-          code: 'PLAN_UPGRADE_REQUIRED',
-          message:
-            'Gerações de vídeo gratuitas estão disponíveis apenas pelo provider GeraEW. Faça upgrade para usar o provider KIE.',
-        },
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    // Free plan + GeraEW provider — check for free generations
-    const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
-    if (hasFree) {
-      return 'free_generation';
-    }
-
+    // Com créditos → qualquer provider, sem restrição de plano
     return 'paid';
   }
 
