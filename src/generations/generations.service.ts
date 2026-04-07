@@ -1003,7 +1003,7 @@ CRITICAL REQUIREMENTS:
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -1080,7 +1080,7 @@ CRITICAL REQUIREMENTS:
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -1201,7 +1201,7 @@ CRITICAL REQUIREMENTS:
 
     const modelVariant = dto.model_variant ?? 'VEO_FAST';
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -1296,6 +1296,7 @@ CRITICAL REQUIREMENTS:
   private async checkVeoAccess(
     userId: string,
     modelVariant: string | null,
+    provider: 'geraew' | 'kie' = 'geraew',
   ): Promise<'paid' | 'free_generation'> {
     const isGeraew = modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
     const isVeo = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
@@ -1314,7 +1315,19 @@ CRITICAL REQUIREMENTS:
       return 'paid';
     }
 
-    // Free plan — check for free generations first, then use regular credits
+    // Free plan + KIE provider → blocked (free video generations only via GeraEW provider)
+    if (provider === 'kie') {
+      throw new HttpException(
+        {
+          code: 'PLAN_UPGRADE_REQUIRED',
+          message:
+            'Gerações de vídeo gratuitas estão disponíveis apenas pelo provider GeraEW. Faça upgrade para usar o provider KIE.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    // Free plan + GeraEW provider — check for free generations
     const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
     if (hasFree) {
       return 'free_generation';

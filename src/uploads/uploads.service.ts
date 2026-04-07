@@ -117,8 +117,13 @@ export class UploadsService {
       );
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    let buffer: Buffer = Buffer.from(await response.arrayBuffer());
     const contentType = response.headers.get('content-type') ?? 'image/png';
+
+    // For MP4 videos, move moov atom to the beginning for streaming playback
+    if (contentType === 'video/mp4') {
+      buffer = await this.applyFaststart(buffer);
+    }
 
     // Upload to S3
     await this.s3Client.send(
@@ -127,6 +132,8 @@ export class UploadsService {
         Key: fileKey,
         Body: buffer,
         ContentType: contentType,
+        ContentLength: buffer.length,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 
@@ -151,17 +158,66 @@ export class UploadsService {
       return `https://mock-s3.local/${this.bucketName}/${fileKey}`;
     }
 
+    // For MP4 videos, move moov atom to the beginning for streaming playback
+    let finalBuffer = buffer;
+    if (contentType === 'video/mp4') {
+      finalBuffer = await this.applyFaststart(buffer);
+    }
+
     await this.s3Client.send(
       new PutObjectCommand({
         Bucket: this.bucketName,
         Key: fileKey,
-        Body: buffer,
+        Body: finalBuffer,
         ContentType: contentType,
+        ContentLength: finalBuffer.length,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 
-    this.logger.log(`Uploaded ${fileKey} (${buffer.length} bytes)`);
+    this.logger.log(`Uploaded ${fileKey} (${finalBuffer.length} bytes)`);
     return this.getPublicUrl(fileKey);
+  }
+
+  /**
+   * Re-muxes an MP4 buffer with -movflags +faststart so the moov atom
+   * is at the beginning of the file, enabling streaming playback.
+   */
+  private async applyFaststart(buffer: Buffer): Promise<Buffer> {
+    const tempDir = path.join('/tmp', `faststart-${randomUUID()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const inputPath = path.join(tempDir, 'input.mp4');
+    const outputPath = path.join(tempDir, 'output.mp4');
+
+    try {
+      fs.writeFileSync(inputPath, buffer);
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions('-c', 'copy', '-movflags', '+faststart')
+          .output(outputPath)
+          .on('end', () => resolve())
+          .on('error', (err: Error) => reject(err))
+          .run();
+      });
+
+      const result = fs.readFileSync(outputPath);
+      this.logger.log(
+        `Faststart applied: ${buffer.length} → ${result.length} bytes`,
+      );
+      return result;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to apply faststart, uploading original: ${(error as Error).message}`,
+      );
+      return buffer;
+    } finally {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   /**
@@ -331,16 +387,24 @@ export class UploadsService {
       return { publicUrl: mockUrl, signedUrl: mockUrl };
     }
 
+    // For MP4 videos, move moov atom to the beginning for streaming playback
+    let finalBuffer = buffer;
+    if (contentType === 'video/mp4') {
+      finalBuffer = await this.applyFaststart(buffer);
+    }
+
     await this.s3Client.send(
       new PutObjectCommand({
         Bucket: this.bucketName,
         Key: fileKey,
-        Body: buffer,
+        Body: finalBuffer,
         ContentType: contentType,
+        ContentLength: finalBuffer.length,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 
-    this.logger.log(`Uploaded (public) ${fileKey} (${buffer.length} bytes)`);
+    this.logger.log(`Uploaded (public) ${fileKey} (${finalBuffer.length} bytes)`);
 
     const publicUrl = this.getPublicUrl(fileKey);
     return { publicUrl, signedUrl: publicUrl };
