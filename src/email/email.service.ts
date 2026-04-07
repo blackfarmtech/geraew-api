@@ -207,7 +207,7 @@ export class EmailService implements OnModuleInit {
               ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
               <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Bem-vindo ao Geraew!</h1>
               <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Olá, ${name}! Seu email foi confirmado e sua conta está pronta.</p>
-              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Seu plano Free inclui <strong>300 créditos Mensais</strong> para você explorar a plataforma.</p>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Seu plano Free inclui <strong>350 créditos Mensais</strong> para você explorar a plataforma.</p>
               <div style="margin: 0 0 0;">
                 <a href="${dashboardUrl}"
                    style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
