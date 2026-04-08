@@ -1,0 +1,150 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  PromptSectionDto,
+  PromptTemplateDto,
+} from './dto/prompt-response.dto';
+
+@Injectable()
+export class PromptsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getAllSections(): Promise<PromptSectionDto[]> {
+    const sections = await this.prisma.promptSection.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        icon: true,
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            prompts: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                type: true,
+                prompt: true,
+                imageUrl: true,
+                aiModel: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return sections.map((section) => ({
+      id: section.id,
+      slug: section.slug,
+      title: section.title,
+      description: section.description ?? undefined,
+      icon: section.icon ?? undefined,
+      categories: section.categories.map((category) => ({
+        id: category.id,
+        title: category.title,
+        prompts: category.prompts.map((prompt) => ({
+          id: prompt.id,
+          title: prompt.title,
+          type: prompt.type,
+          prompt: prompt.prompt,
+          imageUrl: prompt.imageUrl ?? undefined,
+          aiModel: prompt.aiModel ?? undefined,
+        })),
+      })),
+    }));
+  }
+
+  async getSectionBySlug(slug: string): Promise<PromptSectionDto> {
+    const section = await this.prisma.promptSection.findUnique({
+      where: { slug, isActive: true },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        icon: true,
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            prompts: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                type: true,
+                prompt: true,
+                imageUrl: true,
+                aiModel: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!section) {
+      throw new NotFoundException(`Secao com slug "${slug}" nao encontrada`);
+    }
+
+    return {
+      id: section.id,
+      slug: section.slug,
+      title: section.title,
+      description: section.description ?? undefined,
+      icon: section.icon ?? undefined,
+      categories: section.categories.map((category) => ({
+        id: category.id,
+        title: category.title,
+        prompts: category.prompts.map((prompt) => ({
+          id: prompt.id,
+          title: prompt.title,
+          type: prompt.type,
+          prompt: prompt.prompt,
+          imageUrl: prompt.imageUrl ?? undefined,
+          aiModel: prompt.aiModel ?? undefined,
+        })),
+      })),
+    };
+  }
+
+  async searchPrompts(query: string): Promise<PromptTemplateDto[]> {
+    const prompts = await this.prisma.promptTemplate.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { prompt: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        prompt: true,
+        imageUrl: true,
+        aiModel: true,
+      },
+    });
+
+    return prompts.map((prompt) => ({
+      id: prompt.id,
+      title: prompt.title,
+      type: prompt.type,
+      prompt: prompt.prompt,
+      imageUrl: prompt.imageUrl ?? undefined,
+      aiModel: prompt.aiModel ?? undefined,
+    }));
+  }
+}

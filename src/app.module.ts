@@ -24,6 +24,7 @@ import { FoldersModule } from './folders/folders.module';
 import { VideoEditorModule } from './video-editor/video-editor.module';
 import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
+import { PromptsModule } from './prompts/prompts.module';
 
 
 @Module({
@@ -70,6 +71,7 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
     PaymentsModule,
     GenerationsModule,
     GalleryModule,
+    PromptsModule,
     FoldersModule,
     VideoEditorModule,
     PromptEnhancerModule,

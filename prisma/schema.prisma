@@ -581,3 +581,57 @@ model VideoProjectClip {
   @@index([projectId])
   @@map("video_project_clips")
 }
+
+// ============================================
+// PROMPTS
+// ============================================
+
+model PromptSection {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?  @db.Text
+  icon        String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  categories PromptCategory[]
+
+  @@map("prompt_sections")
+}
+
+model PromptCategory {
+  id        String   @id @default(cuid())
+  sectionId String   @map("section_id")
+  title     String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  section PromptSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  prompts PromptTemplate[]
+
+  @@index([sectionId])
+  @@map("prompt_categories")
+}
+
+model PromptTemplate {
+  id         String   @id @default(cuid())
+  categoryId String   @map("category_id")
+  title      String
+  type       String
+  prompt     String   @db.Text
+  imageUrl   String?  @map("image_url")
+  aiModel    String?  @map("ai_model")
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category PromptCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("prompt_templates")
+}

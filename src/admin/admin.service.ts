@@ -4,6 +4,9 @@ import { CreditTransactionType, GenerationStatus, SubscriptionStatus } from '@pr
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
+import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
+import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
+import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 
 @Injectable()
 export class AdminService {
@@ -1206,5 +1209,107 @@ export class AdminService {
       })),
       alerts,
     };
+  }
+
+  // ============================================
+  // PROMPT MANAGEMENT
+  // ============================================
+
+  async getPromptSections() {
+    return this.prisma.promptSection.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            prompts: {
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async createPromptSection(dto: CreatePromptSectionDto) {
+    return this.prisma.promptSection.create({
+      data: {
+        slug: dto.slug,
+        title: dto.title,
+        description: dto.description,
+        icon: dto.icon,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async deletePromptSection(id: string) {
+    const section = await this.prisma.promptSection.findUnique({ where: { id } });
+    if (!section) {
+      throw new NotFoundException('Seção de prompts não encontrada');
+    }
+
+    await this.prisma.promptSection.delete({ where: { id } });
+    return { success: true, message: 'Seção removida com sucesso' };
+  }
+
+  async createPromptTemplate(dto: CreatePromptTemplateDto) {
+    const category = await this.prisma.promptCategory.findUnique({
+      where: { id: dto.categoryId },
+    });
+    if (!category) {
+      throw new NotFoundException('Categoria de prompts não encontrada');
+    }
+
+    return this.prisma.promptTemplate.create({
+      data: {
+        categoryId: dto.categoryId,
+        title: dto.title,
+        type: dto.type,
+        prompt: dto.prompt,
+        imageUrl: dto.imageUrl,
+        aiModel: dto.aiModel,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async updatePromptTemplate(id: string, dto: UpdatePromptTemplateDto) {
+    const template = await this.prisma.promptTemplate.findUnique({ where: { id } });
+    if (!template) {
+      throw new NotFoundException('Prompt template não encontrado');
+    }
+
+    if (dto.categoryId) {
+      const category = await this.prisma.promptCategory.findUnique({
+        where: { id: dto.categoryId },
+      });
+      if (!category) {
+        throw new NotFoundException('Categoria de prompts não encontrada');
+      }
+    }
+
+    return this.prisma.promptTemplate.update({
+      where: { id },
+      data: {
+        ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.type !== undefined && { type: dto.type }),
+        ...(dto.prompt !== undefined && { prompt: dto.prompt }),
+        ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
+        ...(dto.aiModel !== undefined && { aiModel: dto.aiModel }),
+        ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+      },
+    });
+  }
+
+  async deletePromptTemplate(id: string) {
+    const template = await this.prisma.promptTemplate.findUnique({ where: { id } });
+    if (!template) {
+      throw new NotFoundException('Prompt template não encontrado');
+    }
+
+    await this.prisma.promptTemplate.delete({ where: { id } });
+    return { success: true, message: 'Prompt template removido com sucesso' };
   }
 }

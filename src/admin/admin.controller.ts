@@ -29,6 +29,9 @@ import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { AdminUploadDto } from './dto/admin-upload.dto';
+import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
+import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
+import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -182,5 +185,46 @@ export class AdminController {
     });
     const publicUrl = this.uploadsService.getPublicUrl(fileKey);
     return { uploadUrl, fileKey, publicUrl };
+  }
+
+  // ===== PROMPT MANAGEMENT =====
+
+  @Get('prompts')
+  @ApiOperation({ summary: 'Lista todas as seções de prompts (admin)' })
+  async getPromptSections() {
+    return this.adminService.getPromptSections();
+  }
+
+  @Post('prompts/sections')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Cria nova seção de prompts' })
+  async createPromptSection(@Body() dto: CreatePromptSectionDto) {
+    return this.adminService.createPromptSection(dto);
+  }
+
+  @Delete('prompts/sections/:id')
+  @ApiOperation({ summary: 'Remove seção de prompts' })
+  async deletePromptSection(@Param('id') id: string) {
+    return this.adminService.deletePromptSection(id);
+  }
+
+  @Post('prompts/templates')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Cria novo prompt template' })
+  async createPromptTemplate(@Body() dto: CreatePromptTemplateDto) {
+    return this.adminService.createPromptTemplate(dto);
+  }
+
+  @Patch('prompts/templates/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Atualiza prompt template' })
+  async updatePromptTemplate(@Param('id') id: string, @Body() dto: UpdatePromptTemplateDto) {
+    return this.adminService.updatePromptTemplate(id, dto);
+  }
+
+  @Delete('prompts/templates/:id')
+  @ApiOperation({ summary: 'Remove prompt template' })
+  async deletePromptTemplate(@Param('id') id: string) {
+    return this.adminService.deletePromptTemplate(id);
   }
 }
