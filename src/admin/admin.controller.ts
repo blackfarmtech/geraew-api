@@ -22,6 +22,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { AdjustFreeGenerationsDto } from './dto/adjust-free-generations.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
@@ -87,9 +88,9 @@ export class AdminController {
 
   @Get('users')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Lista todos os usuários (paginado)' })
-  async getUsers(@Query() pagination: PaginationDto) {
-    return this.adminService.getUsers(pagination);
+  @ApiOperation({ summary: 'Lista todos os usuários (paginado, busca)' })
+  async getUsers(@Query() query: ListUsersQueryDto) {
+    return this.adminService.getUsers(query);
   }
 
   @Get('users/:id')

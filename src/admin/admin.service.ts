@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreditTransactionType, GenerationStatus, SubscriptionStatus } from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
@@ -124,12 +125,23 @@ export class AdminService {
     };
   }
 
-  async getUsers(pagination: PaginationDto) {
+  async getUsers(query: ListUsersQueryDto) {
+    const search = query.search?.trim();
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { email: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : undefined;
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
-        skip: pagination.skip,
-        take: pagination.limit,
+        skip: query.skip,
+        take: query.limit,
         include: {
           subscriptions: {
             where: { status: SubscriptionStatus.ACTIVE },
@@ -139,7 +151,7 @@ export class AdminService {
           creditBalance: true,
         },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
 
     const data = users.map((user) => ({
@@ -164,7 +176,7 @@ export class AdminService {
         : null,
     }));
 
-    return new PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+    return new PaginatedResponseDto(data, total, query.page, query.limit);
   }
 
   async getUserById(id: string) {
