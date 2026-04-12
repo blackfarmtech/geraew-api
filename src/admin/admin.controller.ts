@@ -31,6 +31,9 @@ import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { DateRangeDto } from './dto/date-range.dto';
 import { AdminUploadDto } from './dto/admin-upload.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
+import { UpdatePromptSectionDto } from './dto/update-prompt-section.dto';
+import { CreatePromptCategoryDto } from './dto/create-prompt-category.dto';
+import { UpdatePromptCategoryDto } from './dto/update-prompt-category.dto';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 import { ToggleModelDto } from './dto/toggle-model.dto';
@@ -204,10 +207,37 @@ export class AdminController {
     return this.adminService.createPromptSection(dto);
   }
 
+  @Patch('prompts/sections/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Atualiza seção de prompts' })
+  async updatePromptSection(@Param('id') id: string, @Body() dto: UpdatePromptSectionDto) {
+    return this.adminService.updatePromptSection(id, dto);
+  }
+
   @Delete('prompts/sections/:id')
   @ApiOperation({ summary: 'Remove seção de prompts' })
   async deletePromptSection(@Param('id') id: string) {
     return this.adminService.deletePromptSection(id);
+  }
+
+  @Post('prompts/categories')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Cria nova categoria dentro de uma seção' })
+  async createPromptCategory(@Body() dto: CreatePromptCategoryDto) {
+    return this.adminService.createPromptCategory(dto);
+  }
+
+  @Patch('prompts/categories/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Atualiza categoria de prompts' })
+  async updatePromptCategory(@Param('id') id: string, @Body() dto: UpdatePromptCategoryDto) {
+    return this.adminService.updatePromptCategory(id, dto);
+  }
+
+  @Delete('prompts/categories/:id')
+  @ApiOperation({ summary: 'Remove categoria de prompts' })
+  async deletePromptCategory(@Param('id') id: string) {
+    return this.adminService.deletePromptCategory(id);
   }
 
   @Post('prompts/templates')
