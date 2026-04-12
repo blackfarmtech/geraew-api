@@ -12,7 +12,9 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditsService } from '../credits/credits.service';
 import { PlansService } from '../plans/plans.service';
+import { ModelsService } from '../models/models.service';
 import {
+  AiModelType,
   GenerationType,
   GenerationStatus,
   CreditTransactionType,
@@ -67,6 +69,18 @@ function getModelVariant(model: string | undefined | null): string | null {
   };
   return MODEL_TO_VARIANT[model] ?? null;
 }
+
+/**
+ * Normaliza nomes legados de modelos para os slugs atuais do banco (tabela ai_models).
+ * Necessário porque alguns DTOs ainda aceitam nomes antigos do Vertex AI.
+ */
+function normalizeVideoModelSlug(model: string): string {
+  const LEGACY_SLUG_MAP: Record<string, string> = {
+    'veo-3.1-fast-generate-001': 'geraew-fast',
+    'veo-3.1-generate-001': 'geraew-quality',
+  };
+  return LEGACY_SLUG_MAP[model] ?? model;
+}
 import {
   GENERATION_QUEUE,
   GenerationJobName,
@@ -114,6 +128,7 @@ export class GenerationsService {
     private readonly creditsService: CreditsService,
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
+    private readonly modelsService: ModelsService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
   ) { }
 
@@ -386,6 +401,11 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
 
+    await this.modelsService.assertActiveBySlug(
+      normalizeVideoModelSlug(dto.model),
+      AiModelType.VIDEO,
+    );
+
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
 
@@ -468,6 +488,11 @@ export class GenerationsService {
     const sampleCount = dto.sample_count ?? 1;
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(
+      normalizeVideoModelSlug(model),
+      AiModelType.VIDEO,
+    );
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
@@ -588,6 +613,11 @@ export class GenerationsService {
     const sampleCount = dto.sample_count ?? 1;
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(
+      normalizeVideoModelSlug(model),
+      AiModelType.VIDEO,
+    );
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
@@ -1003,6 +1033,8 @@ CRITICAL REQUIREMENTS:
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
+
     const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';
 
@@ -1079,6 +1111,8 @@ CRITICAL REQUIREMENTS:
     const hasAudio = dto.generate_audio ?? true;
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';
@@ -1200,6 +1234,8 @@ CRITICAL REQUIREMENTS:
     const hasAudio = dto.generate_audio ?? true;
 
     const modelVariant = dto.model_variant ?? 'VEO_FAST';
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
     const isFreeGeneration = veoAccess === 'free_generation';

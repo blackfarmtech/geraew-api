@@ -8,10 +8,14 @@ import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
+import { ModelsService } from '../models/models.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly modelsService: ModelsService,
+  ) {}
 
   /** Models that use the GeraEW provider (Google Gemini / Veo) */
   private static readonly GERAEW_MODEL_PREFIXES = ['gemini-', 'veo-'];
@@ -1323,5 +1327,31 @@ export class AdminService {
 
     await this.prisma.promptTemplate.delete({ where: { id } });
     return { success: true, message: 'Prompt template removido com sucesso' };
+  }
+
+  // ===== AI MODELS =====
+
+  async listAllModels() {
+    return this.prisma.aiModel.findMany({
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }],
+    });
+  }
+
+  async toggleModelStatus(id: string, isActive: boolean, statusMessage?: string) {
+    const model = await this.prisma.aiModel.findUnique({ where: { id } });
+    if (!model) {
+      throw new NotFoundException('Modelo não encontrado');
+    }
+
+    await this.prisma.aiModel.update({
+      where: { id },
+      data: {
+        isActive,
+        statusMessage: statusMessage ?? null,
+      },
+    });
+
+    // Invalida o cache do ModelsService para refletir mudanças imediatamente
+    this.modelsService.invalidateCache();
   }
 }

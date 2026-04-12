@@ -33,6 +33,7 @@ import { AdminUploadDto } from './dto/admin-upload.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
+import { ToggleModelDto } from './dto/toggle-model.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -227,5 +228,25 @@ export class AdminController {
   @ApiOperation({ summary: 'Remove prompt template' })
   async deletePromptTemplate(@Param('id') id: string) {
     return this.adminService.deletePromptTemplate(id);
+  }
+
+  // ===== AI MODELS =====
+
+  @Get('models')
+  @ApiOperation({ summary: 'Lista todos os modelos de IA (admin)' })
+  async listModels() {
+    return this.adminService.listAllModels();
+  }
+
+  @Patch('models/:id/toggle')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Ativa ou desativa um modelo de IA' })
+  async toggleModel(
+    @Param('id') id: string,
+    @Body() dto: ToggleModelDto,
+  ) {
+    await this.adminService.toggleModelStatus(id, dto.isActive, dto.statusMessage);
+    const status = dto.isActive ? 'ativado' : 'desativado';
+    return { success: true, message: `Modelo ${status} com sucesso` };
   }
 }

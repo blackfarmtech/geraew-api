@@ -86,6 +86,16 @@ enum GenerationImageRole {
   REFERENCE
 }
 
+enum AiModelProvider {
+  GERAEW
+  KIE
+}
+
+enum AiModelType {
+  VIDEO
+  IMAGE
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -634,4 +644,27 @@ model PromptTemplate {
   @@index([categoryId])
   @@index([isActive])
   @@map("prompt_templates")
+}
+
+// ============================================
+// AI MODELS
+// ============================================
+
+model AiModel {
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  label         String
+  description   String?
+  provider      AiModelProvider
+  type          AiModelType
+  modelVariant  String          @map("model_variant")
+  isActive      Boolean         @default(true) @map("is_active")
+  sortOrder     Int             @default(0) @map("sort_order")
+  statusMessage String?         @map("status_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([type, isActive, sortOrder])
+  @@map("ai_models")
 }

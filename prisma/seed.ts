@@ -234,6 +234,36 @@ async function main() {
   console.log(`✅ Created ${packages.length} credit packages`);
 
   // ============================================
+  // Seed AI Models (video)
+  // ============================================
+  console.log('🎬 Creating AI video models...');
+
+  const videoModels = [
+    { slug: 'geraew-quality', label: 'Geraew Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 0 },
+    { slug: 'geraew-fast',    label: 'Geraew Fast',    provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST',    sortOrder: 1 },
+    { slug: 'veo3',           label: 'Veo 3.1 Quality', provider: 'KIE' as const,   modelVariant: 'VEO_MAX',        sortOrder: 2 },
+    { slug: 'veo3_fast',      label: 'Veo 3.1 Fast',    provider: 'KIE' as const,   modelVariant: 'VEO_FAST',       sortOrder: 3 },
+  ];
+
+  for (const model of videoModels) {
+    await prisma.aiModel.upsert({
+      where: { slug: model.slug },
+      update: {}, // não sobrescrever se admin já togou
+      create: {
+        slug: model.slug,
+        label: model.label,
+        provider: model.provider,
+        modelVariant: model.modelVariant,
+        sortOrder: model.sortOrder,
+        type: 'VIDEO',
+        isActive: true,
+      },
+    });
+  }
+
+  console.log(`✅ Created ${videoModels.length} AI video models`);
+
+  // ============================================
   // Seed Test Users (Development only)
   // ============================================
   if (process.env.NODE_ENV === 'development') {

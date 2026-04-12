@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
+import { ModelsService } from '../../models/models.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
 
 /** Maps internal resolution enum to image size values */
@@ -91,6 +92,7 @@ export class GeraewProvider {
   constructor(
     private readonly configService: ConfigService,
     private readonly uploadsService: UploadsService,
+    private readonly modelsService: ModelsService,
   ) {
     this.baseUrl = this.configService.get<string>(
       'GERAEW_PROVIDER_URL',
@@ -296,6 +298,7 @@ export class GeraewProvider {
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
       this.logger.error(`[VIDEO] Error response: ${errorText}`);
+      await this.handleInfraFailure(startResponse.status, errorText);
       const safetyError = ContentSafetyError.fromErrorMessage(errorText);
       if (safetyError) {
         throw safetyError;
@@ -431,6 +434,24 @@ export class GeraewProvider {
       );
     }
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  private async handleInfraFailure(
+    status: number,
+    errorText: string,
+  ): Promise<void> {
+    if (status !== 503) return;
+    if (!errorText.includes('No GCP accounts configured')) return;
+
+    try {
+      await this.modelsService.deactivateGeraewVideoModels(
+        'Modelos de vídeo temporariamente indisponíveis. Tente novamente em instantes.',
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to auto-disable GeraEW video models: ${(err as Error).message}`,
+      );
+    }
   }
 
   private async fetchWithTimeout(

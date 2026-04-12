@@ -25,6 +25,7 @@ import { VideoEditorModule } from './video-editor/video-editor.module';
 import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 import { PromptsModule } from './prompts/prompts.module';
+import { ModelsModule } from './models/models.module';
 
 
 @Module({
@@ -76,6 +77,7 @@ import { PromptsModule } from './prompts/prompts.module';
     VideoEditorModule,
     PromptEnhancerModule,
     AffiliatesModule,
+    ModelsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -15,6 +15,7 @@ import { WanProvider } from './providers/wan.provider';
 import { FaceSwapProvider } from './providers/face-swap.provider';
 import { VeoProvider } from './providers/veo.provider';
 import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
+import { ModelsModule } from '../models/models.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module'
     PlansModule,
     UploadsModule,
     PromptEnhancerModule,
+    ModelsModule,
     BullModule.registerQueue({
       name: GENERATION_QUEUE,
       defaultJobOptions: {
