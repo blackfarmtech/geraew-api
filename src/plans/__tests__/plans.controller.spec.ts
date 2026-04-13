@@ -62,7 +62,7 @@ describe('PlansController', () => {
     it('should return mapped plans array', async () => {
       mockPlansService.findAllPlans.mockResolvedValue(mockPlans);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll({ headers: {} } as any, 'BRL');
 
       expect(mockPlansService.findAllPlans).toHaveBeenCalledTimes(1);
       expect(result).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('PlansController', () => {
     it('should return empty array when no plans exist', async () => {
       mockPlansService.findAllPlans.mockResolvedValue([]);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll({ headers: {} } as any, 'BRL');
 
       expect(mockPlansService.findAllPlans).toHaveBeenCalledTimes(1);
       expect(result).toEqual([]);
@@ -92,7 +92,7 @@ describe('PlansController', () => {
     it('should correctly map all fields and exclude non-DTO fields', async () => {
       mockPlansService.findAllPlans.mockResolvedValue(mockPlans);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll({ headers: {} } as any, 'BRL');
 
       const expectedKeys = [
         'id',

@@ -11,6 +11,7 @@ import { PlansService } from '../plans/plans.service';
 import { StripeService } from '../payments/stripe.service';
 import { CreditsService } from '../credits/credits.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
+import { t } from '../common/i18n/t';
 
 const PLAN_ORDER = ['free', 'starter', 'creator', 'pro', 'studio'];
 
@@ -116,29 +117,7 @@ export class SubscriptionsService {
       );
     }
 
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { email: true, name: true, referredByCode: true },
-    });
-
-    const customerId = await this.stripeService.getOrCreateCustomer(
-      userId,
-      user.email,
-      user.name,
-    );
-
-    const checkoutUrl = await this.stripeService.createSubscriptionCheckout(
-      customerId,
-      plan.slug,
-      plan.name,
-      plan.priceCents,
-      userId,
-      plan.stripePriceId,
-      undefined,
-      undefined,
-      user.referredByCode ?? undefined,
-    );
-
+    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug);
     return { checkoutUrl };
   }
 
@@ -163,7 +142,7 @@ export class SubscriptionsService {
       const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
 
       if (newIdx === currentIdx) {
-        throw new BadRequestException('Você já está neste plano.');
+        throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
       }
 
       // Desconto = valor real que o usuario esta pagando no plano atual
@@ -213,7 +192,7 @@ export class SubscriptionsService {
     });
 
     if (!current) {
-      throw new NotFoundException('Nenhuma assinatura ativa encontrada');
+      throw new NotFoundException(t('errors.subscriptions.NO_ACTIVE_SUBSCRIPTION'));
     }
 
     const newPlan = await this.plansService.findPlanBySlug(planSlug);
@@ -222,7 +201,7 @@ export class SubscriptionsService {
     const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
 
     if (newIdx === currentIdx) {
-      throw new BadRequestException('Você já está neste plano.');
+      throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
     }
 
     if (newIdx > currentIdx) {
@@ -251,16 +230,15 @@ export class SubscriptionsService {
 
     // Downgrade para plano pago inferior: atualizar price no Stripe (sem proration)
     if (!current.externalSubscriptionId) {
-      throw new BadRequestException('Assinatura sem vínculo com Stripe');
+      throw new BadRequestException(t('errors.subscriptions.NO_STRIPE_LINK'));
     }
 
-    if (!newPlan.stripePriceId) {
-      throw new BadRequestException('Plano de destino sem price ID no Stripe');
-    }
+    const userCurrency = await this.getUserCurrency(userId);
+    const resolvedNew = await this.plansService.resolvePlanPrice(newPlan.id, userCurrency);
 
     await this.stripeService.scheduleSubscriptionPlanChange(
       current.externalSubscriptionId,
-      newPlan.stripePriceId,
+      resolvedNew.stripePriceId,
     );
 
     const subscription = await this.prisma.subscription.update({
@@ -282,18 +260,20 @@ export class SubscriptionsService {
     });
 
     if (!current) {
-      throw new NotFoundException('Nenhuma assinatura ativa encontrada');
+      throw new NotFoundException(t('errors.subscriptions.NO_ACTIVE_SUBSCRIPTION'));
     }
 
     if (current.cancelAtPeriodEnd) {
-      throw new BadRequestException('Assinatura já está marcada para cancelamento');
+      throw new BadRequestException(t('errors.subscriptions.ALREADY_CANCELED'));
     }
 
     // If a paid downgrade was pending, revert the Stripe price before canceling
-    if (current.scheduledPlanId && current.externalSubscriptionId && current.plan.stripePriceId) {
+    if (current.scheduledPlanId && current.externalSubscriptionId) {
+      const userCurrency = await this.getUserCurrency(userId);
+      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
       await this.stripeService.scheduleSubscriptionPlanChange(
         current.externalSubscriptionId,
-        current.plan.stripePriceId,
+        resolved.stripePriceId,
       );
     }
 
@@ -331,7 +311,7 @@ export class SubscriptionsService {
     }
 
     if (current.plan.slug === 'free') {
-      throw new BadRequestException('Nao e possivel pausar o plano Free');
+      throw new BadRequestException(t('errors.subscriptions.CANNOT_PAUSE_FREE'));
     }
 
     const resumesAt = new Date();
@@ -378,10 +358,12 @@ export class SubscriptionsService {
     }
 
     // If downgrade to a paid plan, revert the Stripe price back to the current plan
-    if (!current.cancelAtPeriodEnd && current.externalSubscriptionId && current.plan.stripePriceId) {
+    if (!current.cancelAtPeriodEnd && current.externalSubscriptionId) {
+      const userCurrency = await this.getUserCurrency(userId);
+      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
       await this.stripeService.scheduleSubscriptionPlanChange(
         current.externalSubscriptionId,
-        current.plan.stripePriceId,
+        resolved.stripePriceId,
       );
     }
 
@@ -421,10 +403,12 @@ export class SubscriptionsService {
     }
 
     // If there was a pending downgrade, revert Stripe price back to current plan
-    if (current.scheduledPlanId && current.externalSubscriptionId && current.plan.stripePriceId) {
+    if (current.scheduledPlanId && current.externalSubscriptionId) {
+      const userCurrency = await this.getUserCurrency(userId);
+      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
       await this.stripeService.scheduleSubscriptionPlanChange(
         current.externalSubscriptionId,
-        current.plan.stripePriceId,
+        resolved.stripePriceId,
       );
     }
 
@@ -450,7 +434,7 @@ export class SubscriptionsService {
     });
 
     if (!current) {
-      throw new NotFoundException('Nenhuma assinatura ativa encontrada');
+      throw new NotFoundException(t('errors.subscriptions.NO_ACTIVE_SUBSCRIPTION'));
     }
 
     if (current.plan.slug === 'free') {
@@ -587,6 +571,14 @@ export class SubscriptionsService {
     return result;
   }
 
+  private async getUserCurrency(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { currency: true },
+    });
+    return user.currency;
+  }
+
   private async buildCheckoutForPlan(
     userId: string,
     planSlug: string,
@@ -596,8 +588,9 @@ export class SubscriptionsService {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true, referredByCode: true },
+      select: { email: true, name: true, referredByCode: true, currency: true },
     });
+    const resolved = await this.plansService.resolvePlanPrice(plan.id, user.currency);
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
       user.email,
@@ -607,9 +600,10 @@ export class SubscriptionsService {
       customerId,
       plan.slug,
       plan.name,
-      plan.priceCents,
+      resolved.priceCents,
       userId,
-      plan.stripePriceId,
+      resolved.stripePriceId,
+      resolved.currency,
       discountAmountCents > 0 ? discountAmountCents : undefined,
       oldExternalSubscriptionId,
       user.referredByCode ?? undefined,

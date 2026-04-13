@@ -66,25 +66,17 @@ export class StripeService {
     planName: string,
     priceCents: number,
     userId: string,
-    stripePriceId?: string | null,
+    stripePriceId: string,
+    currency: string,
     discountAmountCents?: number,
     oldExternalSubscriptionId?: string,
     referredByCode?: string,
   ): Promise<string> {
-    const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
-      ? { price: stripePriceId, quantity: 1 }
-      : {
-        price_data: {
-          currency: 'brl',
-          product_data: {
-            name: `Geraew AI — Plano ${planName}`,
-            description: `Assinatura mensal do plano ${planName}`,
-          },
-          unit_amount: priceCents,
-          recurring: { interval: 'month' },
-        },
-        quantity: 1,
-      };
+    const stripeCurrency = currency.toLowerCase();
+    const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
+      price: stripePriceId,
+      quantity: 1,
+    };
 
     // Se tem desconto (upgrade), criar cupom one-time para cobrar só a diferença
     let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
@@ -92,7 +84,7 @@ export class StripeService {
     if (discountAmountCents && discountAmountCents > 0) {
       const coupon = await this.stripe.coupons.create({
         amount_off: discountAmountCents,
-        currency: 'brl',
+        currency: stripeCurrency,
         duration: 'once',
         name: `Upgrade para ${planName}`,
         metadata: { userId, type: 'subscription_upgrade' },
@@ -104,7 +96,6 @@ export class StripeService {
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
-      payment_method_types: ['card'],
       payment_method_collection: 'if_required',
       line_items: [lineItem],
       ...(discounts ? { discounts } : { allow_promotion_codes: true }),
@@ -143,27 +134,17 @@ export class StripeService {
     credits: number,
     priceCents: number,
     userId: string,
-    stripePriceId?: string | null,
+    stripePriceId: string,
     referredByCode?: string,
   ): Promise<string> {
-    const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = stripePriceId
-      ? { price: stripePriceId, quantity: 1 }
-      : {
-        price_data: {
-          currency: 'brl',
-          product_data: {
-            name: `Geraew AI — ${packageName}`,
-            description: `${credits} créditos avulsos`,
-          },
-          unit_amount: priceCents,
-        },
-        quantity: 1,
-      };
+    const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
+      price: stripePriceId,
+      quantity: 1,
+    };
 
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'payment',
-      payment_method_types: ['card'],
       line_items: [lineItem],
       allow_promotion_codes: true,
       payment_intent_data: {
@@ -213,12 +194,12 @@ export class StripeService {
     currentPlanPriceCents: number,
     userId: string,
     newPlanSlug: string,
+    currency: string,
   ): Promise<{ stripeSubscriptionId: string; invoiceId: string | null }> {
     // 1. Criar cupom one-time com o valor do plano atual
-    //    Ex: Starter R$29,90 → cupom de R$29,90 off na primeira invoice do Pro
     const coupon = await this.stripe.coupons.create({
       amount_off: currentPlanPriceCents,
-      currency: 'brl',
+      currency: currency.toLowerCase(),
       duration: 'once',
       name: `Upgrade para ${newPlanName}`,
       metadata: { userId, type: 'subscription_upgrade' },
@@ -414,7 +395,6 @@ export class StripeService {
 
     const coupon = await this.stripe.coupons.create({
       percent_off: percentOff,
-      currency: 'brl',
       duration,
       ...(duration === 'repeating' ? { duration_in_months: durationMonths } : {}),
       name: `Retencao ${percentOff}% OFF${durationMonths > 1 ? ` (${durationMonths} meses)` : ''}`,

@@ -33,6 +33,10 @@ export class UserProfileResponseDto {
   @ApiProperty() emailVerified: boolean;
   @ApiProperty() createdAt: Date;
   @ApiProperty() hasCompletedOnboarding: boolean;
+  @ApiPropertyOptional() country: string | null;
+  @ApiProperty() locale: string;
+  @ApiProperty() currency: string;
+  @ApiPropertyOptional() timezone: string | null;
   @ApiPropertyOptional() plan: PlanInfoDto | null;
   @ApiPropertyOptional() credits: CreditInfoDto | null;
   @ApiPropertyOptional() subscription: SubscriptionInfoDto | null;

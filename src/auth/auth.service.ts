@@ -9,6 +9,8 @@ import { randomBytes, createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { TwilioVerifyService } from '../twilio/twilio-verify.service';
 import { EmailService } from '../email/email.service';
+import { LocaleContext } from '../common/utils/locale.util';
+import { t } from '../common/i18n/t';
 
 @Injectable()
 export class AuthService {
@@ -137,7 +139,7 @@ export class AuthService {
   /**
    * Registra um novo usuário (telefone salvo sem verificação — verificação acontece dentro da plataforma)
    */
-  async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
+  async register(registerDto: RegisterDto, locale?: LocaleContext): Promise<AuthResponseDto> {
     const { email, password, name, phone, referralCode } = registerDto;
 
     // Normaliza o telefone
@@ -152,7 +154,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email já cadastrado');
+      throw new ConflictException(t('errors.auth.EMAIL_ALREADY_EXISTS'));
     }
 
     // Verifica se o telefone já está em uso
@@ -192,6 +194,8 @@ export class AuthService {
           isActive: true,
           role: 'USER',
           ...(validReferralCode && { referredByCode: validReferralCode }),
+          ...(locale?.country && { country: locale.country }),
+          ...(locale && { currency: locale.currency, locale: locale.locale }),
         },
       });
 
@@ -346,7 +350,7 @@ export class AuthService {
     const user = await this.validateUser(email, password);
 
     if (!user) {
-      throw new UnauthorizedException('Email ou senha inválidos');
+      throw new UnauthorizedException(t('errors.auth.INVALID_CREDENTIALS'));
     }
 
     if (!user.emailVerified) {
@@ -365,7 +369,7 @@ export class AuthService {
   /**
    * Login/Cadastro via Google OAuth (verifica ID token ou access token)
    */
-  async googleAuthWithToken(googleToken: string, referralCode?: string): Promise<AuthResponseDto> {
+  async googleAuthWithToken(googleToken: string, referralCode?: string, locale?: LocaleContext): Promise<AuthResponseDto> {
     try {
       const { OAuth2Client } = await import('google-auth-library');
       const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
@@ -390,7 +394,7 @@ export class AuthService {
           avatarUrl: payload.picture,
           provider: 'google',
           referralCode,
-        });
+        }, locale);
       } catch {
         // Se falhar como ID token, tenta como access token
         const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -414,7 +418,7 @@ export class AuthService {
           avatarUrl: userInfo.picture,
           provider: 'google',
           referralCode,
-        });
+        }, locale);
       }
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
@@ -432,7 +436,7 @@ export class AuthService {
     avatarUrl?: string;
     provider: string;
     referralCode?: string;
-  }): Promise<AuthResponseDto> {
+  }, locale?: LocaleContext): Promise<AuthResponseDto> {
     // Busca usuário existente por email ou Google ID
     let user = await this.prisma.user.findFirst({
       where: {
@@ -490,6 +494,8 @@ export class AuthService {
             emailVerified: true, // Google já verifica o email
             role: 'USER',
             ...(validReferralCode && { referredByCode: validReferralCode }),
+            ...(locale?.country && { country: locale.country }),
+            ...(locale && { currency: locale.currency, locale: locale.locale }),
           },
         });
 

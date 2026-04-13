@@ -56,6 +56,7 @@ export class PaymentsService {
     stripeSubscriptionId: string,
     amountCents: number,
     externalPaymentId: string,
+    currency: string,
     referredByCode?: string,
   ): Promise<void> {
     const plan = await this.prisma.plan.findUnique({
@@ -132,7 +133,7 @@ export class PaymentsService {
           userId,
           type: 'SUBSCRIPTION',
           amountCents,
-          currency: 'BRL',
+          currency: currency.toUpperCase(),
           status: 'COMPLETED',
           provider: 'stripe',
           externalPaymentId,
@@ -169,6 +170,7 @@ export class PaymentsService {
     packageId: string,
     amountCents: number,
     externalPaymentId: string,
+    currency: string,
     referredByCode?: string,
   ): Promise<void> {
     const creditPackage = await this.prisma.creditPackage.findUnique({
@@ -212,7 +214,7 @@ export class PaymentsService {
           userId,
           type: 'CREDIT_PURCHASE',
           amountCents,
-          currency: 'BRL',
+          currency: currency.toUpperCase(),
           status: 'COMPLETED',
           provider: 'stripe',
           externalPaymentId,
@@ -250,6 +252,7 @@ export class PaymentsService {
     periodEnd: Date,
     amountCents: number,
     externalPaymentId: string,
+    currency: string,
   ): Promise<void> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { externalSubscriptionId: stripeSubscriptionId },
@@ -337,7 +340,7 @@ export class PaymentsService {
           userId: subscription.userId,
           type: 'SUBSCRIPTION',
           amountCents,
-          currency: 'BRL',
+          currency: currency.toUpperCase(),
           status: 'COMPLETED',
           provider: 'stripe',
           externalPaymentId,
@@ -381,6 +384,7 @@ export class PaymentsService {
     stripeSubscriptionId: string,
     amountCents: number,
     externalPaymentId: string,
+    currency: string,
   ): Promise<void> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { externalSubscriptionId: stripeSubscriptionId },
@@ -428,7 +432,7 @@ export class PaymentsService {
           userId: subscription.userId,
           type: 'SUBSCRIPTION',
           amountCents,
-          currency: 'BRL',
+          currency: currency.toUpperCase(),
           status: 'FAILED',
           provider: 'stripe',
           externalPaymentId,

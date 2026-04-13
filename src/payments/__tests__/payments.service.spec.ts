@@ -157,6 +157,7 @@ describe('PaymentsService', () => {
         periodEnd,
         2990,
         'in_renewal_123',
+        'brl',
       );
 
       const tx = mockPrisma.$transaction.mock.calls[0][0];
@@ -181,6 +182,7 @@ describe('PaymentsService', () => {
         periodEnd,
         2990,
         'in_renewal_123',
+        'brl',
       );
 
       // Verificar que $transaction foi chamada
@@ -199,6 +201,7 @@ describe('PaymentsService', () => {
         periodEnd,
         2990,
         'in_renewal_123',
+        'brl',
       );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
@@ -218,6 +221,7 @@ describe('PaymentsService', () => {
         periodEnd,
         0,
         'in_downgrade_123',
+        'brl',
       );
 
       expect(mockPrisma.plan.findUnique).toHaveBeenCalledWith({
@@ -235,6 +239,7 @@ describe('PaymentsService', () => {
         periodEnd,
         2990,
         'in_not_found',
+        'brl',
       );
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
@@ -306,7 +311,7 @@ describe('PaymentsService', () => {
     it('should mark subscription as PAST_DUE and increment retry count', async () => {
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSubscription);
 
-      await service.handlePaymentFailed('sub_stripe_123', 2990, 'in_failed_123');
+      await service.handlePaymentFailed('sub_stripe_123', 2990, 'in_failed_123', 'brl');
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
@@ -314,7 +319,7 @@ describe('PaymentsService', () => {
     it('should create a FAILED payment record', async () => {
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSubscription);
 
-      await service.handlePaymentFailed('sub_stripe_123', 8990, 'in_failed_456');
+      await service.handlePaymentFailed('sub_stripe_123', 8990, 'in_failed_456', 'brl');
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
@@ -322,7 +327,7 @@ describe('PaymentsService', () => {
     it('should skip when subscription is not found', async () => {
       mockPrisma.subscription.findFirst.mockResolvedValue(null);
 
-      await service.handlePaymentFailed('sub_unknown', 2990, 'in_not_found');
+      await service.handlePaymentFailed('sub_unknown', 2990, 'in_not_found', 'brl');
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
@@ -344,6 +349,7 @@ describe('PaymentsService', () => {
         'sub_new_123',
         2990,
         'pi_first_123',
+        'brl',
       );
 
       expect(mockPrisma.plan.findUnique).toHaveBeenCalledWith({
@@ -359,6 +365,7 @@ describe('PaymentsService', () => {
         'sub_new_123',
         2990,
         'pi_first_123',
+        'brl',
       );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
@@ -374,6 +381,7 @@ describe('PaymentsService', () => {
           'sub_123',
           2990,
           'pi_123',
+          'brl',
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -394,6 +402,7 @@ describe('PaymentsService', () => {
         'pkg-500',
         1790,
         'pi_credit_123',
+        'brl',
       );
 
       expect(mockPrisma.creditPackage.findUnique).toHaveBeenCalledWith({
@@ -406,7 +415,7 @@ describe('PaymentsService', () => {
       mockPrisma.creditPackage.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.processCreditPurchase('user-1', 'invalid-pkg', 1790, 'pi_123'),
+        service.processCreditPurchase('user-1', 'invalid-pkg', 1790, 'pi_123', 'brl'),
       ).rejects.toThrow(NotFoundException);
     });
   });

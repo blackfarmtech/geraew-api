@@ -22,6 +22,24 @@ const STRIPE = {
   priceBoostP: process.env.STRIPE_PRICE_BOOST_P ?? '',
   priceBoostM: process.env.STRIPE_PRICE_BOOST_M ?? '',
   priceBoostG: process.env.STRIPE_PRICE_BOOST_G ?? '',
+  // Plans USD
+  planStarterUsd: process.env.STRIPE_PRICE_PLAN_STARTER_USD ?? '',
+  planCreatorUsd: process.env.STRIPE_PRICE_PLAN_CREATOR_USD ?? '',
+  planProUsd: process.env.STRIPE_PRICE_PLAN_PRO_USD ?? '',
+  planStudioUsd: process.env.STRIPE_PRICE_PLAN_STUDIO_USD ?? '',
+  // Plans EUR
+  planStarterEur: process.env.STRIPE_PRICE_PLAN_STARTER_EUR ?? '',
+  planCreatorEur: process.env.STRIPE_PRICE_PLAN_CREATOR_EUR ?? '',
+  planProEur: process.env.STRIPE_PRICE_PLAN_PRO_EUR ?? '',
+  planStudioEur: process.env.STRIPE_PRICE_PLAN_STUDIO_EUR ?? '',
+  // Boosts USD
+  priceBoostPUsd: process.env.STRIPE_PRICE_BOOST_P_USD ?? '',
+  priceBoostMUsd: process.env.STRIPE_PRICE_BOOST_M_USD ?? '',
+  priceBoostGUsd: process.env.STRIPE_PRICE_BOOST_G_USD ?? '',
+  // Boosts EUR
+  priceBoostPEur: process.env.STRIPE_PRICE_BOOST_P_EUR ?? '',
+  priceBoostMEur: process.env.STRIPE_PRICE_BOOST_M_EUR ?? '',
+  priceBoostGEur: process.env.STRIPE_PRICE_BOOST_G_EUR ?? '',
 };
 
 async function main() {
@@ -55,6 +73,43 @@ async function main() {
   }
 
   console.log(`✅ Created ${plans.length} plans`);
+
+  // ============================================
+  // Seed Plan Prices (multi-currency)
+  // ============================================
+  console.log('💱 Creating plan prices (multi-currency)...');
+
+  const planPriceData: Array<{ slug: string; currency: string; priceCents: number; stripePriceId: string }> = [
+    // BRL
+    { slug: 'starter', currency: 'BRL', priceCents: 3990,  stripePriceId: STRIPE.planStarter },
+    { slug: 'creator', currency: 'BRL', priceCents: 8990,  stripePriceId: STRIPE.planCreator },
+    { slug: 'pro',     currency: 'BRL', priceCents: 17990, stripePriceId: STRIPE.planPro },
+    { slug: 'studio',  currency: 'BRL', priceCents: 36990, stripePriceId: STRIPE.planStudio },
+    // USD
+    { slug: 'starter', currency: 'USD', priceCents: 990,  stripePriceId: STRIPE.planStarterUsd },
+    { slug: 'creator', currency: 'USD', priceCents: 1990, stripePriceId: STRIPE.planCreatorUsd },
+    { slug: 'pro',     currency: 'USD', priceCents: 3990, stripePriceId: STRIPE.planProUsd },
+    { slug: 'studio',  currency: 'USD', priceCents: 7990, stripePriceId: STRIPE.planStudioUsd },
+    // EUR
+    { slug: 'starter', currency: 'EUR', priceCents: 890,  stripePriceId: STRIPE.planStarterEur },
+    { slug: 'creator', currency: 'EUR', priceCents: 1890, stripePriceId: STRIPE.planCreatorEur },
+    { slug: 'pro',     currency: 'EUR', priceCents: 3790, stripePriceId: STRIPE.planProEur },
+    { slug: 'studio',  currency: 'EUR', priceCents: 7490, stripePriceId: STRIPE.planStudioEur },
+  ];
+
+  const plansBySlug = new Map(plans.map((p) => [p.slug, p]));
+  let planPriceCount = 0;
+  for (const pp of planPriceData) {
+    const plan = plansBySlug.get(pp.slug);
+    if (!plan || !pp.stripePriceId) continue;
+    await prisma.planPrice.upsert({
+      where: { planId_currency: { planId: plan.id, currency: pp.currency } },
+      update: { priceCents: pp.priceCents, stripePriceId: pp.stripePriceId, isActive: true },
+      create: { planId: plan.id, currency: pp.currency, priceCents: pp.priceCents, stripePriceId: pp.stripePriceId },
+    });
+    planPriceCount++;
+  }
+  console.log(`✅ Created ${planPriceCount} plan prices`);
 
   // ============================================
   // Seed Credit Costs
@@ -232,6 +287,40 @@ async function main() {
   }
 
   console.log(`✅ Created ${packages.length} credit packages`);
+
+  // ============================================
+  // Seed Credit Package Prices (multi-currency)
+  // ============================================
+  console.log('💱 Creating credit package prices (multi-currency)...');
+
+  const packagePriceData: Array<{ name: string; currency: string; priceCents: number; stripePriceId: string }> = [
+    // BRL
+    { name: 'Boost P', currency: 'BRL', priceCents: 1490, stripePriceId: STRIPE.priceBoostP },
+    { name: 'Boost M', currency: 'BRL', priceCents: 2690, stripePriceId: STRIPE.priceBoostM },
+    { name: 'Boost G', currency: 'BRL', priceCents: 3690, stripePriceId: STRIPE.priceBoostG },
+    // USD
+    { name: 'Boost P', currency: 'USD', priceCents: 390, stripePriceId: STRIPE.priceBoostPUsd },
+    { name: 'Boost M', currency: 'USD', priceCents: 690, stripePriceId: STRIPE.priceBoostMUsd },
+    { name: 'Boost G', currency: 'USD', priceCents: 990, stripePriceId: STRIPE.priceBoostGUsd },
+    // EUR
+    { name: 'Boost P', currency: 'EUR', priceCents: 350, stripePriceId: STRIPE.priceBoostPEur },
+    { name: 'Boost M', currency: 'EUR', priceCents: 650, stripePriceId: STRIPE.priceBoostMEur },
+    { name: 'Boost G', currency: 'EUR', priceCents: 890, stripePriceId: STRIPE.priceBoostGEur },
+  ];
+
+  const packagesByName = new Map(packages.map((p) => [p.name, p]));
+  let packagePriceCount = 0;
+  for (const pp of packagePriceData) {
+    const pkg = packagesByName.get(pp.name);
+    if (!pkg || !pp.stripePriceId) continue;
+    await prisma.creditPackagePrice.upsert({
+      where: { creditPackageId_currency: { creditPackageId: pkg.id, currency: pp.currency } },
+      update: { priceCents: pp.priceCents, stripePriceId: pp.stripePriceId, isActive: true },
+      create: { creditPackageId: pkg.id, currency: pp.currency, priceCents: pp.priceCents, stripePriceId: pp.stripePriceId },
+    });
+    packagePriceCount++;
+  }
+  console.log(`✅ Created ${packagePriceCount} credit package prices`);
 
   // ============================================
   // Seed AI Models (video)

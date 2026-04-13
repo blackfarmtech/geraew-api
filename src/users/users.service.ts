@@ -36,6 +36,10 @@ export class UsersService {
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
+      country: user.country,
+      locale: user.locale,
+      currency: user.currency,
+      timezone: user.timezone,
       plan: activeSubscription
         ? {
           slug: activeSubscription.plan.slug,
@@ -86,6 +90,10 @@ export class UsersService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+        ...(dto.country !== undefined && { country: dto.country.toUpperCase() }),
+        ...(dto.locale !== undefined && { locale: dto.locale }),
+        ...(dto.currency !== undefined && { currency: dto.currency.toUpperCase() }),
+        ...(dto.timezone !== undefined && { timezone: dto.timezone }),
       },
     });
 

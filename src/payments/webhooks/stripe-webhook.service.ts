@@ -144,6 +144,7 @@ export class StripeWebhookService {
         stripeSubscriptionId,
         session.amount_total ?? 0,
         session.payment_intent as string ?? session.id,
+        this.requireCurrency(session.currency, `session ${session.id}`),
         metadata.referredByCode,
       );
 
@@ -174,6 +175,7 @@ export class StripeWebhookService {
         packageId,
         session.amount_total ?? 0,
         session.payment_intent as string ?? session.id,
+        this.requireCurrency(session.currency, `session ${session.id}`),
         metadata.referredByCode,
       );
     } else {
@@ -238,6 +240,7 @@ export class StripeWebhookService {
       periodEnd,
       invoice.amount_paid ?? 0,
       invoice.id,
+      this.requireCurrency(invoice.currency, `invoice ${invoice.id}`),
     );
   }
 
@@ -278,7 +281,16 @@ export class StripeWebhookService {
       stripeSubscriptionId,
       invoice.amount_due ?? 0,
       invoice.id,
+      this.requireCurrency(invoice.currency, `invoice ${invoice.id}`),
     );
+  }
+
+  private requireCurrency(currency: string | null | undefined, context: string): string {
+    if (!currency) {
+      this.logger.error(`Missing currency in ${context} — Stripe webhook payload invalid`);
+      throw new Error(`Missing currency in ${context}`);
+    }
+    return currency;
   }
 
   /**

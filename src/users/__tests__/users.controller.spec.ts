@@ -17,6 +17,10 @@ const mockProfile: UserProfileResponseDto = {
   emailVerified: false,
   hasCompletedOnboarding: false,
   createdAt: now,
+  country: null,
+  locale: 'pt-BR',
+  currency: 'BRL',
+  timezone: null,
   plan: {
     slug: 'free',
     name: 'Free',

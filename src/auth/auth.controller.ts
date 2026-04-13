@@ -26,6 +26,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
+import { detectLocaleFromHeaders } from '../common/utils/locale.util';
 
 @ApiTags('auth')
 @Controller('api/v1/auth')
@@ -73,8 +74,11 @@ export class AuthController {
     status: 400,
     description: 'Dados inválidos',
   })
-  async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
-    return this.authService.register(registerDto);
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Req() req: any,
+  ): Promise<AuthResponseDto> {
+    return this.authService.register(registerDto, detectLocaleFromHeaders(req.headers));
   }
 
   @Public()
@@ -122,8 +126,7 @@ export class AuthController {
     type: AuthResponseDto,
   })
   async googleAuthRedirect(@Req() req: any): Promise<AuthResponseDto> {
-    // req.user vem do Google Strategy
-    return this.authService.googleAuth(req.user);
+    return this.authService.googleAuth(req.user, detectLocaleFromHeaders(req.headers));
   }
 
   @Public()
@@ -140,8 +143,15 @@ export class AuthController {
     status: 400,
     description: 'Token Google inválido',
   })
-  async googleAuthMobile(@Body() googleAuthDto: GoogleAuthDto): Promise<AuthResponseDto> {
-    return this.authService.googleAuthWithToken(googleAuthDto.googleToken, googleAuthDto.referralCode);
+  async googleAuthMobile(
+    @Body() googleAuthDto: GoogleAuthDto,
+    @Req() req: any,
+  ): Promise<AuthResponseDto> {
+    return this.authService.googleAuthWithToken(
+      googleAuthDto.googleToken,
+      googleAuthDto.referralCode,
+      detectLocaleFromHeaders(req.headers),
+    );
   }
 
   @Public()

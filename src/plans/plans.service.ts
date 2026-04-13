@@ -156,4 +156,54 @@ export class PlansService {
 
     return this.overridePriceId(pkg, PACKAGE_PRICE_ENV, 'name');
   }
+
+  /**
+   * Resolve o PlanPrice para a moeda do usuário. Fallback: USD.
+   */
+  async resolvePlanPrice(
+    planId: string,
+    userCurrency: string,
+  ): Promise<{ currency: string; priceCents: number; stripePriceId: string }> {
+    const currency = userCurrency.toUpperCase();
+    const primary = await this.prisma.planPrice.findUnique({
+      where: { planId_currency: { planId, currency } },
+    });
+    if (primary?.isActive) return primary;
+
+    if (currency !== 'USD') {
+      const usd = await this.prisma.planPrice.findUnique({
+        where: { planId_currency: { planId, currency: 'USD' } },
+      });
+      if (usd?.isActive) return usd;
+    }
+
+    throw new NotFoundException(
+      `Preço não configurado para plano ${planId} em ${currency} ou USD`,
+    );
+  }
+
+  /**
+   * Resolve o CreditPackagePrice para a moeda do usuário. Fallback: USD.
+   */
+  async resolvePackagePrice(
+    creditPackageId: string,
+    userCurrency: string,
+  ): Promise<{ currency: string; priceCents: number; stripePriceId: string }> {
+    const currency = userCurrency.toUpperCase();
+    const primary = await this.prisma.creditPackagePrice.findUnique({
+      where: { creditPackageId_currency: { creditPackageId, currency } },
+    });
+    if (primary?.isActive) return primary;
+
+    if (currency !== 'USD') {
+      const usd = await this.prisma.creditPackagePrice.findUnique({
+        where: { creditPackageId_currency: { creditPackageId, currency: 'USD' } },
+      });
+      if (usd?.isActive) return usd;
+    }
+
+    throw new NotFoundException(
+      `Preço não configurado para pacote ${creditPackageId} em ${currency} ou USD`,
+    );
+  }
 }

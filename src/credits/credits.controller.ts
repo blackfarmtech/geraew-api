@@ -65,12 +65,24 @@ export class CreditsController {
 
   @Get('packages')
   @ApiOperation({ summary: 'Lista pacotes de créditos disponíveis' })
-  @ApiResponse({
-    status: 200,
-    description: 'Pacotes retornados com sucesso',
-  })
-  async getPackages() {
-    return this.creditsService.getPackages();
+  async getPackages(@CurrentUser('sub') userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { currency: true },
+    });
+    const packages = await this.creditsService.getPackages();
+    return Promise.all(
+      packages.map(async (pkg) => {
+        let priceCents = pkg.priceCents;
+        let currency = 'BRL';
+        try {
+          const resolved = await this.plansService.resolvePackagePrice(pkg.id, user.currency);
+          priceCents = resolved.priceCents;
+          currency = resolved.currency;
+        } catch {}
+        return { id: pkg.id, name: pkg.name, credits: pkg.credits, priceCents, currency };
+      }),
+    );
   }
 
   @Post('purchase')
@@ -88,8 +100,10 @@ export class CreditsController {
 
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true, referredByCode: true },
+      select: { email: true, name: true, referredByCode: true, currency: true },
     });
+
+    const resolved = await this.plansService.resolvePackagePrice(pkg.id, user.currency);
 
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
@@ -102,9 +116,9 @@ export class CreditsController {
       pkg.id,
       pkg.name,
       pkg.credits,
-      pkg.priceCents,
+      resolved.priceCents,
       userId,
-      pkg.stripePriceId,
+      resolved.stripePriceId,
       user.referredByCode ?? undefined,
     );
 

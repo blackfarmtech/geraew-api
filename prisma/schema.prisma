@@ -119,6 +119,12 @@ model User {
   phone         String? @unique
   phoneVerified Boolean @default(false) @map("phone_verified")
 
+  // Localization
+  country  String? // ISO 3166-1 alpha-2 ("BR", "US", "PT")
+  locale   String  @default("pt-BR") // BCP 47
+  currency String  @default("BRL") // ISO 4217
+  timezone String?
+
   // Referral
   referredByCode String? @map("referred_by_code")
 
@@ -162,7 +168,7 @@ model Plan {
   hasApiAccess             Boolean @default(false) @map("has_api_access")
   isActive                 Boolean @default(true) @map("is_active")
   sortOrder                Int     @default(0) @map("sort_order")
-  stripePriceId            String? @map("stripe_price_id")
+  stripePriceId            String? @map("stripe_price_id") // DEPRECATED: usar PlanPrice
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -170,8 +176,27 @@ model Plan {
   // Relations
   subscriptions          Subscription[] @relation("currentPlan")
   scheduledSubscriptions Subscription[] @relation("scheduledPlan")
+  prices                 PlanPrice[]
 
   @@map("plans")
+}
+
+model PlanPrice {
+  id            String @id @default(cuid())
+  planId        String @map("plan_id")
+  currency      String // ISO 4217: "BRL", "USD", "EUR"
+  priceCents    Int    @map("price_cents")
+  stripePriceId String @map("stripe_price_id")
+  isActive      Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, currency])
+  @@index([currency])
+  @@map("plan_prices")
 }
 
 model CreditCost {
@@ -198,14 +223,33 @@ model CreditPackage {
   priceCents    Int     @map("price_cents")
   isActive      Boolean @default(true) @map("is_active")
   sortOrder     Int     @default(0) @map("sort_order")
-  stripePriceId String? @map("stripe_price_id")
+  stripePriceId String? @map("stripe_price_id") // DEPRECATED: usar CreditPackagePrice
 
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
   payments Payment[]
+  prices   CreditPackagePrice[]
 
   @@map("credit_packages")
+}
+
+model CreditPackagePrice {
+  id              String @id @default(cuid())
+  creditPackageId String @map("credit_package_id")
+  currency        String // ISO 4217
+  priceCents      Int    @map("price_cents")
+  stripePriceId   String @map("stripe_price_id")
+  isActive        Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  creditPackage CreditPackage @relation(fields: [creditPackageId], references: [id], onDelete: Cascade)
+
+  @@unique([creditPackageId, currency])
+  @@index([currency])
+  @@map("credit_package_prices")
 }
 
 model Subscription {

@@ -3,6 +3,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bullmq';
+import {
+  AcceptLanguageResolver,
+  HeaderResolver,
+  I18nModule,
+  QueryResolver,
+} from 'nestjs-i18n';
+import * as path from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -58,6 +65,23 @@ import { ModelsModule } from './models/models.module';
           limit: 30,
         },
       ],
+    }),
+    I18nModule.forRoot({
+      fallbackLanguage: 'pt-BR',
+      fallbacks: {
+        'en-*': 'en',
+        'pt-*': 'pt-BR',
+      },
+      loaderOptions: {
+        path: path.join(__dirname, '/i18n/'),
+        watch: process.env.NODE_ENV !== 'production',
+      },
+      resolvers: [
+        new QueryResolver(['lang', 'locale']),
+        new HeaderResolver(['x-lang']),
+        AcceptLanguageResolver,
+      ],
+      typesOutputPath: path.join(process.cwd(), 'src/generated/i18n.generated.ts'),
     }),
     PrismaModule,
     AuthModule,
