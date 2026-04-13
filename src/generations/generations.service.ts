@@ -81,6 +81,23 @@ function normalizeVideoModelSlug(model: string): string {
   };
   return LEGACY_SLUG_MAP[model] ?? model;
 }
+
+/**
+ * Para modelos GeraEW (GERAEW_FAST / GERAEW_QUALITY), a resolução 4K
+ * é gerada internamente como 1080p no provider, mas cobrada como 4K.
+ * O registro no banco mantém RES_4K para exibição no frontend.
+ */
+function effectiveVideoResolution(
+  resolution: Resolution,
+  modelVariant: string | null,
+): Resolution {
+  const isGeraew =
+    modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
+  if (isGeraew && resolution === Resolution.RES_4K) {
+    return Resolution.RES_1080P;
+  }
+  return resolution;
+}
 import {
   GENERATION_QUEUE,
   GenerationJobName,
@@ -409,6 +426,9 @@ export class GenerationsService {
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
 
+    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
+    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
+
     const creditsRequired = isFreeGeneration
       ? 0
       : await this.plansService.calculateGenerationCost(
@@ -459,7 +479,7 @@ export class GenerationsService {
         usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model,
-        resolution: dto.resolution,
+        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
         durationSeconds: dto.duration_seconds,
         aspectRatio: dto.aspect_ratio,
         generateAudio: hasAudio,
@@ -496,6 +516,9 @@ export class GenerationsService {
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
+
+    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
+    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
 
     const creditsRequired = isFreeGeneration
       ? 0
@@ -583,7 +606,7 @@ export class GenerationsService {
         usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model ?? model,
-        resolution: dto.resolution,
+        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
         durationSeconds: dto.duration_seconds,
         aspectRatio: dto.aspect_ratio,
         generateAudio: hasAudio,
@@ -621,6 +644,9 @@ export class GenerationsService {
 
     const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
+
+    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
+    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
 
     const creditsRequired = isFreeGeneration
       ? 0
@@ -690,7 +716,7 @@ export class GenerationsService {
         usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model ?? model,
-        resolution: dto.resolution,
+        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
         durationSeconds: dto.duration_seconds,
         aspectRatio: dto.aspect_ratio,
         generateAudio: hasAudio,
