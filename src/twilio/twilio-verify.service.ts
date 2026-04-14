@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Twilio } from 'twilio';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 @Injectable()
 export class TwilioVerifyService implements OnModuleInit {
@@ -92,10 +93,22 @@ export class TwilioVerifyService implements OnModuleInit {
   }
 
   private formatPhone(phone: string): string {
-    let digits = phone.replace(/\D/g, '');
-    if (!digits.startsWith('55')) {
-      digits = `55${digits}`;
+    const trimmed = phone.trim();
+    // Se já vem em E.164 (+xx...), valida direto
+    if (trimmed.startsWith('+')) {
+      const parsed = parsePhoneNumberFromString(trimmed);
+      if (!parsed?.isValid()) {
+        throw new BadRequestException('Número de telefone inválido');
+      }
+      return parsed.format('E.164');
     }
-    return `+${digits}`;
+    // Sem + = assume BR (retrocompat com usuários legados)
+    const digits = trimmed.replace(/\D/g, '');
+    const withBr = digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+    const parsed = parsePhoneNumberFromString(withBr);
+    if (!parsed?.isValid()) {
+      throw new BadRequestException('Número de telefone inválido');
+    }
+    return parsed.format('E.164');
   }
 }
