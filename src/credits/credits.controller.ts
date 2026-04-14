@@ -80,7 +80,17 @@ export class CreditsController {
           priceCents = resolved.priceCents;
           currency = resolved.currency;
         } catch {}
-        return { id: pkg.id, name: pkg.name, credits: pkg.credits, priceCents, currency };
+        return {
+          id: pkg.id,
+          name: pkg.name,
+          credits: pkg.credits,
+          priceCents,
+          currency,
+          isActive: pkg.isActive,
+          sortOrder: pkg.sortOrder,
+          stripePriceId: pkg.stripePriceId,
+          createdAt: pkg.createdAt,
+        };
       }),
     );
   }
