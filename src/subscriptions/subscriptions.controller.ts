@@ -61,6 +61,7 @@ export class SubscriptionsController {
     return this.subscriptionsService.createSubscription(
       userId,
       dto.planSlug,
+      dto.currency,
     );
   }
 
@@ -77,7 +78,7 @@ export class SubscriptionsController {
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
   ): Promise<{ checkoutUrl: string }> {
-    return this.subscriptionsService.upgrade(userId, dto.planSlug);
+    return this.subscriptionsService.upgrade(userId, dto.planSlug, dto.currency);
   }
 
   @Patch('downgrade')

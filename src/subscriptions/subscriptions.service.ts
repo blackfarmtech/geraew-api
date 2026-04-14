@@ -93,6 +93,7 @@ export class SubscriptionsService {
   async createSubscription(
     userId: string,
     planSlug: string,
+    currencyOverride?: string,
   ): Promise<{ checkoutUrl: string }> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
 
@@ -117,13 +118,14 @@ export class SubscriptionsService {
       );
     }
 
-    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug);
+    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, 0, undefined, currencyOverride);
     return { checkoutUrl };
   }
 
   async upgrade(
     userId: string,
     planSlug: string,
+    currencyOverride?: string,
   ): Promise<{ checkoutUrl: string }> {
     const current = await this.prisma.subscription.findFirst({
       where: {
@@ -175,7 +177,7 @@ export class SubscriptionsService {
     // A sub antiga NÃO é cancelada aqui — só será cancelada no webhook
     // checkout.session.completed, evitando que o usuário fique sem plano se desistir.
     const oldExternalSubscriptionId = current?.externalSubscriptionId ?? undefined;
-    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents, oldExternalSubscriptionId);
+    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents, oldExternalSubscriptionId, currencyOverride);
     return { checkoutUrl };
   }
 
@@ -584,13 +586,15 @@ export class SubscriptionsService {
     planSlug: string,
     discountAmountCents = 0,
     oldExternalSubscriptionId?: string,
+    currencyOverride?: string,
   ): Promise<string> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { email: true, name: true, referredByCode: true, currency: true },
     });
-    const resolved = await this.plansService.resolvePlanPrice(plan.id, user.currency);
+    const targetCurrency = currencyOverride ?? user.currency;
+    const resolved = await this.plansService.resolvePlanPrice(plan.id, targetCurrency);
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
       user.email,

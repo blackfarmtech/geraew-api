@@ -65,18 +65,25 @@ export class CreditsController {
 
   @Get('packages')
   @ApiOperation({ summary: 'Lista pacotes de créditos disponíveis' })
-  async getPackages(@CurrentUser('sub') userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { currency: true },
-    });
+  async getPackages(
+    @CurrentUser('sub') userId: string,
+    @Query('currency') currencyQuery?: string,
+  ) {
+    let resolvedCurrency = currencyQuery?.toUpperCase();
+    if (!resolvedCurrency) {
+      const user = await this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { currency: true },
+      });
+      resolvedCurrency = user.currency;
+    }
     const packages = await this.creditsService.getPackages();
     return Promise.all(
       packages.map(async (pkg) => {
         let priceCents = pkg.priceCents;
         let currency = 'BRL';
         try {
-          const resolved = await this.plansService.resolvePackagePrice(pkg.id, user.currency);
+          const resolved = await this.plansService.resolvePackagePrice(pkg.id, resolvedCurrency!);
           priceCents = resolved.priceCents;
           currency = resolved.currency;
         } catch {}
@@ -113,7 +120,8 @@ export class CreditsController {
       select: { email: true, name: true, referredByCode: true, currency: true },
     });
 
-    const resolved = await this.plansService.resolvePackagePrice(pkg.id, user.currency);
+    const currency = dto.currency ?? user.currency;
+    const resolved = await this.plansService.resolvePackagePrice(pkg.id, currency);
 
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
