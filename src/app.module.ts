@@ -30,6 +30,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { FoldersModule } from './folders/folders.module';
 import { VideoEditorModule } from './video-editor/video-editor.module';
 import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
+import { PromptAgentModule } from './prompt-agent/prompt-agent.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { ModelsModule } from './models/models.module';
@@ -100,6 +101,7 @@ import { ModelsModule } from './models/models.module';
     FoldersModule,
     VideoEditorModule,
     PromptEnhancerModule,
+    PromptAgentModule,
     AffiliatesModule,
     ModelsModule,
   ],
