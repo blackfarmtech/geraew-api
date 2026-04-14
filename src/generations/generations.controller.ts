@@ -32,6 +32,7 @@ import {
 import { FolderResponseDto } from '../folders/dto/folder-response.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { GenerateImageDto } from './dto/generate-image.dto';
+import { UpscaleImageDto } from './dto/upscale-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import { GenerateVideoTextToVideoDto } from './dto/videos/generate-video-text-to-video.dto';
 import { GenerateVideoImageToVideoDto } from './dto/videos/generate-video-image-to-video.dto';
@@ -105,6 +106,20 @@ export class GenerationsController {
     @Body() dto: GenerateImageDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateImageWithFallback(userId, dto);
+  }
+
+  @Post('upscale')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary:
+      'Upscale — restaura/aumenta a qualidade da imagem (resolução fixa em 2K)',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async upscale(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UpscaleImageDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateUpscale(userId, dto);
   }
 
   @Post('generate-image-nano-banana')

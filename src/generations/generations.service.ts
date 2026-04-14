@@ -34,6 +34,7 @@ import { GenerateVideoWithReferencesDto } from './dto/videos/generate-video-with
 import { GenerateMotionControlDto } from './dto/videos/generate-motion-control.dto';
 import { getVideoDurationSeconds } from './utils/video-duration.util';
 import { GenerateImageDto } from './dto/generate-image.dto';
+import { UpscaleImageDto } from './dto/upscale-image.dto';
 import { GenerateImageNanoBananaDto } from './dto/generate-image-nano-banana.dto';
 import { GenerateVirtualTryOnDto } from './dto/generate-virtual-try-on.dto';
 import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
@@ -227,6 +228,30 @@ export class GenerationsService {
       status: GenerationStatus.PROCESSING,
       creditsConsumed: creditsRequired,
     };
+  }
+
+  // ─── Upscale (image-to-image com prompt fixo, resolução fixa 2K) ──
+
+  async generateUpscale(
+    userId: string,
+    dto: UpscaleImageDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const UPSCALE_PROMPT =
+      'Enhance image resolution to 4K quality while preserving all original details exactly. Improve sharpness, reduce compression artifacts, and enhance clarity without changing any visual elements. Maintain the exact same composition, colors, lighting, and all details.';
+
+    return this.generateImageWithFallback(userId, {
+      prompt: UPSCALE_PROMPT,
+      model: dto.model,
+      resolution: Resolution.RES_2K,
+      mime_type: dto.mime_type ?? 'image/png',
+      model_variant: dto.model_variant,
+      images: [
+        {
+          base64: dto.image,
+          mime_type: dto.mime_type ?? 'image/png',
+        },
+      ],
+    } as GenerateImageDto);
   }
 
   // ─── Image generation with fallback (geraew → nano-banana) ─
