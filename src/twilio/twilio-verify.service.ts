@@ -28,7 +28,7 @@ export class TwilioVerifyService implements OnModuleInit {
   /**
    * Envia SMS de verificação para o número de telefone
    */
-  async sendVerification(phone: string): Promise<void> {
+  async sendVerification(phone: string, locale?: string): Promise<void> {
     if (!this.client) {
       throw new BadRequestException('Serviço de verificação não configurado');
     }
@@ -41,6 +41,7 @@ export class TwilioVerifyService implements OnModuleInit {
         .verifications.create({
           to: formatted,
           channel: 'sms',
+          locale: this.toTwilioLocale(locale),
         });
     } catch (error: any) {
       this.logger.error(`Failed to send verification SMS: ${error.message}`);
@@ -90,6 +91,18 @@ export class TwilioVerifyService implements OnModuleInit {
 
       throw new BadRequestException('Erro ao verificar código');
     }
+  }
+
+  private toTwilioLocale(locale?: string): string {
+    if (!locale) return 'en';
+    const lower = locale.toLowerCase();
+    if (lower === 'pt-br' || lower.startsWith('pt')) return 'pt-br';
+    if (lower.startsWith('es')) return 'es';
+    if (lower.startsWith('fr')) return 'fr';
+    if (lower.startsWith('de')) return 'de';
+    if (lower.startsWith('it')) return 'it';
+    if (lower.startsWith('nl')) return 'nl';
+    return 'en';
   }
 
   private formatPhone(phone: string): string {

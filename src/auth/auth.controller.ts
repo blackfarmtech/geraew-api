@@ -50,8 +50,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Envia SMS de verificação via Twilio' })
   @ApiResponse({ status: 200, description: 'SMS enviado com sucesso' })
   @ApiResponse({ status: 400, description: 'Número inválido ou muitas tentativas' })
-  async sendVerification(@Body() body: { phone: string }) {
-    await this.authService.sendVerification(body.phone);
+  async sendVerification(@Body() body: { phone: string }, @Req() req: any) {
+    const locale = detectLocaleFromHeaders(req.headers).locale;
+    await this.authService.sendVerification(body.phone, locale);
     return { message: 'SMS de verificação enviado' };
   }
 
