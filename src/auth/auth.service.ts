@@ -11,6 +11,8 @@ import { EmailService } from '../email/email.service';
 import { LocaleContext } from '../common/utils/locale.util';
 import { t } from '../common/i18n/t';
 
+const SIGNUP_BONUS_CREDITS = 50;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -106,16 +108,27 @@ export class AuthService {
         },
       });
 
-      // Cria o saldo inicial de créditos (Free plan começa com 0 em v5)
+      // Cria o saldo inicial de créditos (Free plan começa com 0 em v5, + bônus de signup)
       await tx.creditBalance.create({
         data: {
           userId: newUser.id,
           planCreditsRemaining: 0,
-          bonusCreditsRemaining: 0,
+          bonusCreditsRemaining: SIGNUP_BONUS_CREDITS,
           planCreditsUsed: 0,
           freeVeoGenerationsRemaining: 0,
           periodStart: now,
           periodEnd: periodEnd,
+        },
+      });
+
+      // Registra transação do bônus de cadastro
+      await tx.creditTransaction.create({
+        data: {
+          userId: newUser.id,
+          type: 'ONBOARDING_BONUS',
+          amount: SIGNUP_BONUS_CREDITS,
+          source: 'bonus',
+          description: 'Bônus de boas-vindas ao criar conta',
         },
       });
 
@@ -404,16 +417,27 @@ export class AuthService {
           },
         });
 
-        // Cria o saldo inicial de créditos (Free plan começa com 0 em v5)
+        // Cria o saldo inicial de créditos (Free plan começa com 0 em v5, + bônus de signup)
         await tx.creditBalance.create({
           data: {
             userId: newUser.id,
             planCreditsRemaining: 0,
-            bonusCreditsRemaining: 0,
+            bonusCreditsRemaining: SIGNUP_BONUS_CREDITS,
             planCreditsUsed: 0,
             freeVeoGenerationsRemaining: 0,
             periodStart: now,
             periodEnd: periodEnd,
+          },
+        });
+
+        // Registra transação do bônus de cadastro
+        await tx.creditTransaction.create({
+          data: {
+            userId: newUser.id,
+            type: 'ONBOARDING_BONUS',
+            amount: SIGNUP_BONUS_CREDITS,
+            source: 'bonus',
+            description: 'Bônus de boas-vindas ao criar conta',
           },
         });
 
