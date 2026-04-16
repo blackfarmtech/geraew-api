@@ -7,7 +7,6 @@ import { AuthService } from './auth.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { TwilioModule } from '../twilio/twilio.module';
 import { EmailModule } from '../email/email.module';
 
 @Module({
@@ -15,7 +14,6 @@ import { EmailModule } from '../email/email.module';
     PrismaModule,
     PassportModule,
     ConfigModule,
-    TwilioModule,
     EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

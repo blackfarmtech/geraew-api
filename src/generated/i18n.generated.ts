@@ -13,8 +13,6 @@ export type I18nTranslations = {
             "EMAIL_NOT_VERIFIED": string;
             "UNAUTHORIZED": string;
             "USER_NOT_FOUND": string;
-            "PHONE_ALREADY_EXISTS": string;
-            "INVALID_PHONE_CODE": string;
             "GOOGLE_TOKEN_INVALID": string;
         };
         "credits": {

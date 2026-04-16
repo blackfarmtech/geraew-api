@@ -25,7 +25,6 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 import { detectLocaleFromHeaders } from '../common/utils/locale.util';
 
 @ApiTags('auth')
@@ -37,23 +36,10 @@ export class AuthController {
   @Post('check-availability')
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verifica se email/telefone já estão em uso' })
+  @ApiOperation({ summary: 'Verifica se email já está em uso' })
   @ApiResponse({ status: 200, description: 'Resultado da verificação' })
-  async checkAvailability(@Body() body: { email?: string; phone?: string }) {
-    return this.authService.checkAvailability(body.email, body.phone);
-  }
-
-  @Public()
-  @Post('send-verification')
-  @Throttle({ default: { ttl: 60000, limit: 3 } })
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Envia SMS de verificação via Twilio' })
-  @ApiResponse({ status: 200, description: 'SMS enviado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Número inválido ou muitas tentativas' })
-  async sendVerification(@Body() body: { phone: string }, @Req() req: any) {
-    const locale = detectLocaleFromHeaders(req.headers).locale;
-    await this.authService.sendVerification(body.phone, locale);
-    return { message: 'SMS de verificação enviado' };
+  async checkAvailability(@Body() body: { email?: string }) {
+    return this.authService.checkAvailability(body.email);
   }
 
   @Public()
@@ -171,19 +157,6 @@ export class AuthController {
   })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
     return this.authService.refreshTokens(refreshTokenDto.refreshToken);
-  }
-
-  @Post('verify-phone')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verificar telefone de usuário autenticado (ex: após Google login)' })
-  @ApiResponse({ status: 200, description: 'Telefone verificado com sucesso', type: AuthResponseDto })
-  @ApiResponse({ status: 400, description: 'Código inválido' })
-  @ApiResponse({ status: 409, description: 'Telefone já cadastrado' })
-  async verifyPhone(
-    @CurrentUser() user: JwtPayload,
-    @Body() body: { phone: string; code: string },
-  ): Promise<AuthResponseDto> {
-    return this.authService.verifyPhone(user.sub, body.phone, body.code);
   }
 
   @Public()

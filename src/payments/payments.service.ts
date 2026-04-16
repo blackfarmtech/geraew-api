@@ -108,6 +108,14 @@ export class PaymentsService {
         },
       });
 
+      // Bônus de boas-vindas: 2 gerações grátis em modelos GeraEW na primeira
+      // assinatura paga do usuário (nunca no Free, nunca em renovações).
+      const hasPreviousPaidSubscription =
+        (await tx.payment.count({
+          where: { userId, type: 'SUBSCRIPTION', status: 'COMPLETED' },
+        })) > 0;
+      const grantWelcomeBonus = plan.slug !== 'free' && !hasPreviousPaidSubscription;
+
       // Inicializar/resetar saldo de créditos
       await tx.creditBalance.upsert({
         where: { userId },
@@ -116,12 +124,14 @@ export class PaymentsService {
           planCreditsRemaining: plan.creditsPerMonth,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
+          freeVeoGenerationsRemaining: grantWelcomeBonus ? 2 : 0,
           periodStart: now,
           periodEnd: periodEnd,
         },
         update: {
           planCreditsRemaining: plan.creditsPerMonth,
           planCreditsUsed: 0,
+          ...(grantWelcomeBonus && { freeVeoGenerationsRemaining: 2 }),
           periodStart: now,
           periodEnd: periodEnd,
         },

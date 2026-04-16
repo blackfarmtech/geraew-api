@@ -7,7 +7,6 @@ import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { randomBytes, createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { TwilioVerifyService } from '../twilio/twilio-verify.service';
 import { EmailService } from '../email/email.service';
 import { LocaleContext } from '../common/utils/locale.util';
 import { t } from '../common/i18n/t';
@@ -20,137 +19,28 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly twilioVerify: TwilioVerifyService,
     private readonly emailService: EmailService,
   ) { }
 
   /**
-   * Verifica se email ou telefone já estão em uso
+   * Verifica se email já está em uso
    */
-  async checkAvailability(email?: string, phone?: string): Promise<{ emailTaken: boolean; phoneTaken: boolean }> {
+  async checkAvailability(email?: string): Promise<{ emailTaken: boolean }> {
     let emailTaken = false;
-    let phoneTaken = false;
 
     if (email) {
       const existing = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
       emailTaken = !!existing;
     }
 
-    if (phone) {
-      let normalized = phone.replace(/\D/g, '');
-      // Sempre normaliza para formato com código do país (55)
-      // O register salva o telefone verificado pelo Firebase que vem com +55
-      if (!normalized.startsWith('55')) {
-        normalized = `55${normalized}`;
-      }
-      const existing = await this.prisma.user.findUnique({ where: { phone: normalized } });
-      phoneTaken = !!existing;
-    }
-
-    return { emailTaken, phoneTaken };
+    return { emailTaken };
   }
 
   /**
-   * Envia SMS de verificação via Twilio Verify
-   */
-  async sendVerification(phone: string, locale?: string): Promise<void> {
-    // Normaliza para dígitos E.164 (sem +) para comparar com o que está no banco
-    const trimmed = phone.trim();
-    let normalized: string;
-    if (trimmed.startsWith('+')) {
-      normalized = trimmed.slice(1).replace(/\D/g, '');
-    } else {
-      const digits = trimmed.replace(/\D/g, '');
-      normalized = digits.startsWith('55') ? digits : `55${digits}`;
-    }
-    const existing = await this.prisma.user.findFirst({
-      where: { phone: normalized, phoneVerified: true },
-    });
-    if (existing) {
-      throw new ConflictException('Este telefone já está cadastrado');
-    }
-
-    await this.twilioVerify.sendVerification(phone, locale);
-  }
-
-  /**
-   * Verifica telefone de um usuário já autenticado (ex: após Google login)
-   */
-  async verifyPhone(userId: string, phone: string, code: string): Promise<AuthResponseDto> {
-    const verifiedPhone = await this.twilioVerify.checkVerification(phone, code);
-    const normalizedPhone = verifiedPhone.replace(/\D/g, '');
-
-    // Verifica se o telefone já está em uso por outro usuário
-    const existingPhone = await this.prisma.user.findFirst({
-      where: { phone: normalizedPhone, id: { not: userId } },
-    });
-
-    if (existingPhone) {
-      throw new ConflictException('Telefone já cadastrado por outro usuário');
-    }
-
-    const user = await this.prisma.$transaction(async (tx) => {
-      // Marca telefone como verificado
-      const updatedUser = await tx.user.update({
-        where: { id: userId },
-        data: { phone: normalizedPhone, phoneVerified: true },
-      });
-
-      // Libera créditos do plano Free se ainda não foram concedidos
-      const subscription = await tx.subscription.findFirst({
-        where: { userId, status: 'ACTIVE' },
-        include: { plan: true },
-      });
-
-      if (subscription && subscription.plan.slug === 'free') {
-        const creditBalance = await tx.creditBalance.findFirst({
-          where: { userId },
-        });
-
-        if (creditBalance && creditBalance.planCreditsRemaining === 0 && creditBalance.planCreditsUsed === 0) {
-          await tx.creditBalance.update({
-            where: { id: creditBalance.id },
-            data: {
-              planCreditsRemaining: subscription.plan.creditsPerMonth,
-              freeVeoGenerationsRemaining: 2,
-            },
-          });
-
-          await tx.creditTransaction.create({
-            data: {
-              userId,
-              type: 'SUBSCRIPTION_RENEWAL',
-              amount: subscription.plan.creditsPerMonth,
-              source: 'plan',
-              description: `Créditos iniciais do plano ${subscription.plan.name} (telefone verificado)`,
-            },
-          });
-        }
-      }
-
-      return updatedUser;
-    });
-
-    const tokens = await this.generateTokens(user);
-
-    return {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      user: this.formatUserResponse(user),
-    };
-  }
-
-  /**
-   * Registra um novo usuário (telefone salvo sem verificação — verificação acontece dentro da plataforma)
+   * Registra um novo usuário
    */
   async register(registerDto: RegisterDto, locale?: LocaleContext): Promise<AuthResponseDto> {
-    const { email, password, name, phone, referralCode } = registerDto;
-
-    // Normaliza o telefone
-    let normalizedVerified = phone.replace(/\D/g, '');
-    if (!normalizedVerified.startsWith('55')) {
-      normalizedVerified = `55${normalizedVerified}`;
-    }
+    const { email, password, name, referralCode } = registerDto;
 
     // Verifica se o email já está em uso
     const existingUser = await this.prisma.user.findUnique({
@@ -159,15 +49,6 @@ export class AuthService {
 
     if (existingUser) {
       throw new ConflictException(t('errors.auth.EMAIL_ALREADY_EXISTS'));
-    }
-
-    // Verifica se o telefone já está em uso
-    const existingPhone = await this.prisma.user.findUnique({
-      where: { phone: normalizedVerified },
-    });
-
-    if (existingPhone) {
-      throw new ConflictException('Telefone já cadastrado');
     }
 
     // Hash da senha
@@ -193,8 +74,6 @@ export class AuthService {
           email: email.toLowerCase(),
           name,
           passwordHash: hashedPassword,
-          phone: normalizedVerified,
-          phoneVerified: false,
           isActive: true,
           role: 'USER',
           ...(validReferralCode && { referredByCode: validReferralCode }),
@@ -227,7 +106,7 @@ export class AuthService {
         },
       });
 
-      // Cria o saldo inicial de créditos (0 até verificar telefone)
+      // Cria o saldo inicial de créditos (Free plan começa com 0 em v5)
       await tx.creditBalance.create({
         data: {
           userId: newUser.id,
@@ -316,8 +195,6 @@ export class AuthService {
       avatarUrl: user.avatarUrl || '',
       role: user.role,
       emailVerified: user.emailVerified,
-      phone: user.phone || undefined,
-      phoneVerified: user.phoneVerified,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       createdAt: user.createdAt,
     };
@@ -527,7 +404,7 @@ export class AuthService {
           },
         });
 
-        // Cria o saldo inicial de créditos (0 até verificar telefone)
+        // Cria o saldo inicial de créditos (Free plan começa com 0 em v5)
         await tx.creditBalance.create({
           data: {
             userId: newUser.id,

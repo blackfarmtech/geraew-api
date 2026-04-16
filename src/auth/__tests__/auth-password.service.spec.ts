@@ -7,10 +7,8 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TwilioVerifyService } from '../../twilio/twilio-verify.service';
 import { EmailService } from '../../email/email.service';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 
 jest.mock('bcrypt');
 
@@ -53,7 +51,7 @@ const mockPlan = {
   id: 'plan-1',
   slug: 'free',
   name: 'Free',
-  creditsPerMonth: 300,
+  creditsPerMonth: 0,
 };
 
 const mockResetToken = {
@@ -85,6 +83,15 @@ const mockPrisma = {
   },
   creditTransaction: {
     create: jest.fn(),
+  },
+  affiliate: {
+    findUnique: jest.fn(),
+  },
+  emailVerificationToken: {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
   },
   refreshToken: {
     create: jest.fn(),
@@ -124,11 +131,6 @@ const mockConfigService = {
   }),
 };
 
-const mockTwilioVerify = {
-  sendVerification: jest.fn().mockResolvedValue(undefined),
-  checkVerification: jest.fn().mockResolvedValue('+5511999999999'),
-};
-
 const mockEmailService = {
   sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
   sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
@@ -147,7 +149,6 @@ describe('AuthService — Password Reset & Google OAuth', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: TwilioVerifyService, useValue: mockTwilioVerify },
         { provide: EmailService, useValue: mockEmailService },
       ],
     }).compile();
@@ -506,7 +507,6 @@ describe('AuthService — Password Reset & Google OAuth', () => {
       mockPrisma.plan.findFirst.mockResolvedValue(mockPlan);
       mockPrisma.subscription.create.mockResolvedValue({ id: 'sub-1' });
       mockPrisma.creditBalance.create.mockResolvedValue({ id: 'cb-1' });
-      mockPrisma.creditTransaction.create.mockResolvedValue({ id: 'ct-1' });
       mockPrisma.$transaction.mockImplementation((fn) => fn(mockPrisma));
 
       await service.googleAuth(googleUserInput);
@@ -525,23 +525,13 @@ describe('AuthService — Password Reset & Google OAuth', () => {
         }),
       });
 
-      // Should create credit balance
+      // Should create credit balance (v5: Free starts with 0 credits)
       expect(mockPrisma.creditBalance.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: newUser.id,
-          planCreditsRemaining: mockPlan.creditsPerMonth,
+          planCreditsRemaining: 0,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
-        }),
-      });
-
-      // Should create credit transaction
-      expect(mockPrisma.creditTransaction.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          userId: newUser.id,
-          type: 'SUBSCRIPTION_RENEWAL',
-          amount: mockPlan.creditsPerMonth,
-          source: 'plan',
         }),
       });
     });

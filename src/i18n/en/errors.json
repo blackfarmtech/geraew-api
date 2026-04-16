@@ -6,8 +6,6 @@
     "EMAIL_NOT_VERIFIED": "Please verify your email before signing in",
     "UNAUTHORIZED": "Unauthorized",
     "USER_NOT_FOUND": "User not found",
-    "PHONE_ALREADY_EXISTS": "Phone number already registered",
-    "INVALID_PHONE_CODE": "Invalid verification code",
     "GOOGLE_TOKEN_INVALID": "Invalid or expired Google token"
   },
   "credits": {

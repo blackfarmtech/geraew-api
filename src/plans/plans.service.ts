@@ -8,6 +8,11 @@ import { GenerationType, Resolution } from '@prisma/client';
  * Allows dev/test to use different price IDs without touching the database.
  */
 const PLAN_PRICE_ENV: Record<string, string> = {
+  // v5 plans
+  'ultra-basic': 'STRIPE_PRICE_PLAN_ULTRABASIC',
+  basic: 'STRIPE_PRICE_PLAN_BASIC',
+  advanced: 'STRIPE_PRICE_PLAN_ADVANCED',
+  // legacy plans (mantidos para grandfathering)
   starter: 'STRIPE_PRICE_PLAN_STARTER',
   creator: 'STRIPE_PRICE_PLAN_CREATOR',
   pro: 'STRIPE_PRICE_PLAN_PRO',
@@ -18,6 +23,8 @@ const PACKAGE_PRICE_ENV: Record<string, string> = {
   'boost p': 'STRIPE_PRICE_BOOST_P',
   'boost m': 'STRIPE_PRICE_BOOST_M',
   'boost g': 'STRIPE_PRICE_BOOST_G',
+  'boost xg': 'STRIPE_PRICE_BOOST_XG',
+  'boost xxg': 'STRIPE_PRICE_BOOST_XXG',
 };
 
 @Injectable()

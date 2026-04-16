@@ -115,10 +115,6 @@ model User {
   // Stripe
   stripeCustomerId String? @unique @map("stripe_customer_id")
 
-  // Phone
-  phone         String? @unique
-  phoneVerified Boolean @default(false) @map("phone_verified")
-
   // Localization
   country  String? // ISO 3166-1 alpha-2 ("BR", "US", "PT")
   locale   String  @default("pt-BR") // BCP 47

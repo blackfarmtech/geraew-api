@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreditTransactionType, Plan, Subscription, SubscriptionStatus, User } from '@prisma/client';
+import { CreditTransactionType, Plan, Subscription, SubscriptionStatus } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionRenewalService {
@@ -20,7 +20,7 @@ export class SubscriptionRenewalService {
           currentPeriodEnd: { lte: now },
           cancelAtPeriodEnd: false,
         },
-        include: { plan: true, user: { select: { phoneVerified: true } } },
+        include: { plan: true },
       });
 
       this.logger.log(
@@ -71,17 +71,30 @@ export class SubscriptionRenewalService {
   }
 
   private async renewSubscription(
-    subscription: Subscription & { plan: Plan; user: Pick<User, 'phoneVerified'> },
+    subscription: Subscription & { plan: Plan },
   ) {
     const newPeriodStart = subscription.currentPeriodEnd;
     const newPeriodEnd = new Date(newPeriodStart);
     newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
 
-    // Free plan: only grant credits if phone is verified
-    const credits =
-      subscription.plan.slug === 'free' && !subscription.user.phoneVerified
-        ? 0
-        : subscription.plan.creditsPerMonth;
+    // Plans without monthly renewal (creditsPerMonth === 0) only advance the
+    // period — saldo é preservado. Usado pelo Free em v5 (sem créditos).
+    if (subscription.plan.creditsPerMonth === 0) {
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          currentPeriodStart: newPeriodStart,
+          currentPeriodEnd: newPeriodEnd,
+        },
+      });
+
+      this.logger.log(
+        `Advanced period for subscription ${subscription.id} (plan "${subscription.plan.slug}" has no monthly credits)`,
+      );
+      return;
+    }
+
+    const credits = subscription.plan.creditsPerMonth;
 
     await this.prisma.$transaction(async (tx) => {
       // Update subscription period

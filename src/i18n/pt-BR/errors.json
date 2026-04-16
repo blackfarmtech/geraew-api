@@ -6,8 +6,6 @@
     "EMAIL_NOT_VERIFIED": "Confirme seu email antes de fazer login",
     "UNAUTHORIZED": "Não autorizado",
     "USER_NOT_FOUND": "Usuário não encontrado",
-    "PHONE_ALREADY_EXISTS": "Telefone já cadastrado",
-    "INVALID_PHONE_CODE": "Código de verificação inválido",
     "GOOGLE_TOKEN_INVALID": "Token Google inválido ou expirado"
   },
   "credits": {

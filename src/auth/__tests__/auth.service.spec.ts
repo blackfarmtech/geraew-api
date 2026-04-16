@@ -8,9 +8,9 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TwilioVerifyService } from '../../twilio/twilio-verify.service';
+import { EmailService } from '../../email/email.service';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 
 jest.mock('bcrypt');
 
@@ -37,7 +37,7 @@ const mockPlan = {
   id: 'plan-free',
   slug: 'free',
   name: 'Free',
-  creditsPerMonth: 300,
+  creditsPerMonth: 0,
 };
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -53,6 +53,13 @@ const mockPrisma = {
   subscription: { create: jest.fn() },
   creditBalance: { create: jest.fn() },
   creditTransaction: { create: jest.fn() },
+  affiliate: { findUnique: jest.fn() },
+  emailVerificationToken: {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
   refreshToken: {
     create: jest.fn(),
     findFirst: jest.fn(),
@@ -83,9 +90,10 @@ const mockConfigService = {
   }),
 };
 
-const mockTwilioVerify = {
-  sendVerification: jest.fn().mockResolvedValue(undefined),
-  checkVerification: jest.fn().mockResolvedValue('+5511999998888'),
+const mockEmailService = {
+  sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
 };
 
 // ── Test Suite ───────────────────────────────────────────────────────
@@ -102,7 +110,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: TwilioVerifyService, useValue: mockTwilioVerify },
+        { provide: EmailService, useValue: mockEmailService },
       ],
     }).compile();
 
@@ -127,7 +135,6 @@ describe('AuthService', () => {
       email: 'Test@Example.com',
       password: 'SecurePassword123!',
       name: 'Test User',
-      phone: '5511999998888',
     };
 
     it('should register successfully with valid data', async () => {
@@ -137,14 +144,14 @@ describe('AuthService', () => {
       mockPrisma.plan.findFirst.mockResolvedValue(mockPlan);
       mockPrisma.subscription.create.mockResolvedValue({});
       mockPrisma.creditBalance.create.mockResolvedValue({});
-      mockPrisma.creditTransaction.create.mockResolvedValue({});
+      mockPrisma.emailVerificationToken.create.mockResolvedValue({});
       setupGenerateTokensMocks();
 
       const result = await service.register(registerDto);
 
       // Verifies email is lowercased when checking for existing user
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' },
+        where: { email: 'test@example.com', isActive: true },
       });
 
       // Verifies password is hashed
@@ -180,23 +187,13 @@ describe('AuthService', () => {
         }),
       });
 
-      // Verifies credit balance creation
+      // Verifies credit balance creation (v5: Free starts with 0 credits)
       expect(mockPrisma.creditBalance.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: mockUser.id,
-          planCreditsRemaining: 300,
+          planCreditsRemaining: 0,
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
-        }),
-      });
-
-      // Verifies credit transaction creation
-      expect(mockPrisma.creditTransaction.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          userId: mockUser.id,
-          type: 'SUBSCRIPTION_RENEWAL',
-          amount: 300,
-          source: 'plan',
         }),
       });
 
@@ -243,18 +240,17 @@ describe('AuthService', () => {
       mockPrisma.plan.findFirst.mockResolvedValue(mockPlan);
       mockPrisma.subscription.create.mockResolvedValue({});
       mockPrisma.creditBalance.create.mockResolvedValue({});
-      mockPrisma.creditTransaction.create.mockResolvedValue({});
+      mockPrisma.emailVerificationToken.create.mockResolvedValue({});
       setupGenerateTokensMocks();
 
       await service.register({
         email: 'TEST@EXAMPLE.COM',
         password: 'SecurePassword123!',
         name: 'Test',
-        phone: '5511999998888',
-        });
+      });
 
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' },
+        where: { email: 'test@example.com', isActive: true },
       });
       expect(mockPrisma.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ email: 'test@example.com' }),
