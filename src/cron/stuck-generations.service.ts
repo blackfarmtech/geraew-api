@@ -65,22 +65,28 @@ export class StuckGenerationsService {
         },
       });
 
-      // Free generation: restore the free generation slot instead of refunding credits
-      if (generation.usedFreeGeneration) {
-        const balance = await tx.creditBalance.findUnique({
-          where: { userId: generation.userId },
-        });
-        if (balance) {
-          await tx.creditBalance.update({
-            where: { userId: generation.userId },
-            data: {
-              freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining + 1,
+      // Free generation: restore the free generation slot by type
+      if (generation.usedFreeGeneration && generation.usedFreeGenerationType) {
+        await tx.userFreeGeneration.upsert({
+          where: {
+            userId_type: {
+              userId: generation.userId,
+              type: generation.usedFreeGenerationType,
             },
-          });
-        }
+          },
+          create: {
+            userId: generation.userId,
+            type: generation.usedFreeGenerationType,
+            remaining: 1,
+          },
+          update: { remaining: { increment: 1 } },
+        });
         await tx.generation.update({
           where: { id: generation.id },
-          data: { usedFreeGeneration: false },
+          data: {
+            usedFreeGeneration: false,
+            usedFreeGenerationType: null,
+          },
         });
         return;
       }

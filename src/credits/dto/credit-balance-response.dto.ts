@@ -1,4 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FreeGenerationType } from '@prisma/client';
+
+export type FreeGenerationsMap = Record<FreeGenerationType, number>;
 
 export class CreditBalanceResponseDto {
   @ApiProperty()
@@ -13,8 +16,17 @@ export class CreditBalanceResponseDto {
   @ApiProperty()
   planCreditsUsed: number;
 
-  @ApiProperty()
-  freeVeoGenerationsRemaining: number;
+  @ApiProperty({
+    description: 'Gerações gratuitas disponíveis por tipo',
+    example: {
+      NB2: 1,
+      NB_PRO: 1,
+      FACE_SWAP: 1,
+      VIRTUAL_TRY_ON: 1,
+      GERAEW_FAST: 1,
+    },
+  })
+  freeGenerations: FreeGenerationsMap;
 
   @ApiPropertyOptional()
   periodStart: Date | null;

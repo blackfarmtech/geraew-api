@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { LocaleContext } from '../common/utils/locale.util';
 import { t } from '../common/i18n/t';
+import { PendingGrantsService } from '../pending-grants/pending-grants.service';
 
 const SIGNUP_BONUS_CREDITS = 50;
 
@@ -22,6 +23,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly pendingGrantsService: PendingGrantsService,
   ) { }
 
   /**
@@ -115,7 +117,6 @@ export class AuthService {
           planCreditsRemaining: 0,
           bonusCreditsRemaining: SIGNUP_BONUS_CREDITS,
           planCreditsUsed: 0,
-          freeVeoGenerationsRemaining: 0,
           periodStart: now,
           periodEnd: periodEnd,
         },
@@ -131,6 +132,9 @@ export class AuthService {
           description: 'Bônus de boas-vindas ao criar conta',
         },
       });
+
+      // Consome pending grants (ex: compra de curso na Hubla antes do cadastro)
+      await this.pendingGrantsService.consumeForUser(newUser.id, newUser.email, tx);
 
       return newUser;
     });
@@ -424,7 +428,6 @@ export class AuthService {
             planCreditsRemaining: 0,
             bonusCreditsRemaining: SIGNUP_BONUS_CREDITS,
             planCreditsUsed: 0,
-            freeVeoGenerationsRemaining: 0,
             periodStart: now,
             periodEnd: periodEnd,
           },
@@ -440,6 +443,9 @@ export class AuthService {
             description: 'Bônus de boas-vindas ao criar conta',
           },
         });
+
+        // Consome pending grants (ex: compra de curso na Hubla antes do cadastro)
+        await this.pendingGrantsService.consumeForUser(newUser.id, newUser.email, tx);
 
         return newUser;
       });

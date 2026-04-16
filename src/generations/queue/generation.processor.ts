@@ -829,7 +829,7 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     if (usedFreeGeneration) {
-      await this.creditsService.refundFreeVeoGeneration(userId, generationId);
+      await this.creditsService.refundFreeGeneration(userId, generationId);
     } else {
       await this.creditsService.refund(userId, creditsConsumed, generationId);
     }

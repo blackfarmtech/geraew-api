@@ -10,11 +10,12 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreditsService } from '../credits/credits.service';
+import { CreditsService, resolveFreeGenerationType } from '../credits/credits.service';
 import { PlansService } from '../plans/plans.service';
 import { ModelsService } from '../models/models.service';
 import {
   AiModelType,
+  FreeGenerationType,
   GenerationType,
   GenerationStatus,
   CreditTransactionType,
@@ -162,17 +163,25 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      undefined,
-      false,
-      1,
-      modelVariant,
-    );
+
+    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const isFreeGeneration = freeGenType !== null;
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          false,
+          1,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -185,6 +194,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         hasAudio: false,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         parameters: { mimeType: dto.mime_type },
       },
     });
@@ -206,7 +216,11 @@ export class GenerationsService {
       });
     }
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.IMAGE,
@@ -214,6 +228,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model,
         resolution: dto.resolution,
@@ -266,17 +281,25 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      undefined,
-      false,
-      1,
-      modelVariant,
-    );
+
+    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const isFreeGeneration = freeGenType !== null;
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          false,
+          1,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -289,6 +312,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         hasAudio: false,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         parameters: { mimeType: dto.mime_type, provider: 'geraew' },
       },
     });
@@ -310,7 +334,11 @@ export class GenerationsService {
       });
     }
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.IMAGE_WITH_FALLBACK,
@@ -318,6 +346,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model,
         resolution: dto.resolution,
@@ -346,17 +375,25 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      dto.resolution,
-      undefined,
-      false,
-      1,
-      modelVariant,
-    );
+
+    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const isFreeGeneration = freeGenType !== null;
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          dto.resolution,
+          undefined,
+          false,
+          1,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -369,6 +406,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio,
         hasAudio: false,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         parameters: {
           output_format: dto.output_format,
           google_search: dto.google_search,
@@ -399,13 +437,17 @@ export class GenerationsService {
       imageUrls = uploadedUrls;
     }
 
-    await this.debitCredits(
-      userId,
-      creditsRequired,
-      generation.id,
-      type,
-      dto.resolution,
-    );
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+    } else {
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        dto.resolution,
+      );
+    }
 
     await this.generationQueue.add(
       GenerationJobName.IMAGE_NANO_BANANA,
@@ -413,6 +455,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt: dto.prompt,
         model: dto.model ?? 'nano-banana-2',
         resolution: dto.resolution,
@@ -490,7 +533,11 @@ export class GenerationsService {
     });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -617,7 +664,11 @@ export class GenerationsService {
     await this.prisma.generationInputImage.createMany({ data: inputImageData });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -727,7 +778,11 @@ export class GenerationsService {
     }
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -870,17 +925,25 @@ export class GenerationsService {
     const resolution = dto.resolution ?? Resolution.RES_2K;
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      resolution,
-      undefined,
-      false,
-      1,
-      modelVariant,
-    );
+
+    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const isFreeGeneration = freeGenType !== null;
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          resolution,
+          undefined,
+          false,
+          1,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const prompt = this.buildVirtualTryOnPrompt(dto.additional_instructions);
 
@@ -895,6 +958,7 @@ export class GenerationsService {
         aspectRatio: dto.aspect_ratio ?? '3:4',
         hasAudio: false,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         parameters: {
           feature: 'virtual_try_on',
           mimeType: dto.output_mime_type ?? 'image/png',
@@ -935,7 +999,11 @@ export class GenerationsService {
       ],
     });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.VIRTUAL_TRY_ON,
@@ -943,6 +1011,7 @@ export class GenerationsService {
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         prompt,
         model,
         resolution,
@@ -992,17 +1061,25 @@ CRITICAL REQUIREMENTS:
     const resolution = resolutionMap[dto.resolution ?? '2K'] ?? Resolution.RES_2K;
 
     const modelVariant = getModelVariant('nano-banana-2');
-    const creditsRequired = await this.plansService.calculateGenerationCost(
-      type,
-      resolution,
-      undefined,
-      false,
-      1,
-      modelVariant,
-    );
+
+    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const isFreeGeneration = freeGenType !== null;
+
+    const creditsRequired = isFreeGeneration
+      ? 0
+      : await this.plansService.calculateGenerationCost(
+          type,
+          resolution,
+          undefined,
+          false,
+          1,
+          modelVariant,
+        );
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, creditsRequired);
+    if (!isFreeGeneration) {
+      await this.ensureSufficientBalance(userId, creditsRequired);
+    }
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -1014,6 +1091,7 @@ CRITICAL REQUIREMENTS:
         resolution,
         hasAudio: false,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         parameters: { feature: 'face_swap' },
       },
     });
@@ -1051,7 +1129,11 @@ CRITICAL REQUIREMENTS:
       ],
     });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+    if (isFreeGeneration) {
+      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+    } else {
+      await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+    }
 
     await this.generationQueue.add(
       GenerationJobName.FACE_SWAP,
@@ -1059,6 +1141,7 @@ CRITICAL REQUIREMENTS:
         generationId: generation.id,
         userId,
         creditsConsumed: creditsRequired,
+        usedFreeGeneration: isFreeGeneration,
         sourceImageUrl: sourceUrl,
         targetImageUrl: targetUrl,
         resolution: dto.resolution ?? '2K',
@@ -1123,7 +1206,11 @@ CRITICAL REQUIREMENTS:
     });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -1245,7 +1332,11 @@ CRITICAL REQUIREMENTS:
     await this.prisma.generationInputImage.createMany({ data: inputImageData });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -1349,7 +1440,11 @@ CRITICAL REQUIREMENTS:
     });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeVeoGeneration(userId, generation.id);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        FreeGenerationType.GERAEW_FAST,
+      );
     } else {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
@@ -1392,16 +1487,33 @@ CRITICAL REQUIREMENTS:
       return 'paid';
     }
 
-    // Free generations (2 iniciais) → apenas GeraEW provider
-    if (provider === 'geraew') {
-      const hasFree = await this.creditsService.hasFreeVeoGenerations(userId);
+    // Free generations agora cobrem apenas GERAEW_FAST (não GERAEW_QUALITY)
+    if (provider === 'geraew' && modelVariant === 'GERAEW_FAST') {
+      const hasFree = await this.creditsService.hasFreeGeneration(
+        userId,
+        FreeGenerationType.GERAEW_FAST,
+      );
       if (hasFree) {
         return 'free_generation';
       }
     }
 
-    // Com créditos → qualquer provider, sem restrição de plano
     return 'paid';
+  }
+
+  /**
+   * Resolve se o usuário tem uma free generation elegível pra este request.
+   * Retorna o tipo se sim, null se deve cobrar créditos normalmente.
+   */
+  private async resolveFreeGenForRequest(
+    userId: string,
+    type: GenerationType,
+    modelVariant: string | null,
+  ): Promise<FreeGenerationType | null> {
+    const freeType = resolveFreeGenerationType(type, modelVariant);
+    if (!freeType) return null;
+    const hasFree = await this.creditsService.hasFreeGeneration(userId, freeType);
+    return hasFree ? freeType : null;
   }
 
   private async checkConcurrentLimit(userId: string): Promise<void> {

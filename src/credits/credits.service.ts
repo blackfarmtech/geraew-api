@@ -5,12 +5,44 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
-import { CreditTransactionType, GenerationType, Resolution } from '@prisma/client';
+import {
+  CreditTransactionType,
+  FreeGenerationType,
+  GenerationType,
+  Resolution,
+} from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
-import { CreditBalanceResponseDto } from './dto/credit-balance-response.dto';
+import {
+  CreditBalanceResponseDto,
+  FreeGenerationsMap,
+} from './dto/credit-balance-response.dto';
 import { CreditTransactionResponseDto } from './dto/credit-transaction-response.dto';
 import { EstimateCostResponseDto } from './dto/estimate-cost.dto';
+
+const EMPTY_FREE_GENERATIONS: FreeGenerationsMap = {
+  NB2: 0,
+  NB_PRO: 0,
+  FACE_SWAP: 0,
+  VIRTUAL_TRY_ON: 0,
+  GERAEW_FAST: 0,
+};
+
+/**
+ * Mapeia (generationType, modelVariant) para o tipo de geração grátis elegível.
+ * Retorna null se a combinação não tem free generation.
+ */
+export function resolveFreeGenerationType(
+  type: GenerationType,
+  modelVariant: string | null | undefined,
+): FreeGenerationType | null {
+  if (type === GenerationType.FACE_SWAP) return FreeGenerationType.FACE_SWAP;
+  if (type === GenerationType.VIRTUAL_TRY_ON) return FreeGenerationType.VIRTUAL_TRY_ON;
+  if (modelVariant === 'NB2') return FreeGenerationType.NB2;
+  if (modelVariant === 'NBP') return FreeGenerationType.NB_PRO;
+  if (modelVariant === 'GERAEW_FAST') return FreeGenerationType.GERAEW_FAST;
+  return null;
+}
 
 @Injectable()
 export class CreditsService {
@@ -20,9 +52,15 @@ export class CreditsService {
   ) {}
 
   async getBalance(userId: string): Promise<CreditBalanceResponseDto> {
-    const balance = await this.prisma.creditBalance.findUnique({
-      where: { userId },
-    });
+    const [balance, freeGens] = await Promise.all([
+      this.prisma.creditBalance.findUnique({ where: { userId } }),
+      this.prisma.userFreeGeneration.findMany({ where: { userId } }),
+    ]);
+
+    const freeGenerations = { ...EMPTY_FREE_GENERATIONS };
+    for (const fg of freeGens) {
+      freeGenerations[fg.type] = fg.remaining;
+    }
 
     if (!balance) {
       return {
@@ -30,7 +68,7 @@ export class CreditsService {
         bonusCreditsRemaining: 0,
         totalCreditsAvailable: 0,
         planCreditsUsed: 0,
-        freeVeoGenerationsRemaining: 0,
+        freeGenerations,
         periodStart: null,
         periodEnd: null,
       };
@@ -42,7 +80,7 @@ export class CreditsService {
       totalCreditsAvailable:
         balance.planCreditsRemaining + balance.bonusCreditsRemaining,
       planCreditsUsed: balance.planCreditsUsed,
-      freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining,
+      freeGenerations,
       periodStart: balance.periodStart,
       periodEnd: balance.periodEnd,
     };
@@ -95,6 +133,7 @@ export class CreditsService {
     hasAudio: boolean = false,
     sampleCount: number = 1,
     modelVariant?: string,
+    freeGenerationTypeOverride?: FreeGenerationType,
   ): Promise<EstimateCostResponseDto> {
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -106,16 +145,24 @@ export class CreditsService {
     );
 
     const balance = await this.getBalance(userId);
+    const freeGenerationType =
+      freeGenerationTypeOverride ??
+      resolveFreeGenerationType(type, modelVariant ?? null);
 
-    // Free generations only apply to GeraEW models (not KIE/Veo 3.1)
-    const isGeraewModel = modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
-    const canUseFreeGeneration = isGeraewModel && balance.freeVeoGenerationsRemaining > 0;
+    const freeGenerationsRemainingForType = freeGenerationType
+      ? balance.freeGenerations[freeGenerationType]
+      : 0;
+    const canUseFreeGeneration =
+      freeGenerationType !== null && freeGenerationsRemainingForType > 0;
 
     return {
       creditsRequired,
-      hasSufficientBalance: canUseFreeGeneration || balance.totalCreditsAvailable >= creditsRequired,
+      hasSufficientBalance:
+        canUseFreeGeneration ||
+        balance.totalCreditsAvailable >= creditsRequired,
       canUseFreeGeneration,
-      freeVeoGenerationsRemaining: balance.freeVeoGenerationsRemaining,
+      freeGenerationType,
+      freeGenerationsRemainingForType,
     };
   }
 
@@ -309,68 +356,90 @@ export class CreditsService {
     });
   }
 
-  async hasFreeVeoGenerations(userId: string): Promise<boolean> {
-    const balance = await this.prisma.creditBalance.findUnique({
-      where: { userId },
-      select: { freeVeoGenerationsRemaining: true },
+  async hasFreeGeneration(
+    userId: string,
+    type: FreeGenerationType,
+  ): Promise<boolean> {
+    const row = await this.prisma.userFreeGeneration.findUnique({
+      where: { userId_type: { userId, type } },
+      select: { remaining: true },
     });
-    return (balance?.freeVeoGenerationsRemaining ?? 0) > 0;
+    return (row?.remaining ?? 0) > 0;
   }
 
-  async consumeFreeVeoGeneration(
+  async consumeFreeGeneration(
     userId: string,
     generationId: string,
+    type: FreeGenerationType,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const [balance] = await tx.$queryRawUnsafe<any[]>(
-        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
-        userId,
-      );
+      // Atomic decrement with guard: only succeeds if remaining > 0
+      const updated = await tx.$executeRaw`
+        UPDATE "user_free_generations"
+        SET "remaining" = "remaining" - 1,
+            "updated_at" = NOW()
+        WHERE "user_id" = ${userId}
+          AND "type"::text = ${type}
+          AND "remaining" > 0
+      `;
 
-      if (!balance || balance.free_veo_generations_remaining <= 0) {
+      if (updated === 0) {
         throw new BadRequestException({
           code: 'NO_FREE_GENERATIONS',
-          message: 'Nenhuma geração gratuita disponível.',
+          message: `Nenhuma geração gratuita de ${type} disponível.`,
         });
       }
 
-      await tx.creditBalance.update({
-        where: { userId },
-        data: {
-          freeVeoGenerationsRemaining: balance.free_veo_generations_remaining - 1,
-        },
-      });
-
       await tx.generation.update({
         where: { id: generationId },
-        data: { usedFreeGeneration: true },
+        data: {
+          usedFreeGeneration: true,
+          usedFreeGenerationType: type,
+        },
       });
     });
   }
 
-  async refundFreeVeoGeneration(
+  async refundFreeGeneration(
     userId: string,
     generationId: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const [balance] = await tx.$queryRawUnsafe<any[]>(
-        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
-        userId,
-      );
+      const generation = await tx.generation.findUnique({
+        where: { id: generationId },
+        select: { usedFreeGenerationType: true, usedFreeGeneration: true },
+      });
 
-      if (!balance) return;
+      if (!generation || !generation.usedFreeGenerationType) return;
 
-      await tx.creditBalance.update({
-        where: { userId },
-        data: {
-          freeVeoGenerationsRemaining: balance.free_veo_generations_remaining + 1,
-        },
+      const type = generation.usedFreeGenerationType;
+
+      await tx.userFreeGeneration.upsert({
+        where: { userId_type: { userId, type } },
+        create: { userId, type, remaining: 1 },
+        update: { remaining: { increment: 1 } },
       });
 
       await tx.generation.update({
         where: { id: generationId },
-        data: { usedFreeGeneration: false },
+        data: {
+          usedFreeGeneration: false,
+          usedFreeGenerationType: null,
+        },
       });
+    });
+  }
+
+  async grantFreeGeneration(
+    userId: string,
+    type: FreeGenerationType,
+    amount: number,
+  ): Promise<void> {
+    if (amount === 0) return;
+    await this.prisma.userFreeGeneration.upsert({
+      where: { userId_type: { userId, type } },
+      create: { userId, type, remaining: Math.max(0, amount) },
+      update: { remaining: { increment: amount } },
     });
   }
 

@@ -1,7 +1,7 @@
 import { IsEnum, IsOptional, IsInt, IsBoolean, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { GenerationType, Resolution } from '@prisma/client';
+import { FreeGenerationType, GenerationType, Resolution } from '@prisma/client';
 
 export class EstimateCostDto {
   @ApiProperty({ enum: GenerationType })
@@ -35,6 +35,14 @@ export class EstimateCostDto {
   @IsOptional()
   @IsString()
   modelVariant?: string;
+
+  @ApiPropertyOptional({
+    enum: FreeGenerationType,
+    description: 'Override do tipo de geração grátis (opcional, normalmente derivado de type + modelVariant)',
+  })
+  @IsOptional()
+  @IsEnum(FreeGenerationType)
+  freeGenerationType?: FreeGenerationType;
 }
 
 export class EstimateCostResponseDto {
@@ -44,9 +52,15 @@ export class EstimateCostResponseDto {
   @ApiProperty()
   hasSufficientBalance: boolean;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Se o usuário tem uma geração grátis compatível com este request' })
   canUseFreeGeneration: boolean;
 
-  @ApiProperty()
-  freeVeoGenerationsRemaining: number;
+  @ApiPropertyOptional({
+    enum: FreeGenerationType,
+    description: 'Tipo de geração grátis que seria consumida (se canUseFreeGeneration=true)',
+  })
+  freeGenerationType: FreeGenerationType | null;
+
+  @ApiProperty({ description: 'Quantas gerações grátis deste tipo o usuário tem' })
+  freeGenerationsRemainingForType: number;
 }

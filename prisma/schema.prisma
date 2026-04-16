@@ -96,6 +96,14 @@ enum AiModelType {
   IMAGE
 }
 
+enum FreeGenerationType {
+  NB2
+  NB_PRO
+  FACE_SWAP
+  VIRTUAL_TRY_ON
+  GERAEW_FAST
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -107,6 +115,10 @@ model User {
   name         String
   avatarUrl    String?  @map("avatar_url")
   role         UserRole @default(USER)
+
+  // Contact
+  phone         String?
+  phoneVerified Boolean? @map("phone_verified")
 
   // OAuth
   oauthProvider   String? @map("oauth_provider")
@@ -136,6 +148,7 @@ model User {
   subscriptions        Subscription[]
   creditBalance        CreditBalance?
   creditTransactions   CreditTransaction[]
+  freeGenerations      UserFreeGeneration[]
   generations          Generation[]
   payments             Payment[]
   refreshTokens        RefreshToken[]
@@ -284,7 +297,8 @@ model CreditBalance {
   planCreditsRemaining  Int       @default(0) @map("plan_credits_remaining")
   bonusCreditsRemaining Int       @default(0) @map("bonus_credits_remaining")
   planCreditsUsed               Int       @default(0) @map("plan_credits_used")
-  freeVeoGenerationsRemaining   Int       @default(0) @map("free_veo_generations_remaining")
+  /// DEPRECATED: migrado para user_free_generations (type=GERAEW_FAST). Mantido opcional só pra não quebrar dados existentes.
+  freeVeoGenerationsRemaining   Int?      @map("free_veo_generations_remaining")
   periodStart                   DateTime? @map("period_start")
   periodEnd                     DateTime? @map("period_end")
 
@@ -295,6 +309,38 @@ model CreditBalance {
 
   @@index([userId])
   @@map("credit_balances")
+}
+
+model UserFreeGeneration {
+  id        String             @id @default(cuid())
+  userId    String             @map("user_id")
+  type      FreeGenerationType
+  remaining Int                @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@map("user_free_generations")
+}
+
+model PendingFreeGenerationGrant {
+  id               String    @id @default(cuid())
+  email            String
+  bundle           Json      // ex: { "NB2": 1, "NB_PRO": 1, "FACE_SWAP": 1, "VIRTUAL_TRY_ON": 1, "GERAEW_FAST": 1 }
+  source           String    @default("hubla")
+  externalEventId  String?   @unique @map("external_event_id")
+  consumedByUserId String?   @map("consumed_by_user_id")
+  consumedAt       DateTime? @map("consumed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([consumedByUserId])
+  @@map("pending_free_generation_grants")
 }
 
 model CreditTransaction {
@@ -345,8 +391,9 @@ model Generation {
   hasWatermark Boolean @default(false) @map("has_watermark")
 
   // Costs
-  creditsConsumed    Int     @default(0) @map("credits_consumed")
-  usedFreeGeneration Boolean @default(false) @map("used_free_generation")
+  creditsConsumed        Int                 @default(0) @map("credits_consumed")
+  usedFreeGeneration     Boolean             @default(false) @map("used_free_generation")
+  usedFreeGenerationType FreeGenerationType? @map("used_free_generation_type")
 
   // Metadata
   processingStartedAt DateTime? @map("processing_started_at")
@@ -708,3 +755,4 @@ model AiModel {
   @@index([type, isActive, sortOrder])
   @@map("ai_models")
 }
+

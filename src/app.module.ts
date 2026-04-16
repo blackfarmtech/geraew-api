@@ -34,6 +34,7 @@ import { PromptAgentModule } from './prompt-agent/prompt-agent.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { ModelsModule } from './models/models.module';
+import { PendingGrantsModule } from './pending-grants/pending-grants.module';
 
 
 @Module({
@@ -104,6 +105,7 @@ import { ModelsModule } from './models/models.module';
     PromptAgentModule,
     AffiliatesModule,
     ModelsModule,
+    PendingGrantsModule,
   ],
   controllers: [AppController],
   providers: [

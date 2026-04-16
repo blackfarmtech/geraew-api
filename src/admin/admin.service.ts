@@ -1,6 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreditTransactionType, GenerationStatus, SubscriptionStatus } from '@prisma/client';
+import {
+  CreditTransactionType,
+  FreeGenerationType,
+  GenerationStatus,
+  SubscriptionStatus,
+} from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
@@ -196,6 +201,7 @@ export class AdminService {
           take: 1,
         },
         creditBalance: true,
+        freeGenerations: true,
         generations: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -208,6 +214,17 @@ export class AdminService {
 
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const freeGenerations: Record<FreeGenerationType, number> = {
+      NB2: 0,
+      NB_PRO: 0,
+      FACE_SWAP: 0,
+      VIRTUAL_TRY_ON: 0,
+      GERAEW_FAST: 0,
+    };
+    for (const fg of user.freeGenerations) {
+      freeGenerations[fg.type] = fg.remaining;
     }
 
     return {
@@ -237,7 +254,7 @@ export class AdminService {
             planCreditsRemaining: user.creditBalance.planCreditsRemaining,
             bonusCreditsRemaining: user.creditBalance.bonusCreditsRemaining,
             planCreditsUsed: user.creditBalance.planCreditsUsed,
-            freeVeoGenerationsRemaining: user.creditBalance.freeVeoGenerationsRemaining,
+            freeGenerations,
             periodStart: user.creditBalance.periodStart,
             periodEnd: user.creditBalance.periodEnd,
           }
@@ -307,24 +324,20 @@ export class AdminService {
     });
   }
 
-  async adjustFreeGenerations(userId: string, amount: number): Promise<void> {
+  async adjustFreeGenerations(
+    userId: string,
+    type: FreeGenerationType,
+    amount: number,
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    await this.prisma.creditBalance.upsert({
-      where: { userId },
-      create: {
-        userId,
-        freeVeoGenerationsRemaining: amount,
-        planCreditsRemaining: 0,
-        bonusCreditsRemaining: 0,
-        planCreditsUsed: 0,
-      },
-      update: {
-        freeVeoGenerationsRemaining: amount,
-      },
+    await this.prisma.userFreeGeneration.upsert({
+      where: { userId_type: { userId, type } },
+      create: { userId, type, remaining: amount },
+      update: { remaining: amount },
     });
   }
 

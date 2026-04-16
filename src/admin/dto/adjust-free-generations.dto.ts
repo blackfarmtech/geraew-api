@@ -1,10 +1,18 @@
-import { IsInt, Min } from 'class-validator';
+import { IsEnum, IsInt, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { FreeGenerationType } from '@prisma/client';
 
 export class AdjustFreeGenerationsDto {
   @ApiProperty({
-    description: 'Number of free Veo generations to set (absolute value)',
-    example: 2,
+    enum: FreeGenerationType,
+    description: 'Tipo de geração grátis a ajustar',
+  })
+  @IsEnum(FreeGenerationType)
+  type: FreeGenerationType;
+
+  @ApiProperty({
+    description: 'Quantidade (valor absoluto) de gerações grátis a definir',
+    example: 1,
   })
   @IsInt()
   @Min(0)

@@ -163,6 +163,7 @@ export class CreditsController {
       dto.hasAudio,
       dto.sampleCount,
       dto.modelVariant,
+      dto.freeGenerationType,
     );
   }
 }

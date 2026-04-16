@@ -135,13 +135,13 @@ export class AdminController {
 
   @Patch('users/:id/free-generations')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Ajustar gerações gratuitas de vídeo de um usuário' })
+  @ApiOperation({ summary: 'Ajustar gerações gratuitas de um tipo específico para um usuário' })
   async adjustFreeGenerations(
     @Param('id') id: string,
     @Body() dto: AdjustFreeGenerationsDto,
   ) {
-    await this.adminService.adjustFreeGenerations(id, dto.amount);
-    return { success: true, message: 'Gerações gratuitas ajustadas com sucesso' };
+    await this.adminService.adjustFreeGenerations(id, dto.type, dto.amount);
+    return { success: true, message: `Gerações gratuitas (${dto.type}) ajustadas com sucesso` };
   }
 
   @Patch('users/:id/plan')
@@ -279,4 +279,5 @@ export class AdminController {
     const status = dto.isActive ? 'ativado' : 'desativado';
     return { success: true, message: `Modelo ${status} com sucesso` };
   }
+
 }
