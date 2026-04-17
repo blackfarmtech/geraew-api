@@ -254,19 +254,23 @@ export class GenerationsService {
     const UPSCALE_PROMPT =
       'Enhance image resolution to 4K quality while preserving all original details exactly. Improve sharpness, reduce compression artifacts, and enhance clarity without changing any visual elements. Maintain the exact same composition, colors, lighting, and all details.';
 
-    return this.generateImageWithFallback(userId, {
-      prompt: UPSCALE_PROMPT,
-      model: dto.model,
-      resolution: Resolution.RES_2K,
-      mime_type: dto.mime_type ?? 'image/png',
-      model_variant: dto.model_variant,
-      images: [
-        {
-          base64: dto.image,
-          mime_type: dto.mime_type ?? 'image/png',
-        },
-      ],
-    } as GenerateImageDto);
+    return this.generateImageWithFallback(
+      userId,
+      {
+        prompt: UPSCALE_PROMPT,
+        model: dto.model,
+        resolution: Resolution.RES_2K,
+        mime_type: dto.mime_type ?? 'image/png',
+        model_variant: dto.model_variant,
+        images: [
+          {
+            base64: dto.image,
+            mime_type: dto.mime_type ?? 'image/png',
+          },
+        ],
+      } as GenerateImageDto,
+      FreeGenerationType.UPSCALE,
+    );
   }
 
   // ─── Image generation with fallback (geraew → nano-banana) ─
@@ -274,6 +278,7 @@ export class GenerationsService {
   async generateImageWithFallback(
     userId: string,
     dto: GenerateImageDto,
+    freeGenerationTypeOverride?: FreeGenerationType,
   ): Promise<CreateGenerationResponseDto> {
     const type =
       dto.images?.length
@@ -282,7 +287,12 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
 
-    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const freeGenType = await this.resolveFreeGenForRequest(
+      userId,
+      type,
+      modelVariant,
+      freeGenerationTypeOverride,
+    );
     const isFreeGeneration = freeGenType !== null;
 
     const creditsRequired = isFreeGeneration
@@ -1509,8 +1519,9 @@ CRITICAL REQUIREMENTS:
     userId: string,
     type: GenerationType,
     modelVariant: string | null,
+    override?: FreeGenerationType,
   ): Promise<FreeGenerationType | null> {
-    const freeType = resolveFreeGenerationType(type, modelVariant);
+    const freeType = override ?? resolveFreeGenerationType(type, modelVariant);
     if (!freeType) return null;
     const hasFree = await this.creditsService.hasFreeGeneration(userId, freeType);
     return hasFree ? freeType : null;

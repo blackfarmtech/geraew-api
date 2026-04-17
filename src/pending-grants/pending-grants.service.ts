@@ -14,6 +14,7 @@ export const DEFAULT_HUBLA_BUNDLE: FreeGenerationBundle = {
   FACE_SWAP: 1,
   VIRTUAL_TRY_ON: 1,
   GERAEW_FAST: 1,
+  UPSCALE: 1,
 };
 
 @Injectable()

@@ -222,6 +222,7 @@ export class AdminService {
       FACE_SWAP: 0,
       VIRTUAL_TRY_ON: 0,
       GERAEW_FAST: 0,
+      UPSCALE: 0,
     };
     for (const fg of user.freeGenerations) {
       freeGenerations[fg.type] = fg.remaining;

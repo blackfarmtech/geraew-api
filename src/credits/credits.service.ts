@@ -26,6 +26,7 @@ const EMPTY_FREE_GENERATIONS: FreeGenerationsMap = {
   FACE_SWAP: 0,
   VIRTUAL_TRY_ON: 0,
   GERAEW_FAST: 0,
+  UPSCALE: 0,
 };
 
 /**

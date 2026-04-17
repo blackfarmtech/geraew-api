@@ -102,6 +102,7 @@ enum FreeGenerationType {
   FACE_SWAP
   VIRTUAL_TRY_ON
   GERAEW_FAST
+  UPSCALE
 }
 
 // ============================================
