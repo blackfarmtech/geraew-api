@@ -297,8 +297,8 @@ model CreditBalance {
   planCreditsRemaining  Int       @default(0) @map("plan_credits_remaining")
   bonusCreditsRemaining Int       @default(0) @map("bonus_credits_remaining")
   planCreditsUsed               Int       @default(0) @map("plan_credits_used")
-  /// DEPRECATED: migrado para user_free_generations (type=GERAEW_FAST). Mantido opcional só pra não quebrar dados existentes.
-  freeVeoGenerationsRemaining   Int?      @map("free_veo_generations_remaining")
+  /// DEPRECATED: migrado para user_free_generations (type=GERAEW_FAST). Mantido só pra não quebrar dados existentes.
+  freeVeoGenerationsRemaining   Int       @default(0) @map("free_veo_generations_remaining")
   periodStart                   DateTime? @map("period_start")
   periodEnd                     DateTime? @map("period_end")
 
