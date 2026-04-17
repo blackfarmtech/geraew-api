@@ -13,7 +13,7 @@ import { CreditsService } from '../credits/credits.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { t } from '../common/i18n/t';
 
-const PLAN_ORDER = ['free', 'starter', 'creator', 'pro', 'studio'];
+const PLAN_ORDER = ['free', 'ultra-basic', 'starter', 'basic', 'creator', 'pro', 'advanced', 'studio'];
 
 @Injectable()
 export class SubscriptionsService {
@@ -143,6 +143,12 @@ export class SubscriptionsService {
       const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
       const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
 
+      if (currentIdx === -1 || newIdx === -1) {
+        throw new BadRequestException(
+          `Plano desconhecido na ordem de upgrade: ${current.plan.slug} → ${newPlan.slug}`,
+        );
+      }
+
       if (newIdx === currentIdx) {
         throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
       }
@@ -201,6 +207,12 @@ export class SubscriptionsService {
 
     const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
     const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
+
+    if (currentIdx === -1 || newIdx === -1) {
+      throw new BadRequestException(
+        `Plano desconhecido na ordem de downgrade: ${current.plan.slug} → ${newPlan.slug}`,
+      );
+    }
 
     if (newIdx === currentIdx) {
       throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
