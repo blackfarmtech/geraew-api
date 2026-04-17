@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+
+const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
 @Injectable()
 export class PaymentsService {
@@ -154,6 +156,29 @@ export class PaymentsService {
 
       // Registrar comissão do afiliado se o usuário foi indicado
       await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
+
+      // Welcome bonus Ultra Basic: 2 vídeos grátis (GERAEW_FAST) no primeiro acesso.
+      // Idempotente por usuário: só concede se o user nunca teve ultra-basic antes.
+      if (plan.slug === 'ultra-basic') {
+        const priorUltraBasic = await tx.subscription.findFirst({
+          where: { userId, planId: plan.id, id: { not: subscription.id } },
+          select: { id: true },
+        });
+        if (!priorUltraBasic) {
+          await tx.userFreeGeneration.upsert({
+            where: { userId_type: { userId, type: FreeGenerationType.GERAEW_FAST } },
+            create: {
+              userId,
+              type: FreeGenerationType.GERAEW_FAST,
+              remaining: ULTRA_BASIC_WELCOME_FREE_GENERATIONS,
+            },
+            update: { remaining: { increment: ULTRA_BASIC_WELCOME_FREE_GENERATIONS } },
+          });
+          this.logger.log(
+            `Granted Ultra Basic welcome bonus (${ULTRA_BASIC_WELCOME_FREE_GENERATIONS}× GERAEW_FAST) to user ${userId}`,
+          );
+        }
+      }
     });
 
     this.logger.log(

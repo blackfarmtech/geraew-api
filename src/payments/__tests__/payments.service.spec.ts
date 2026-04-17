@@ -29,6 +29,14 @@ const mockPlanFree = {
   creditsPerMonth: 300,
 };
 
+const mockPlanUltraBasic = {
+  id: 'plan-ultra-basic',
+  slug: 'ultra-basic',
+  name: 'Ultra Basic',
+  priceCents: 1290,
+  creditsPerMonth: 700,
+};
+
 const mockSubscription = {
   id: 'sub-1',
   userId: 'user-1',
@@ -84,12 +92,24 @@ const createMockPrisma = () => {
     creditTransaction: {
       create: jest.fn().mockResolvedValue({ id: 'ct-1' }),
     },
+    userFreeGeneration: {
+      upsert: jest.fn().mockResolvedValue({ id: 'ufg-1' }),
+    },
     payment: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation((args) => ({
         id: 'pay-1',
         ...args.data,
       })),
       update: jest.fn().mockResolvedValue({ id: 'pay-1' }),
+    },
+    affiliateEarning: {
+      create: jest.fn().mockResolvedValue({ id: 'ae-1' }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    user: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
     plan: {
       findUnique: jest.fn(),
@@ -106,7 +126,6 @@ const createMockPrisma = () => {
       findFirst: jest.fn(),
     },
     payment: {
-      findFirst: jest.fn(),
       ...tx.payment,
     },
     creditPackage: {
@@ -115,6 +134,7 @@ const createMockPrisma = () => {
     creditBalance: {
       ...tx.creditBalance,
     },
+    __tx: tx,
     $transaction: jest.fn((fn) => fn(tx)),
   };
 };
@@ -384,6 +404,59 @@ describe('PaymentsService', () => {
           'brl',
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    describe('welcome bonus Ultra Basic', () => {
+      it('deve conceder 2 GERAEW_FAST grátis no primeiro acesso ao Ultra Basic', async () => {
+        mockPrisma.plan.findUnique.mockResolvedValue(mockPlanUltraBasic);
+        mockPrisma.__tx.subscription.findFirst.mockResolvedValue(null);
+
+        await service.processSubscriptionPayment(
+          'user-1',
+          'ultra-basic',
+          'sub_ub_123',
+          1290,
+          'pi_ub_first',
+          'brl',
+        );
+
+        expect(mockPrisma.__tx.userFreeGeneration.upsert).toHaveBeenCalledWith({
+          where: { userId_type: { userId: 'user-1', type: 'GERAEW_FAST' } },
+          create: { userId: 'user-1', type: 'GERAEW_FAST', remaining: 2 },
+          update: { remaining: { increment: 2 } },
+        });
+      });
+
+      it('NÃO deve conceder bônus se o usuário já teve ultra-basic antes', async () => {
+        mockPrisma.plan.findUnique.mockResolvedValue(mockPlanUltraBasic);
+        mockPrisma.__tx.subscription.findFirst.mockResolvedValue({ id: 'sub-old' });
+
+        await service.processSubscriptionPayment(
+          'user-1',
+          'ultra-basic',
+          'sub_ub_new',
+          1290,
+          'pi_ub_second',
+          'brl',
+        );
+
+        expect(mockPrisma.__tx.userFreeGeneration.upsert).not.toHaveBeenCalled();
+      });
+
+      it('NÃO deve conceder bônus para outros planos', async () => {
+        mockPrisma.plan.findUnique.mockResolvedValue(mockPlanStarter);
+
+        await service.processSubscriptionPayment(
+          'user-1',
+          'starter',
+          'sub_starter_123',
+          2990,
+          'pi_starter_first',
+          'brl',
+        );
+
+        expect(mockPrisma.__tx.userFreeGeneration.upsert).not.toHaveBeenCalled();
+      });
     });
   });
 
