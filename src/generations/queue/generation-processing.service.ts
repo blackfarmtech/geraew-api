@@ -8,6 +8,7 @@ import {
   mapGeminiToNanoBanana,
 } from '../providers/nano-banana.provider';
 import { WanProvider } from '../providers/wan.provider';
+import { SeedreamProvider } from '../providers/seedream.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -37,6 +38,7 @@ export class GenerationProcessingService {
     private readonly geraewProvider: GeraewProvider,
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly wanProvider: WanProvider,
+    private readonly seedreamProvider: SeedreamProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {}
@@ -102,6 +104,30 @@ export class GenerationProcessingService {
       `[processImage] gen=${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} mimeType=${data.mimeType} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
     );
 
+    if (data.model === 'sem-censura') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      const result = await this.seedreamProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        imageUrls,
+      });
+
+      await this.completeGeneration(data.generationId, result, startTime);
+      return;
+    }
+
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)
       : undefined;
@@ -126,6 +152,30 @@ export class GenerationProcessingService {
     this.logger.log(
       `[processImageWithFallback] gen=${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} mimeType=${data.mimeType} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
     );
+
+    if (data.model === 'sem-censura') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      const result = await this.seedreamProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        imageUrls,
+      });
+
+      await this.completeGeneration(data.generationId, result, startTime);
+      return;
+    }
 
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)

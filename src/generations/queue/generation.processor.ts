@@ -12,6 +12,7 @@ import {
 import { WanProvider } from '../providers/wan.provider';
 import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
+import { SeedreamProvider } from '../providers/seedream.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -52,6 +53,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly wanProvider: WanProvider,
     private readonly faceSwapProvider: FaceSwapProvider,
     private readonly veoProvider: VeoProvider,
+    private readonly seedreamProvider: SeedreamProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {
@@ -95,6 +97,20 @@ export class GenerationProcessor extends WorkerHost {
 
   // ─── Process methods ────────────────────────────────────────
 
+  async runImageJobDirectly(data: ImageJobData): Promise<void> {
+    try {
+      await this.processImage(data);
+    } catch (error) {
+      await this.handleFailure(
+        data.generationId,
+        data.userId,
+        data.creditsConsumed,
+        error as Error,
+        data.usedFreeGeneration,
+      );
+    }
+  }
+
   private async processImage(data: ImageJobData): Promise<void> {
     const startTime = Date.now();
     await this.markProcessingStarted(data.generationId);
@@ -102,6 +118,30 @@ export class GenerationProcessor extends WorkerHost {
     this.logger.log(
       `[IMAGE] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
     );
+
+    if (data.model === 'sem-censura') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      const result = await this.seedreamProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        imageUrls,
+      });
+
+      await this.completeGeneration(data.generationId, result, startTime);
+      return;
+    }
 
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)
@@ -127,6 +167,30 @@ export class GenerationProcessor extends WorkerHost {
     this.logger.log(
       `[IMAGE_FALLBACK] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} hasInputImages=${data.hasInputImages} prompt="${data.prompt}"`,
     );
+
+    if (data.model === 'sem-censura') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      const result = await this.seedreamProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        imageUrls,
+      });
+
+      await this.completeGeneration(data.generationId, result, startTime);
+      return;
+    }
 
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)

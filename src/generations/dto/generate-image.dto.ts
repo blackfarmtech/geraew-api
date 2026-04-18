@@ -34,11 +34,19 @@ export class GenerateImageDto {
   prompt: string;
 
   @ApiProperty({
-    description: 'Modelo Gemini a utilizar',
-    enum: ['gemini-3-pro-image-preview', 'gemini-3.1-flash-image-preview'],
+    description: 'Modelo a utilizar',
+    enum: [
+      'gemini-3-pro-image-preview',
+      'gemini-3.1-flash-image-preview',
+      'sem-censura',
+    ],
   })
   @IsString()
-  @IsIn(['gemini-3-pro-image-preview', 'gemini-3.1-flash-image-preview'])
+  @IsIn([
+    'gemini-3-pro-image-preview',
+    'gemini-3.1-flash-image-preview',
+    'sem-censura',
+  ])
   model: string;
 
   @ApiProperty({ enum: Resolution })

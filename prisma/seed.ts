@@ -158,6 +158,12 @@ async function main() {
     { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
     { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 190, isPerSecond: false },
 
+    // Images - Sem censura (SEM_CENSURA) — matches NB2 pricing, no 1K
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'SEM_CENSURA', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'SEM_CENSURA', creditsPerUnit: 190, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'SEM_CENSURA', creditsPerUnit: 130, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_4K', hasAudio: false, modelVariant: 'SEM_CENSURA', creditsPerUnit: 190, isPerSecond: false },
+
     // Images - Nano Banana Pro (NBP) — v4 pricing
     { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
     { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NBP', creditsPerUnit: 190, isPerSecond: false },
@@ -392,6 +398,33 @@ async function main() {
   }
 
   console.log(`✅ Created ${videoModels.length} AI video models`);
+
+  // ============================================
+  // Seed AI Models (image)
+  // ============================================
+  console.log('🖼️  Creating AI image models...');
+
+  const imageModels = [
+    { slug: 'sem-censura', label: 'Sem censura', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 0 },
+  ];
+
+  for (const model of imageModels) {
+    await prisma.aiModel.upsert({
+      where: { slug: model.slug },
+      update: {}, // não sobrescrever se admin já togou
+      create: {
+        slug: model.slug,
+        label: model.label,
+        provider: model.provider,
+        modelVariant: model.modelVariant,
+        sortOrder: model.sortOrder,
+        type: 'IMAGE',
+        isActive: true,
+      },
+    });
+  }
+
+  console.log(`✅ Created ${imageModels.length} AI image models`);
 
   // ============================================
   // Seed Test Users (Development only)

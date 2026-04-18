@@ -60,6 +60,8 @@ function getModelVariant(model: string | undefined | null): string | null {
     'gemini-3.1-flash-image-preview': 'NB2',
     'nano-banana-pro': 'NBP',
     'nano-banana-2': 'NB2',
+    // Sem censura
+    'sem-censura': 'SEM_CENSURA',
     // GeraEW provider (video)
     'geraew-fast': 'GERAEW_FAST',
     'geraew-quality': 'GERAEW_QUALITY',
@@ -100,6 +102,7 @@ function effectiveVideoResolution(
   }
   return resolution;
 }
+import { GenerationProcessor } from './queue/generation.processor';
 import {
   GENERATION_QUEUE,
   GenerationJobName,
@@ -149,7 +152,23 @@ export class GenerationsService {
     private readonly uploadsService: UploadsService,
     private readonly modelsService: ModelsService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
+    private readonly generationProcessor: GenerationProcessor,
   ) { }
+
+  private isSeedream(model: string | undefined | null): boolean {
+    return model === 'sem-censura';
+  }
+
+  private runSeedreamDirectly(data: ImageJobData): void {
+    this.generationProcessor
+      .runImageJobDirectly(data)
+      .catch((err) =>
+        this.logger.error(
+          `Seedream direct run failed for ${data.generationId}: ${(err as Error).message}`,
+          (err as Error).stack,
+        ),
+      );
+  }
 
   // ─── Image generation (text-to-image / image-to-image) ────
 
@@ -157,6 +176,22 @@ export class GenerationsService {
     userId: string,
     dto: GenerateImageDto,
   ): Promise<CreateGenerationResponseDto> {
+    if (
+      dto.model === 'sem-censura' &&
+      dto.resolution !== Resolution.RES_2K &&
+      dto.resolution !== Resolution.RES_4K
+    ) {
+      throw new BadRequestException(
+        'Este modelo suporta apenas resoluções 2K ou 4K.',
+      );
+    }
+
+    if (dto.model === 'sem-censura' && !dto.images?.length) {
+      throw new BadRequestException(
+        'Este modelo exige pelo menos uma imagem de referência.',
+      );
+    }
+
     const type =
       dto.images?.length
         ? GenerationType.IMAGE_TO_IMAGE
@@ -222,21 +257,24 @@ export class GenerationsService {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model,
-        resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        mimeType: dto.mime_type,
-        hasInputImages: !!dto.images?.length,
-      } satisfies ImageJobData,
-    );
+    const jobData: ImageJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      mimeType: dto.mime_type,
+      hasInputImages: !!dto.images?.length,
+    };
+
+    if (this.isSeedream(dto.model)) {
+      this.runSeedreamDirectly(jobData);
+    } else {
+      await this.generationQueue.add(GenerationJobName.IMAGE, jobData);
+    }
 
     return {
       id: generation.id,
@@ -350,21 +388,27 @@ export class GenerationsService {
       await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE_WITH_FALLBACK,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model,
-        resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        mimeType: dto.mime_type,
-        hasInputImages: !!dto.images?.length,
-      } satisfies ImageJobData,
-    );
+    const jobDataFallback: ImageJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      mimeType: dto.mime_type,
+      hasInputImages: !!dto.images?.length,
+    };
+
+    if (this.isSeedream(dto.model)) {
+      this.runSeedreamDirectly(jobDataFallback);
+    } else {
+      await this.generationQueue.add(
+        GenerationJobName.IMAGE_WITH_FALLBACK,
+        jobDataFallback,
+      );
+    }
 
     return {
       id: generation.id,
