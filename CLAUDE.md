@@ -5,7 +5,7 @@
 MicroSaaS de geração de imagens e vídeos com IA, similar ao Higgsfield. Público-alvo: creators e social media managers. Modelo freemium com sistema de créditos.
 
 **Stack:** NestJS + TypeScript + PostgreSQL + Redis (BullMQ) + S3/R2
-
+###
 ---
 
 ## Regras de Negócio
