@@ -7,7 +7,6 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import { Public } from '../common/decorators/public.decorator';
 import { PromptsService } from './prompts.service';
 import {
   PromptSectionDto,
@@ -22,7 +21,6 @@ export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}
 
   @Get()
-  @Public()
   @ApiOperation({ summary: 'Lista todas as secoes com categorias e prompts' })
   @ApiResponse({
     status: 200,
@@ -35,7 +33,6 @@ export class PromptsController {
   }
 
   @Get('search')
-  @Public()
   @ApiOperation({ summary: 'Busca prompts por titulo ou conteudo' })
   @ApiQuery({
     name: 'q',
@@ -55,7 +52,6 @@ export class PromptsController {
   }
 
   @Get(':slug')
-  @Public()
   @ApiOperation({ summary: 'Retorna uma secao pelo slug' })
   @ApiParam({
     name: 'slug',
