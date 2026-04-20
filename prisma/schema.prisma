@@ -67,6 +67,14 @@ enum AffiliateEarningStatus {
   PAID
 }
 
+enum PixKeyType {
+  CPF
+  CNPJ
+  EMAIL
+  PHONE
+  RANDOM
+}
+
 enum PaymentType {
   SUBSCRIPTION
   CREDIT_PURCHASE
@@ -592,12 +600,14 @@ model GenerationFolder {
 // ============================================
 
 model Affiliate {
-  id                String  @id @default(cuid())
-  userId            String? @unique @map("user_id")
-  code              String  @unique
+  id                String      @id @default(cuid())
+  userId            String?     @unique @map("user_id")
+  code              String      @unique
   name              String
-  commissionPercent Int     @default(30) @map("commission_percent")
-  isActive          Boolean @default(true) @map("is_active")
+  commissionPercent Int         @default(30) @map("commission_percent")
+  isActive          Boolean     @default(true) @map("is_active")
+  pixKey            String?     @map("pix_key")
+  pixKeyType        PixKeyType? @map("pix_key_type")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

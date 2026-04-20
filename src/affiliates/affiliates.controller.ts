@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -73,6 +74,12 @@ export class AffiliatesController {
   @ApiOperation({ summary: 'Ativar/desativar afiliado' })
   async toggleActive(@Param('id') id: string) {
     return this.affiliatesService.toggleActive(id);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Deletar afiliado (cascata nas comissões)' })
+  async remove(@Param('id') id: string) {
+    return this.affiliatesService.remove(id);
   }
 
   @Post('earnings/mark-paid')
