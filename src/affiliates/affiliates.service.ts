@@ -56,6 +56,20 @@ export class AffiliatesService {
       totalsByAffiliate.set(row.affiliateId, current);
     }
 
+    // Single query to count referred users per affiliate code
+    const referralRows = await this.prisma.user.groupBy({
+      by: ['referredByCode'],
+      where: { referredByCode: { in: affiliates.map((a) => a.code) } },
+      _count: { _all: true },
+    });
+
+    const referredUsersByCode = new Map<string, number>();
+    for (const row of referralRows) {
+      if (row.referredByCode) {
+        referredUsersByCode.set(row.referredByCode, row._count._all);
+      }
+    }
+
     return affiliates.map((affiliate) => {
       const totals = totalsByAffiliate.get(affiliate.id) ?? { total: 0, pending: 0 };
       return {
@@ -63,6 +77,7 @@ export class AffiliatesService {
         totalEarningsCents: totals.total,
         pendingEarningsCents: totals.pending,
         referralsCount: affiliate._count.earnings,
+        referredUsersCount: referredUsersByCode.get(affiliate.code) ?? 0,
       };
     });
   }
