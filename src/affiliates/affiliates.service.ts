@@ -1,11 +1,16 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StripeService } from '../payments/stripe.service';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
 import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
+import { AffiliateDiscountScope } from '@prisma/client';
 
 @Injectable()
 export class AffiliatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stripeService: StripeService,
+  ) {}
 
   async create(dto: CreateAffiliateDto) {
     const code = dto.code.toUpperCase();
@@ -17,14 +22,36 @@ export class AffiliatesService {
       throw new ConflictException(`Código "${code}" já está em uso`);
     }
 
-    return this.prisma.affiliate.create({
+    const affiliate = await this.prisma.affiliate.create({
       data: {
         name: dto.name,
         code,
         commissionPercent: dto.commissionPercent ?? 30,
         userId: dto.userId ?? null,
+        discountPercent: dto.discountPercent ?? null,
+        discountAppliesTo: dto.discountAppliesTo ?? AffiliateDiscountScope.FIRST_PURCHASE,
       },
     });
+
+    if (dto.discountPercent && dto.discountPercent > 0) {
+      try {
+        const { couponId, promotionCodeId } = await this.stripeService.createAffiliateCoupon(
+          affiliate.id,
+          code,
+          dto.discountPercent,
+        );
+        return this.prisma.affiliate.update({
+          where: { id: affiliate.id },
+          data: { stripeCouponId: couponId, stripePromotionCodeId: promotionCodeId },
+        });
+      } catch (err) {
+        // Rollback: remove afiliado se nao conseguiu criar cupom
+        await this.prisma.affiliate.delete({ where: { id: affiliate.id } });
+        throw err;
+      }
+    }
+
+    return affiliate;
   }
 
   async findAll() {
@@ -143,12 +170,48 @@ export class AffiliatesService {
       throw new NotFoundException('Afiliado não encontrado');
     }
 
+    const oldDiscount = affiliate.discountPercent ?? null;
+    const discountProvided = dto.discountPercent !== undefined;
+    const newDiscount = discountProvided ? dto.discountPercent : oldDiscount;
+    const discountChanged = discountProvided && newDiscount !== oldDiscount;
+
+    let newCouponId = affiliate.stripeCouponId;
+    let newPromotionCodeId = affiliate.stripePromotionCodeId;
+
+    if (discountChanged) {
+      // Remove cupom antigo (se existir)
+      if (affiliate.stripeCouponId || affiliate.stripePromotionCodeId) {
+        await this.stripeService.removeAffiliateCoupon(
+          affiliate.stripeCouponId,
+          affiliate.stripePromotionCodeId,
+        );
+        newCouponId = null;
+        newPromotionCodeId = null;
+      }
+      // Cria novo (se desconto > 0)
+      if (newDiscount && newDiscount > 0) {
+        const created = await this.stripeService.createAffiliateCoupon(
+          affiliate.id,
+          affiliate.code,
+          newDiscount,
+        );
+        newCouponId = created.couponId;
+        newPromotionCodeId = created.promotionCodeId;
+      }
+    }
+
     return this.prisma.affiliate.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.commissionPercent !== undefined && { commissionPercent: dto.commissionPercent }),
         ...(dto.userId !== undefined && { userId: dto.userId || null }),
+        ...(discountProvided && { discountPercent: newDiscount ?? null }),
+        ...(dto.discountAppliesTo !== undefined && { discountAppliesTo: dto.discountAppliesTo }),
+        ...(discountChanged && {
+          stripeCouponId: newCouponId,
+          stripePromotionCodeId: newPromotionCodeId,
+        }),
       },
       include: {
         user: { select: { id: true, email: true, name: true } },
@@ -164,9 +227,19 @@ export class AffiliatesService {
       throw new NotFoundException('Afiliado não encontrado');
     }
 
+    const nextActive = !affiliate.isActive;
+
+    // Ativa/desativa promotion code no Stripe junto com o afiliado
+    if (affiliate.stripePromotionCodeId) {
+      await this.stripeService.setAffiliatePromotionCodeActive(
+        affiliate.stripePromotionCodeId,
+        nextActive,
+      );
+    }
+
     return this.prisma.affiliate.update({
       where: { id },
-      data: { isActive: !affiliate.isActive },
+      data: { isActive: nextActive },
     });
   }
 
@@ -254,6 +327,8 @@ export class AffiliatesService {
         name: affiliate.name,
         commissionPercent: affiliate.commissionPercent,
         isActive: affiliate.isActive,
+        discountPercent: affiliate.discountPercent,
+        discountAppliesTo: affiliate.discountAppliesTo,
         createdAt: affiliate.createdAt,
       },
       summary: {

@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AffiliateDiscountScope } from '@prisma/client';
 
 export class CreateAffiliateDto {
   @ApiProperty({ example: 'Maria Silva', description: 'Nome do afiliado' })
@@ -23,4 +24,22 @@ export class CreateAffiliateDto {
   @IsString()
   @IsOptional()
   userId?: string;
+
+  @ApiPropertyOptional({
+    example: 10,
+    description: 'Percentual de desconto para quem se registra pelo link (opcional).',
+  })
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
+
+  @ApiPropertyOptional({
+    enum: AffiliateDiscountScope,
+    description: 'Quando o desconto se aplica: FIRST_PURCHASE (só primeira compra) ou ALL_PURCHASES (todas).',
+  })
+  @IsEnum(AffiliateDiscountScope)
+  @IsOptional()
+  discountAppliesTo?: AffiliateDiscountScope;
 }

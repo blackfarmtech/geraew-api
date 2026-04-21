@@ -93,6 +93,19 @@ export class StripeService {
       discounts = [{ coupon: coupon.id }];
     }
 
+    // Desconto de afiliado: so aplica se nao houver desconto de upgrade.
+    // Prioridade: upgrade > afiliado > cupom manual.
+    let appliedAffiliatePromoCodeId: string | undefined;
+    if (!discounts) {
+      appliedAffiliatePromoCodeId = await this.resolveAffiliatePromotionCode(
+        userId,
+        referredByCode,
+      );
+      if (appliedAffiliatePromoCodeId) {
+        discounts = [{ promotion_code: appliedAffiliatePromoCodeId }];
+      }
+    }
+
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
@@ -104,6 +117,9 @@ export class StripeService {
         planSlug,
         type: 'subscription',
         ...(couponId ? { upgradeCouponId: couponId } : {}),
+        ...(appliedAffiliatePromoCodeId
+          ? { affiliatePromotionCodeId: appliedAffiliatePromoCodeId }
+          : {}),
         ...(oldExternalSubscriptionId ? { oldExternalSubscriptionId } : {}),
         ...(referredByCode ? { referredByCode } : {}),
       },
@@ -142,11 +158,19 @@ export class StripeService {
       quantity: 1,
     };
 
+    const appliedAffiliatePromoCodeId = await this.resolveAffiliatePromotionCode(
+      userId,
+      referredByCode,
+    );
+    const discounts = appliedAffiliatePromoCodeId
+      ? [{ promotion_code: appliedAffiliatePromoCodeId }]
+      : undefined;
+
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'payment',
       line_items: [lineItem],
-      allow_promotion_codes: true,
+      ...(discounts ? { discounts } : { allow_promotion_codes: true }),
       payment_intent_data: {
         setup_future_usage: 'off_session',
       },
@@ -155,6 +179,9 @@ export class StripeService {
         packageId,
         type: 'credit_purchase',
         ...(referredByCode ? { referredByCode } : {}),
+        ...(appliedAffiliatePromoCodeId
+          ? { affiliatePromotionCodeId: appliedAffiliatePromoCodeId }
+          : {}),
       },
       success_url: this.configService.get<string>('STRIPE_SUCCESS_URL') ??
         'http://localhost:3000/payment/success?session_id={CHECKOUT_SESSION_ID}',
@@ -438,5 +465,126 @@ export class StripeService {
     this.logger.log(
       `Resumed Stripe subscription ${externalSubscriptionId}`,
     );
+  }
+
+  /**
+   * Cria um cupom + promotion_code no Stripe para um afiliado especifico.
+   * O promotion_code fica atrelado ao codigo do afiliado (uppercase).
+   * Cupom eh `forever` — o desconto acompanha o usuario indicado em toda compra.
+   * A logica de "primeira compra vs todas" eh aplicada no momento do checkout,
+   * nao no cupom em si.
+   */
+  async createAffiliateCoupon(
+    affiliateId: string,
+    affiliateCode: string,
+    percentOff: number,
+  ): Promise<{ couponId: string; promotionCodeId: string }> {
+    const coupon = await this.stripe.coupons.create({
+      percent_off: percentOff,
+      duration: 'forever',
+      name: `Afiliado ${affiliateCode} — ${percentOff}% OFF`,
+      metadata: { affiliateId, affiliateCode, type: 'affiliate_discount' },
+    });
+
+    const promotionCode = await this.stripe.promotionCodes.create({
+      promotion: { type: 'coupon', coupon: coupon.id },
+      code: affiliateCode,
+      metadata: { affiliateId, affiliateCode, type: 'affiliate_discount' },
+    });
+
+    this.logger.log(
+      `Created affiliate coupon ${coupon.id} + promotion code ${promotionCode.id} for affiliate ${affiliateId} (${affiliateCode}, ${percentOff}% OFF)`,
+    );
+
+    return { couponId: coupon.id, promotionCodeId: promotionCode.id };
+  }
+
+  /**
+   * Desativa (e tenta deletar) cupom + promotion code de afiliado no Stripe.
+   * Promotion codes nao podem ser deletados — sao desativados (active=false).
+   * Cupons podem ser deletados. Ambos operadores sao idempotentes (nao lancam
+   * se o recurso ja nao existe).
+   */
+  async removeAffiliateCoupon(
+    couponId?: string | null,
+    promotionCodeId?: string | null,
+  ): Promise<void> {
+    if (promotionCodeId) {
+      try {
+        await this.stripe.promotionCodes.update(promotionCodeId, { active: false });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to deactivate promotion code ${promotionCodeId}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    if (couponId) {
+      try {
+        await this.stripe.coupons.del(couponId);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to delete coupon ${couponId}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Ativa ou desativa um promotion code no Stripe (usado quando afiliado
+   * eh ativado/desativado no painel admin).
+   */
+  async setAffiliatePromotionCodeActive(
+    promotionCodeId: string,
+    active: boolean,
+  ): Promise<void> {
+    try {
+      await this.stripe.promotionCodes.update(promotionCodeId, { active });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to set promotion code ${promotionCodeId} active=${active}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Resolve o `promotion_code` do Stripe a aplicar em um checkout, considerando
+   * o afiliado que indicou o usuario e o escopo configurado (FIRST_PURCHASE
+   * ou ALL_PURCHASES). Retorna null se nao houver desconto aplicavel.
+   */
+  private async resolveAffiliatePromotionCode(
+    userId: string,
+    referredByCode?: string,
+  ): Promise<string | undefined> {
+    if (!referredByCode) return undefined;
+
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { code: referredByCode },
+      select: {
+        isActive: true,
+        discountPercent: true,
+        discountAppliesTo: true,
+        stripePromotionCodeId: true,
+      },
+    });
+
+    if (
+      !affiliate ||
+      !affiliate.isActive ||
+      !affiliate.discountPercent ||
+      !affiliate.stripePromotionCodeId
+    ) {
+      return undefined;
+    }
+
+    if (affiliate.discountAppliesTo === 'FIRST_PURCHASE') {
+      const priorPayment = await this.prisma.payment.findFirst({
+        where: { userId, status: 'COMPLETED' },
+        select: { id: true },
+      });
+      if (priorPayment) return undefined;
+    }
+
+    return affiliate.stripePromotionCodeId;
   }
 }
