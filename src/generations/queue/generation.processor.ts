@@ -480,17 +480,68 @@ export class GenerationProcessor extends WorkerHost {
 
     const images = await this.loadInputImagesAsBase64(data.generationId);
 
-    const result = await this.geraewProvider.generateImage({
-      id: data.generationId,
-      prompt: data.prompt,
-      model: data.model,
-      resolution: data.resolution,
-      aspectRatio: data.aspectRatio,
-      mimeType: data.mimeType,
-      images,
-    });
+    try {
+      const result = await this.geraewProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        model: data.model,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        mimeType: data.mimeType,
+        images,
+      });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+      await this.completeGeneration(
+        data.generationId,
+        result,
+        startTime,
+        'geraew',
+      );
+    } catch (geraewError) {
+      this.logger.warn(
+        `Geraew failed for virtual try-on ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
+      );
+
+      const preCheck = await this.prisma.generation.findUnique({
+        where: { id: data.generationId },
+        select: { status: true },
+      });
+      if (
+        preCheck?.status === GenerationStatus.FAILED ||
+        preCheck?.status === GenerationStatus.COMPLETED
+      ) {
+        this.logger.warn(
+          `Generation ${data.generationId} already ${preCheck.status} before Nano Banana fallback — aborting to save KIE costs`,
+        );
+        return;
+      }
+
+      const inputImages = await this.prisma.generationInputImage.findMany({
+        where: { generationId: data.generationId },
+        orderBy: { order: 'asc' },
+      });
+      const imageUrls = inputImages
+        .map((img) => img.url)
+        .filter(Boolean) as string[];
+
+      const nanoBananaModel = mapGeminiToNanoBanana(data.model);
+      const result = await this.nanoBananaProvider.generateImage({
+        id: data.generationId,
+        model: nanoBananaModel,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
+        imageUrls: imageUrls.length ? imageUrls : undefined,
+      });
+
+      await this.completeGeneration(
+        data.generationId,
+        result,
+        startTime,
+        nanoBananaModel,
+      );
+    }
   }
 
   private async processFaceSwap(data: FaceSwapJobData): Promise<void> {
