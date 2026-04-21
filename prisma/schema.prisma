@@ -427,8 +427,8 @@ model Affiliate {
   stripePromotionCodeId String?                 @map("stripe_promotion_code_id")
   createdAt             DateTime                @default(now()) @map("created_at")
   updatedAt             DateTime                @updatedAt @map("updated_at")
-  pix_key               String?
-  pix_key_type          PixKeyType?
+  pixKey                String?                 @map("pix_key")
+  pixKeyType            PixKeyType?             @map("pix_key_type")
   earnings              AffiliateEarning[]
   user                  User?                   @relation(fields: [userId], references: [id])
 

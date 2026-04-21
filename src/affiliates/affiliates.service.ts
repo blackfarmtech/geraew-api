@@ -1,8 +1,10 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { PixKeyType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
 import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
+import { UpdatePixKeyDto } from './dto/update-pix-key.dto';
 import { AffiliateDiscountScope } from '@prisma/client';
 
 @Injectable()
@@ -63,29 +65,48 @@ export class AffiliatesService {
       },
     });
 
-    // Calcular totais para cada afiliado
-    const result = await Promise.all(
-      affiliates.map(async (affiliate) => {
-        const totals = await this.prisma.affiliateEarning.aggregate({
-          where: { affiliateId: affiliate.id },
-          _sum: { commissionCents: true },
-        });
+    if (affiliates.length === 0) return [];
 
-        const pendingTotals = await this.prisma.affiliateEarning.aggregate({
-          where: { affiliateId: affiliate.id, status: 'PENDING' },
-          _sum: { commissionCents: true },
-        });
+    // Single aggregated query to avoid N+1 (estourava o pool do Supabase em session mode)
+    const grouped = await this.prisma.affiliateEarning.groupBy({
+      by: ['affiliateId', 'status'],
+      where: { affiliateId: { in: affiliates.map((a) => a.id) } },
+      _sum: { commissionCents: true },
+    });
 
-        return {
-          ...affiliate,
-          totalEarningsCents: totals._sum.commissionCents ?? 0,
-          pendingEarningsCents: pendingTotals._sum.commissionCents ?? 0,
-          referralsCount: affiliate._count.earnings,
-        };
-      }),
-    );
+    const totalsByAffiliate = new Map<string, { total: number; pending: number }>();
+    for (const row of grouped) {
+      const current = totalsByAffiliate.get(row.affiliateId) ?? { total: 0, pending: 0 };
+      const amount = row._sum.commissionCents ?? 0;
+      current.total += amount;
+      if (row.status === 'PENDING') current.pending += amount;
+      totalsByAffiliate.set(row.affiliateId, current);
+    }
 
-    return result;
+    // Single query to count referred users per affiliate code
+    const referralRows = await this.prisma.user.groupBy({
+      by: ['referredByCode'],
+      where: { referredByCode: { in: affiliates.map((a) => a.code) } },
+      _count: { _all: true },
+    });
+
+    const referredUsersByCode = new Map<string, number>();
+    for (const row of referralRows) {
+      if (row.referredByCode) {
+        referredUsersByCode.set(row.referredByCode, row._count._all);
+      }
+    }
+
+    return affiliates.map((affiliate) => {
+      const totals = totalsByAffiliate.get(affiliate.id) ?? { total: 0, pending: 0 };
+      return {
+        ...affiliate,
+        totalEarningsCents: totals.total,
+        pendingEarningsCents: totals.pending,
+        referralsCount: affiliate._count.earnings,
+        referredUsersCount: referredUsersByCode.get(affiliate.code) ?? 0,
+      };
+    });
   }
 
   async findById(id: string) {
@@ -243,6 +264,109 @@ export class AffiliatesService {
     });
   }
 
+  async remove(id: string) {
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { id },
+      include: { _count: { select: { earnings: true } } },
+    });
+    if (!affiliate) {
+      throw new NotFoundException('Afiliado não encontrado');
+    }
+
+    await this.prisma.affiliate.delete({ where: { id } });
+
+    return {
+      id,
+      code: affiliate.code,
+      deletedEarnings: affiliate._count.earnings,
+    };
+  }
+
+  async createForUser(userId: string, dto: UpdatePixKeyDto) {
+    const existing = await this.prisma.affiliate.findFirst({
+      where: { userId },
+    });
+    if (existing) {
+      throw new ConflictException('Você já possui um link de afiliado');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const displayName = user.name?.trim() || user.email.split('@')[0];
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = this.buildAffiliateCodeCandidate(user.name, user.email, attempt);
+      try {
+        return await this.prisma.affiliate.create({
+          data: {
+            name: displayName,
+            code,
+            commissionPercent: 20,
+            userId,
+            pixKey: dto.pixKey.trim(),
+            pixKeyType: dto.pixKeyType as PixKeyType,
+          },
+        });
+      } catch (err: unknown) {
+        if (this.isUniqueConstraintError(err)) continue;
+        throw err;
+      }
+    }
+
+    throw new ConflictException('Não foi possível gerar um código único, tente novamente');
+  }
+
+  async updateMyPixKey(userId: string, dto: UpdatePixKeyDto) {
+    const affiliate = await this.prisma.affiliate.findFirst({
+      where: { userId },
+    });
+    if (!affiliate) {
+      throw new NotFoundException('Você ainda não é afiliado');
+    }
+
+    return this.prisma.affiliate.update({
+      where: { id: affiliate.id },
+      data: {
+        pixKey: dto.pixKey.trim(),
+        pixKeyType: dto.pixKeyType as PixKeyType,
+      },
+      select: {
+        id: true,
+        pixKey: true,
+        pixKeyType: true,
+      },
+    });
+  }
+
+  private buildAffiliateCodeCandidate(name: string, email: string, attempt: number): string {
+    const base =
+      (name || email.split('@')[0])
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase()
+        .slice(0, 12) || 'USER';
+
+    // First try: clean code. After that: append 4-digit random suffix to break collisions.
+    const suffix = attempt === 0 ? '' : Math.floor(1000 + Math.random() * 9000).toString();
+    return `${base}${suffix}`.slice(0, 20);
+  }
+
+  private isUniqueConstraintError(err: unknown): boolean {
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: unknown }).code === 'P2002'
+    );
+  }
+
   async getMyAffiliate(userId: string) {
     const affiliate = await this.prisma.affiliate.findFirst({
       where: { userId },
@@ -329,6 +453,8 @@ export class AffiliatesService {
         isActive: affiliate.isActive,
         discountPercent: affiliate.discountPercent,
         discountAppliesTo: affiliate.discountAppliesTo,
+        pixKey: affiliate.pixKey,
+        pixKeyType: affiliate.pixKeyType,
         createdAt: affiliate.createdAt,
       },
       summary: {
