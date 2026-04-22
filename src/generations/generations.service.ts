@@ -187,12 +187,6 @@ export class GenerationsService {
       );
     }
 
-    if (dto.model === 'sem-censura' && !dto.images?.length) {
-      throw new BadRequestException(
-        'Este modelo exige pelo menos uma imagem de referência.',
-      );
-    }
-
     if (dto.model === 'sem-censura' && containsNsfwContent(dto.prompt)) {
       throw new BadRequestException(
         'Seu prompt contém termos não permitidos neste modelo. Remova-os e tente novamente.',
