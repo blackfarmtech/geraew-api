@@ -13,8 +13,11 @@ export class PromptTemplateDto {
   @ApiProperty({ description: 'Conteudo do prompt' })
   prompt: string;
 
-  @ApiPropertyOptional({ description: 'URL da imagem de preview' })
+  @ApiPropertyOptional({ description: 'URL da imagem de preview (original)' })
   imageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'URL da thumbnail otimizada (WebP)' })
+  thumbnailUrl?: string;
 
   @ApiPropertyOptional({ description: 'Modelo de IA recomendado' })
   aiModel?: string;

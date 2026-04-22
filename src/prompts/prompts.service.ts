@@ -33,6 +33,7 @@ export class PromptsService {
                 type: true,
                 prompt: true,
                 imageUrl: true,
+                thumbnailUrl: true,
                 aiModel: true,
               },
             },
@@ -56,6 +57,7 @@ export class PromptsService {
           type: prompt.type,
           prompt: prompt.prompt,
           imageUrl: prompt.imageUrl ?? undefined,
+          thumbnailUrl: prompt.thumbnailUrl ?? undefined,
           aiModel: prompt.aiModel ?? undefined,
         })),
       })),
@@ -85,6 +87,7 @@ export class PromptsService {
                 type: true,
                 prompt: true,
                 imageUrl: true,
+                thumbnailUrl: true,
                 aiModel: true,
               },
             },
@@ -112,6 +115,7 @@ export class PromptsService {
           type: prompt.type,
           prompt: prompt.prompt,
           imageUrl: prompt.imageUrl ?? undefined,
+          thumbnailUrl: prompt.thumbnailUrl ?? undefined,
           aiModel: prompt.aiModel ?? undefined,
         })),
       })),
@@ -134,6 +138,7 @@ export class PromptsService {
         type: true,
         prompt: true,
         imageUrl: true,
+        thumbnailUrl: true,
         aiModel: true,
       },
     });
@@ -144,6 +149,7 @@ export class PromptsService {
       type: prompt.type,
       prompt: prompt.prompt,
       imageUrl: prompt.imageUrl ?? undefined,
+      thumbnailUrl: prompt.thumbnailUrl ?? undefined,
       aiModel: prompt.aiModel ?? undefined,
     }));
   }

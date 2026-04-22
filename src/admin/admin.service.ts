@@ -17,13 +17,45 @@ import { UpdatePromptCategoryDto } from './dto/update-prompt-category.dto';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 import { ModelsService } from '../models/models.service';
+import { UploadsService } from '../uploads/uploads.service';
+import { Logger } from '@nestjs/common';
+
+const PROMPT_THUMB_WIDTH = 400;
+const PROMPT_THUMB_HEIGHT = 500;
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly modelsService: ModelsService,
+    private readonly uploadsService: UploadsService,
   ) {}
+
+  /**
+   * Generates an optimized WebP thumbnail for a prompt template image.
+   * Returns null on failure; callers should fall back to the original imageUrl.
+   */
+  private async generatePromptThumbnail(
+    imageUrl: string,
+    promptId: string,
+  ): Promise<string | null> {
+    try {
+      return await this.uploadsService.generateThumbnailDirect(
+        imageUrl,
+        `thumbnails/prompts/${promptId}`,
+        'thumb.webp',
+        PROMPT_THUMB_WIDTH,
+        PROMPT_THUMB_HEIGHT,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to generate prompt thumbnail for ${promptId}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
 
   /** Models that use the GeraEW provider (Google Gemini / Veo) */
   private static readonly GERAEW_MODEL_PREFIXES = ['gemini-', 'veo-'];
@@ -1356,7 +1388,7 @@ export class AdminService {
       throw new NotFoundException('Categoria de prompts não encontrada');
     }
 
-    return this.prisma.promptTemplate.create({
+    const created = await this.prisma.promptTemplate.create({
       data: {
         categoryId: dto.categoryId,
         title: dto.title,
@@ -1367,6 +1399,18 @@ export class AdminService {
         sortOrder: dto.sortOrder ?? 0,
       },
     });
+
+    if (dto.imageUrl) {
+      const thumbnailUrl = await this.generatePromptThumbnail(dto.imageUrl, created.id);
+      if (thumbnailUrl) {
+        return this.prisma.promptTemplate.update({
+          where: { id: created.id },
+          data: { thumbnailUrl },
+        });
+      }
+    }
+
+    return created;
   }
 
   async updatePromptTemplate(id: string, dto: UpdatePromptTemplateDto) {
@@ -1384,6 +1428,17 @@ export class AdminService {
       }
     }
 
+    // Regenerate thumbnail only if imageUrl actually changes
+    let thumbnailPatch: { thumbnailUrl: string | null } | undefined;
+    if (dto.imageUrl !== undefined && dto.imageUrl !== template.imageUrl) {
+      if (dto.imageUrl) {
+        const thumbnailUrl = await this.generatePromptThumbnail(dto.imageUrl, id);
+        thumbnailPatch = { thumbnailUrl: thumbnailUrl ?? null };
+      } else {
+        thumbnailPatch = { thumbnailUrl: null };
+      }
+    }
+
     return this.prisma.promptTemplate.update({
       where: { id },
       data: {
@@ -1394,6 +1449,7 @@ export class AdminService {
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.aiModel !== undefined && { aiModel: dto.aiModel }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+        ...(thumbnailPatch ?? {}),
       },
     });
   }

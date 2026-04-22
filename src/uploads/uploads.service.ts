@@ -227,7 +227,8 @@ export class UploadsService {
     sourceUrl: string,
     folder: string,
     filename: string,
-    size = 256,
+    width = 256,
+    height?: number,
   ): Promise<string> {
     const fileKey = `${folder}/${randomUUID()}/${filename}`;
 
@@ -241,7 +242,7 @@ export class UploadsService {
 
       const buffer = Buffer.from(await response.arrayBuffer());
       const thumbnail = await sharp(buffer)
-        .resize(size, size, { fit: 'cover' })
+        .resize(width, height ?? width, { fit: 'cover' })
         .webp({ quality: 70 })
         .toBuffer();
 
@@ -269,7 +270,8 @@ export class UploadsService {
     sourceUrl: string,
     folder: string,
     filename: string,
-    size = 256,
+    width = 256,
+    height?: number,
   ): Promise<string> {
     const fileKey = `${folder}/${randomUUID()}/${filename}`;
 
@@ -282,7 +284,7 @@ export class UploadsService {
 
     const buffer = Buffer.from(await response.arrayBuffer());
     const thumbnail = await sharp(buffer)
-      .resize(size, size, { fit: 'cover' })
+      .resize(width, height ?? width, { fit: 'cover' })
       .webp({ quality: 70 })
       .toBuffer();
 
