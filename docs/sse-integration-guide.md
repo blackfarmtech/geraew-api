@@ -1,6 +1,6 @@
 # Guia de Integração: SSE para Gerações em Tempo Real
 
-## Contexto
+### Contexto
 
 A API agora dispara **Server-Sent Events (SSE)** quando uma geração termina (sucesso ou falha), eliminando a necessidade de polling.
 
