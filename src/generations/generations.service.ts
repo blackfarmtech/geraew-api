@@ -192,6 +192,10 @@ export class GenerationsService {
       );
     }
 
+    if (dto.model === 'sem-censura') {
+      await this.modelsService.assertActiveBySlug(dto.model, AiModelType.IMAGE);
+    }
+
     const type =
       dto.images?.length
         ? GenerationType.IMAGE_TO_IMAGE

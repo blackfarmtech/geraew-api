@@ -25,4 +25,21 @@ export class ModelsController {
       sortOrder: m.sortOrder,
     }));
   }
+
+  @Public()
+  @Get('images')
+  @ApiOperation({ summary: 'Lista modelos de imagem disponíveis (público)' })
+  @ApiResponse({ status: 200, type: [AiModelResponseDto] })
+  async listImages(): Promise<AiModelResponseDto[]> {
+    const models = await this.modelsService.listImageModels();
+    return models.map((m) => ({
+      slug: m.slug,
+      label: m.label,
+      description: m.description,
+      provider: m.provider,
+      isActive: m.isActive,
+      statusMessage: m.statusMessage,
+      sortOrder: m.sortOrder,
+    }));
+  }
 }
