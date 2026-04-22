@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+import { EmailService } from '../email/email.service';
 
 const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
@@ -8,7 +9,10 @@ const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async createPayment(
     userId: string,
@@ -184,6 +188,20 @@ export class PaymentsService {
     this.logger.log(
       `Processed subscription payment for user ${userId}, plan ${planSlug}`,
     );
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+
+    if (user?.email) {
+      await this.emailService.sendSubscriptionEmail(
+        user.email,
+        user.name,
+        plan.name,
+        plan.creditsPerMonth,
+      );
+    }
   }
 
   /**
@@ -265,6 +283,20 @@ export class PaymentsService {
     this.logger.log(
       `Processed credit purchase for user ${userId}, package ${creditPackage.name}`,
     );
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+
+    if (user?.email) {
+      await this.emailService.sendCreditPurchaseEmail(
+        user.email,
+        user.name,
+        creditPackage.credits,
+        creditPackage.name,
+      );
+    }
   }
 
   /**

@@ -6,9 +6,10 @@ import { StripeWebhookService } from './webhooks/stripe-webhook.service';
 import { MercadoPagoWebhookService } from './webhooks/mercadopago-webhook.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WebhookLogsModule } from '../webhook-logs/webhook-logs.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [PrismaModule, WebhookLogsModule],
+  imports: [PrismaModule, WebhookLogsModule, EmailModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

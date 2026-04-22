@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PaymentsService } from '../payments.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../email/email.service';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -134,6 +135,9 @@ const createMockPrisma = () => {
     creditBalance: {
       ...tx.creditBalance,
     },
+    user: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     __tx: tx,
     $transaction: jest.fn((fn) => fn(tx)),
   };
@@ -152,6 +156,13 @@ describe('PaymentsService', () => {
       providers: [
         PaymentsService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: EmailService,
+          useValue: {
+            sendCreditPurchaseEmail: jest.fn(),
+            sendSubscriptionEmail: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

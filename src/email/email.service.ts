@@ -104,6 +104,66 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  async sendSubscriptionEmail(
+    to: string,
+    name: string,
+    planName: string,
+    credits: number,
+  ): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping subscription email');
+      return;
+    }
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject: `Sua assinatura ${planName} está ativa — Geraew`,
+        html: this.getSubscriptionTemplate(name, planName, credits),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send subscription email to ${to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`Subscription email sent to ${to}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send subscription email: ${error.message}`);
+    }
+  }
+
+  async sendCreditPurchaseEmail(
+    to: string,
+    name: string,
+    credits: number,
+    packageName?: string,
+  ): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping credit purchase email');
+      return;
+    }
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject: 'Créditos adicionados à sua conta — Geraew',
+        html: this.getCreditPurchaseTemplate(name, credits, packageName),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send credit purchase email to ${to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`Credit purchase email sent to ${to}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send credit purchase email: ${error.message}`);
+    }
+  }
+
   // --- Templates ---
 
   private getVerificationTemplate(_name: string, code: string): string {
@@ -206,14 +266,129 @@ export class EmailService implements OnModuleInit {
             <td style="padding: 48px 40px;">
               ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
               <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Bem-vindo ao Geraew!</h1>
-              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Olá, ${name}! Seu email foi confirmado e sua conta está pronta.</p>
-              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Seu plano Free inclui <strong>350 créditos Mensais</strong> para você explorar a plataforma.</p>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Olá, ${name}! Seu email foi confirmado e sua conta está pronta.</p>
               <div style="margin: 0 0 0;">
                 <a href="${dashboardUrl}"
                    style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
                   Começar a Criar
                 </a>
               </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getCreditPurchaseTemplate(name: string, credits: number, packageName?: string): string {
+    const dashboardUrl = `${this.frontendUrl}`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+    const creditsFormatted = credits.toLocaleString('pt-BR');
+    const packageLine = packageName
+      ? `<p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Pacote adquirido: <strong>${packageName}</strong>.</p>`
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Parabéns pela sua compra, ${name}!</h1>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Sua compra foi confirmada e seus créditos já estão disponíveis para uso.</p>
+              ${packageLine}
+              <div style="margin: 0 0 28px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; text-align: center;">
+                <p style="margin: 0 0 4px; font-size: 13px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Créditos adicionados</p>
+                <p style="margin: 0; font-size: 32px; font-weight: 700; color: #1a1a1a; line-height: 1;">+${creditsFormatted}</p>
+              </div>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">É só acessar a plataforma e começar a criar agora mesmo.</p>
+              <div style="margin: 0 0 0;">
+                <a href="${dashboardUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Usar meus créditos
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Este email é a confirmação da sua compra. Guarde-o para seus registros.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getSubscriptionTemplate(
+    name: string,
+    planName: string,
+    credits: number,
+  ): string {
+    const dashboardUrl = `${this.frontendUrl}`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+    const creditsFormatted = credits.toLocaleString('pt-BR');
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Bem-vindo ao plano ${planName}, ${name}!</h1>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Sua assinatura está ativa e todos os recursos do seu plano já estão liberados.</p>
+              <div style="margin: 0 0 28px; padding: 20px; background-color: #f5f5f5; border-radius: 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding: 0 0 12px; border-bottom: 1px solid #e5e5e5;">
+                      <p style="margin: 0 0 4px; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Plano</p>
+                      <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1a1a1a;">${planName}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 0 0;">
+                      <p style="margin: 0 0 4px; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Créditos mensais</p>
+                      <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1a1a1a;">${creditsFormatted}</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Você pode gerenciar sua assinatura a qualquer momento pelo painel. Cancele quando quiser, sem burocracia.</p>
+              <div style="margin: 0 0 0;">
+                <a href="${dashboardUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Acessar minha conta
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Este email é a confirmação da sua assinatura. Guarde-o para seus registros.</p>
             </td>
           </tr>
         </table>
