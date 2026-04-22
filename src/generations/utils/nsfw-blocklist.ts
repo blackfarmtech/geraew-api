@@ -1,6 +1,6 @@
 const RAW_BLOCKLIST: readonly string[] = [
   // Nudez direta
-  'nude', 'nudes', 'naked',
+  'naked',
   'nu', 'nua', 'nus', 'nuas',
   'pelado', 'pelada', 'pelados', 'peladas',
   'despido', 'despida',
