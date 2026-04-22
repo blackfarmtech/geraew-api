@@ -6,9 +6,10 @@ import { HublaWebhookService } from './hubla-webhook.service';
 import { HotmartWebhookController } from './hotmart-webhook.controller';
 import { HotmartWebhookService } from './hotmart-webhook.service';
 import { WebhookLogsModule } from '../webhook-logs/webhook-logs.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [PrismaModule, WebhookLogsModule],
+  imports: [PrismaModule, WebhookLogsModule, EmailModule],
   controllers: [HublaWebhookController, HotmartWebhookController],
   providers: [
     PendingGrantsService,

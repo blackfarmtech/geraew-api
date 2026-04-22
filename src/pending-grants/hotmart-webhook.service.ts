@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EmailService } from '../email/email.service';
 import { WebhookLogsService } from '../webhook-logs/webhook-logs.service';
 import {
   DEFAULT_HUBLA_BUNDLE,
@@ -37,6 +38,7 @@ export class HotmartWebhookService {
     private readonly configService: ConfigService,
     private readonly pendingGrantsService: PendingGrantsService,
     private readonly webhookLogs: WebhookLogsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async handle(
@@ -75,7 +77,25 @@ export class HotmartWebhookService {
       `Hotmart ${eventType} for ${email} — pending grant ${created ? 'created' : 'already existed'}`,
     );
 
+    if (created) {
+      const buyerName = this.extractName(payload);
+      await this.emailService.sendPendingGrantsEmailEs(email, buyerName);
+    }
+
     return { processed: true };
+  }
+
+  private extractName(payload: any): string | null {
+    const candidate =
+      payload?.data?.buyer?.name ??
+      payload?.data?.subscriber?.name ??
+      payload?.buyer?.name ??
+      payload?.name ??
+      null;
+
+    if (!candidate || typeof candidate !== 'string') return null;
+    const trimmed = candidate.trim();
+    return trimmed.length > 0 ? trimmed.split(/\s+/)[0] : null;
   }
 
   private verifyHottok(

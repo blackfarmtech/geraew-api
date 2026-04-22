@@ -134,6 +134,31 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  async sendPendingGrantsEmailEs(to: string, name?: string | null): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping pending grants email');
+      return;
+    }
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject: '¡Ganaste generaciones gratis en Geraew! 🎉',
+        html: this.getPendingGrantsTemplateEs(name ?? null),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send pending grants email to ${to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`Pending grants email (ES) sent to ${to}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send pending grants email: ${error.message}`);
+    }
+  }
+
   async sendCreditPurchaseEmail(
     to: string,
     name: string,
@@ -273,6 +298,62 @@ export class EmailService implements OnModuleInit {
                   Começar a Criar
                 </a>
               </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getPendingGrantsTemplateEs(name: string | null): string {
+    const signupUrl = `${this.frontendUrl}/login`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+    const greeting = name ? `¡Hola, ${name}!` : '¡Hola!';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">${greeting} Ganaste generaciones gratis 🎁</h1>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">Gracias por tu compra. Reservamos un paquete de <strong>generaciones gratis</strong> para tu cuenta en Geraew.</p>
+              <div style="margin: 0 0 28px; padding: 20px; background-color: #f5f5f5; border-radius: 8px;">
+                <p style="margin: 0 0 8px; font-size: 13px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Incluye</p>
+                <ul style="margin: 0; padding-left: 18px; font-size: 14px; color: #1a1a1a; line-height: 1.8;">
+                  <li>1 generación Nano Banana 2</li>
+                  <li>1 generación Nano Banana Pro</li>
+                  <li>1 Face Swap</li>
+                  <li>1 Virtual Try-On</li>
+                  <li>1 Geraew Fast</li>
+                  <li>1 Upscale</li>
+                </ul>
+              </div>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Para canjearlas, crea tu cuenta ahora mismo usando <strong>este mismo correo</strong>. Los créditos se acreditarán automáticamente después del registro.</p>
+              <div style="margin: 0 0 28px;">
+                <a href="${signupUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Crear mi cuenta y reclamar
+                </a>
+              </div>
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.6;">Importante: regístrate con el mismo correo al que llegó este mensaje; de lo contrario, las generaciones no podrán ser acreditadas.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Si tienes alguna duda, solo responde a este correo y te ayudaremos.</p>
             </td>
           </tr>
         </table>
