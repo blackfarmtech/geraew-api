@@ -42,6 +42,7 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
+import { containsNsfwContent } from './utils/nsfw-blocklist';
 
 /**
  * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
@@ -189,6 +190,12 @@ export class GenerationsService {
     if (dto.model === 'sem-censura' && !dto.images?.length) {
       throw new BadRequestException(
         'Este modelo exige pelo menos uma imagem de referência.',
+      );
+    }
+
+    if (dto.model === 'sem-censura' && containsNsfwContent(dto.prompt)) {
+      throw new BadRequestException(
+        'Seu prompt contém termos não permitidos neste modelo. Remova-os e tente novamente.',
       );
     }
 

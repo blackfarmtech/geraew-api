@@ -62,7 +62,7 @@ export class SeedreamProvider {
         aspect_ratio: aspectRatio,
         sequential_image_generation: 'disabled',
         max_images: 1,
-        disable_safety_checker: false,
+        disable_safety_checker: true,
         ...(input.imageUrls?.length && { image_input: input.imageUrls }),
       },
     };

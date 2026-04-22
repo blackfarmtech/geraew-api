@@ -405,7 +405,7 @@ async function main() {
   console.log('🖼️  Creating AI image models...');
 
   const imageModels = [
-    { slug: 'sem-censura', label: 'Sem censura', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 0 },
+    { slug: 'sem-censura', label: 'Geraew Unlocked', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 0 },
   ];
 
   for (const model of imageModels) {
