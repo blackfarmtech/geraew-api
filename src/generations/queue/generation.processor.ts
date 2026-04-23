@@ -16,6 +16,7 @@ import { SeedreamProvider } from '../providers/seedream.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
+import { containsNsfwContent } from '../utils/nsfw-blocklist';
 import {
   GenerationStatus,
   GenerationType,
@@ -777,6 +778,13 @@ export class GenerationProcessor extends WorkerHost {
     ) {
       this.logger.warn(
         `Generation ${generationId} already ${preCheck.status} before Seedream safety fallback — aborting`,
+      );
+      throw originalError;
+    }
+
+    if (containsNsfwContent(prompt)) {
+      this.logger.warn(
+        `[FALLBACK_SEEDREAM_BLOCKED] gen=${generationId} prompt hit nsfw blocklist — aborting fallback, propagating original error`,
       );
       throw originalError;
     }
