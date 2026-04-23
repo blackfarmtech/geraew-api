@@ -143,13 +143,28 @@ export class GeraewProvider {
     if (!response.ok) {
       const errorText = await response.text();
       this.logger.error(`[IMAGE] Error response: ${errorText}`);
+      const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(`Image API error (${response.status}): ${errorText}`);
     }
 
     const data = (await response.json()) as GeminiImageResponse;
 
+    const textParts = data.parts?.filter((p) => p.type === 'text') ?? [];
+    const textJoined = textParts
+      .map((p) => (p.type === 'text' ? p.text : ''))
+      .join(' ');
+
     const imageParts = data.parts?.filter((p) => p.type === 'image') ?? [];
     if (!imageParts.length) {
+      const safetyError = textJoined
+        ? ContentSafetyError.fromErrorMessage(textJoined)
+        : null;
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error('No image returned in response. Try a different prompt.');
     }
 

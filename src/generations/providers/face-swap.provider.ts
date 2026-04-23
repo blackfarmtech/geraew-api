@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GenerationResult } from './geraew.provider';
+import { ContentSafetyError } from '../errors/content-safety.error';
 
 const FACE_SWAP_PROMPT =
   "Recreate the scene in Image 2 (clothing, body pose, and setting) replacing the person with the woman in Image 1. The skin tone in Image 1 must be applied evenly across the entire body—face, neck, arms, hands, legs, and any visible skin areas—ensuring absolute consistency in coloring. Facial features, face shape, hair, and expression must be preserved with complete fidelity to Image 1. The integration between face and body must be perfect in lighting, shadows, skin texture, and anatomical proportions, resulting in a photorealistic image indistinguishable from an authentic photo.";
@@ -84,6 +85,10 @@ export class FaceSwapProvider {
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
+      const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(
         `Face Swap createTask error (${createResponse.status}): ${errorText}`,
       );
@@ -92,6 +97,10 @@ export class FaceSwapProvider {
     const createData = (await createResponse.json()) as CreateTaskResponse;
 
     if (createData.code !== 200) {
+      const safetyError = ContentSafetyError.fromErrorMessage(createData.msg);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(
         `Face Swap createTask failed: ${createData.msg} (code ${createData.code})`,
       );
@@ -172,9 +181,12 @@ export class FaceSwapProvider {
       }
 
       if (data.data.state === 'fail') {
-        throw new Error(
-          `Face Swap generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`,
-        );
+        const failMsg = data.data.failMsg ?? data.data.failCode ?? 'unknown error';
+        const safetyError = ContentSafetyError.fromErrorMessage(failMsg);
+        if (safetyError) {
+          throw safetyError;
+        }
+        throw new Error(`Face Swap generation failed: ${failMsg}`);
       }
 
       if (data.data.state === 'success') {

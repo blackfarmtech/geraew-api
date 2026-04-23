@@ -1160,6 +1160,7 @@ export class AdminService {
       recentFailuresByModel,
       failingPayments,
       recentErrors,
+      recentSafetyFallbacks,
     ] = await Promise.all([
       // Queue: processing count
       this.prisma.generation.count({
@@ -1216,6 +1217,27 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
+
+      // Recent Seedream safety fallbacks (last 10)
+      this.prisma.generation.findMany({
+        where: {
+          status: GenerationStatus.COMPLETED,
+          parameters: {
+            path: ['seedreamSafetyFallback'],
+            equals: true,
+          },
+        },
+        select: {
+          id: true,
+          userId: true,
+          type: true,
+          modelUsed: true,
+          parameters: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
     ]);
 
     // Build alerts based on thresholds
@@ -1263,15 +1285,40 @@ export class AdminService {
         errorCodes: r.error_codes ?? [],
       })),
       failingPayments,
-      recentErrors: recentErrors.map((e) => ({
-        id: e.id,
-        userId: e.userId,
-        type: e.type,
-        modelUsed: e.modelUsed,
-        errorMessage: e.errorMessage,
-        errorCode: e.errorCode,
-        createdAt: e.createdAt,
-      })),
+      recentErrors: [
+        ...recentErrors.map((e) => ({
+          id: e.id,
+          userId: e.userId,
+          type: e.type,
+          modelUsed: e.modelUsed,
+          errorMessage: e.errorMessage,
+          errorCode: e.errorCode,
+          createdAt: e.createdAt,
+          safetyFallback: false,
+        })),
+        ...recentSafetyFallbacks.map((e) => {
+          const params =
+            e.parameters && typeof e.parameters === 'object'
+              ? (e.parameters as Record<string, unknown>)
+              : {};
+          const from =
+            typeof params.seedreamFallbackFrom === 'string'
+              ? params.seedreamFallbackFrom
+              : 'unknown';
+          return {
+            id: e.id,
+            userId: e.userId,
+            type: e.type,
+            modelUsed: e.modelUsed,
+            errorMessage: `Bloqueio de diretriz — fallback Seedream acionado (origem: ${from})`,
+            errorCode: 'SAFETY_FALLBACK',
+            createdAt: e.createdAt,
+            safetyFallback: true,
+          };
+        }),
+      ]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 10),
       alerts,
     };
   }

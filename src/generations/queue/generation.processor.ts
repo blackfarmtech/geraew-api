@@ -20,6 +20,7 @@ import {
   GenerationStatus,
   GenerationType,
   GenerationImageRole,
+  Resolution,
 } from '@prisma/client';
 import {
   GENERATION_QUEUE,
@@ -147,17 +148,32 @@ export class GenerationProcessor extends WorkerHost {
       ? await this.loadInputImagesAsBase64(data.generationId)
       : undefined;
 
-    const result = await this.geraewProvider.generateImage({
-      id: data.generationId,
-      prompt: data.prompt,
-      model: data.model,
-      resolution: data.resolution,
-      aspectRatio: data.aspectRatio,
-      mimeType: data.mimeType,
-      images,
-    });
+    try {
+      const result = await this.geraewProvider.generateImage({
+        id: data.generationId,
+        prompt: data.prompt,
+        model: data.model,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        mimeType: data.mimeType,
+        images,
+      });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const result = await this.fallbackToSeedream(
+          data.generationId,
+          data.prompt,
+          data.aspectRatio,
+          error,
+          'processImage:geraew',
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+        return;
+      }
+      throw error;
+    }
   }
 
   private async processImageWithFallback(data: ImageJobData): Promise<void> {
@@ -214,6 +230,18 @@ export class GenerationProcessor extends WorkerHost {
         'geraew',
       );
     } catch (geraewError) {
+      if (this.isSafetyRelatedError(geraewError)) {
+        const result = await this.fallbackToSeedream(
+          data.generationId,
+          data.prompt,
+          data.aspectRatio,
+          geraewError,
+          'processImageWithFallback:geraew',
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+        return;
+      }
+
       this.logger.warn(
         `Geraew failed for ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
       );
@@ -241,22 +269,37 @@ export class GenerationProcessor extends WorkerHost {
         .filter(Boolean) as string[];
 
       const nanaBananaModel = mapGeminiToNanoBanana(data.model);
-      const result = await this.nanoBananaProvider.generateImage({
-        id: data.generationId,
-        model: nanaBananaModel,
-        prompt: data.prompt,
-        resolution: data.resolution,
-        aspectRatio: data.aspectRatio,
-        outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
-        imageUrls: imageUrls.length ? imageUrls : undefined,
-      });
+      try {
+        const result = await this.nanoBananaProvider.generateImage({
+          id: data.generationId,
+          model: nanaBananaModel,
+          prompt: data.prompt,
+          resolution: data.resolution,
+          aspectRatio: data.aspectRatio,
+          outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
+          imageUrls: imageUrls.length ? imageUrls : undefined,
+        });
 
-      await this.completeGeneration(
-        data.generationId,
-        result,
-        startTime,
-        nanaBananaModel,
-      );
+        await this.completeGeneration(
+          data.generationId,
+          result,
+          startTime,
+          nanaBananaModel,
+        );
+      } catch (nanoBananaError) {
+        if (this.isSafetyRelatedError(nanoBananaError)) {
+          const result = await this.fallbackToSeedream(
+            data.generationId,
+            data.prompt,
+            data.aspectRatio,
+            nanoBananaError,
+            'processImageWithFallback:nano-banana',
+          );
+          await this.completeGeneration(data.generationId, result, startTime);
+          return;
+        }
+        throw nanoBananaError;
+      }
     }
   }
 
@@ -268,18 +311,33 @@ export class GenerationProcessor extends WorkerHost {
       `[NANO_BANANA] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio} outputFormat=${data.outputFormat} googleSearch=${data.googleSearch} imageUrls=${data.imageUrls?.length ?? 0} prompt="${data.prompt}"`,
     );
 
-    const result = await this.nanoBananaProvider.generateImage({
-      id: data.generationId,
-      model: data.model,
-      prompt: data.prompt,
-      resolution: data.resolution,
-      aspectRatio: data.aspectRatio,
-      outputFormat: data.outputFormat,
-      googleSearch: data.googleSearch,
-      imageUrls: data.imageUrls,
-    });
+    try {
+      const result = await this.nanoBananaProvider.generateImage({
+        id: data.generationId,
+        model: data.model,
+        prompt: data.prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        outputFormat: data.outputFormat,
+        googleSearch: data.googleSearch,
+        imageUrls: data.imageUrls,
+      });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const result = await this.fallbackToSeedream(
+          data.generationId,
+          data.prompt,
+          data.aspectRatio,
+          error,
+          'processNanoBanana',
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+        return;
+      }
+      throw error;
+    }
   }
 
   private async processTextToVideo(data: TextToVideoJobData): Promise<void> {
@@ -498,6 +556,18 @@ export class GenerationProcessor extends WorkerHost {
         'geraew',
       );
     } catch (geraewError) {
+      if (this.isSafetyRelatedError(geraewError)) {
+        const result = await this.fallbackToSeedream(
+          data.generationId,
+          data.prompt,
+          data.aspectRatio,
+          geraewError,
+          'processVirtualTryOn:geraew',
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+        return;
+      }
+
       this.logger.warn(
         `Geraew failed for virtual try-on ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
       );
@@ -525,22 +595,37 @@ export class GenerationProcessor extends WorkerHost {
         .filter(Boolean) as string[];
 
       const nanoBananaModel = mapGeminiToNanoBanana(data.model);
-      const result = await this.nanoBananaProvider.generateImage({
-        id: data.generationId,
-        model: nanoBananaModel,
-        prompt: data.prompt,
-        resolution: data.resolution,
-        aspectRatio: data.aspectRatio,
-        outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
-        imageUrls: imageUrls.length ? imageUrls : undefined,
-      });
+      try {
+        const result = await this.nanoBananaProvider.generateImage({
+          id: data.generationId,
+          model: nanoBananaModel,
+          prompt: data.prompt,
+          resolution: data.resolution,
+          aspectRatio: data.aspectRatio,
+          outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
+          imageUrls: imageUrls.length ? imageUrls : undefined,
+        });
 
-      await this.completeGeneration(
-        data.generationId,
-        result,
-        startTime,
-        nanoBananaModel,
-      );
+        await this.completeGeneration(
+          data.generationId,
+          result,
+          startTime,
+          nanoBananaModel,
+        );
+      } catch (nanoBananaError) {
+        if (this.isSafetyRelatedError(nanoBananaError)) {
+          const result = await this.fallbackToSeedream(
+            data.generationId,
+            data.prompt,
+            data.aspectRatio,
+            nanoBananaError,
+            'processVirtualTryOn:nano-banana',
+          );
+          await this.completeGeneration(data.generationId, result, startTime);
+          return;
+        }
+        throw nanoBananaError;
+      }
     }
   }
 
@@ -552,14 +637,31 @@ export class GenerationProcessor extends WorkerHost {
       `[FACE_SWAP] ${data.generationId} resolution=${data.resolution} sourceImage=${data.sourceImageUrl} targetImage=${data.targetImageUrl}`,
     );
 
-    const result = await this.faceSwapProvider.generateFaceSwap({
-      id: data.generationId,
-      sourceImageUrl: data.sourceImageUrl,
-      targetImageUrl: data.targetImageUrl,
-      resolution: data.resolution,
-    });
+    try {
+      const result = await this.faceSwapProvider.generateFaceSwap({
+        id: data.generationId,
+        sourceImageUrl: data.sourceImageUrl,
+        targetImageUrl: data.targetImageUrl,
+        resolution: data.resolution,
+      });
 
-    await this.completeGeneration(data.generationId, result, startTime);
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const faceSwapFallbackPrompt =
+          'Recreate the scene in Image 2 (clothing, body pose, and setting) replacing the person with the woman in Image 1. Preserve facial features, skin tone and body proportions from Image 1 with photorealistic lighting and shadows.';
+        const result = await this.fallbackToSeedream(
+          data.generationId,
+          faceSwapFallbackPrompt,
+          undefined,
+          error,
+          'processFaceSwap',
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+        return;
+      }
+      throw error;
+    }
   }
 
   // ─── Kie Veo process methods ────────────────────────────────
@@ -643,6 +745,73 @@ export class GenerationProcessor extends WorkerHost {
       return true;
     }
     return false;
+  }
+
+  // ─── Seedream universal fallback (for safety-blocked image generations) ──
+
+  private async fallbackToSeedream(
+    generationId: string,
+    prompt: string,
+    aspectRatio: string | undefined,
+    originalError: unknown,
+    context: string,
+  ): Promise<{ outputUrls: string[]; modelUsed: string }> {
+    this.logger.warn(
+      `[FALLBACK_SEEDREAM_SAFETY] ${context} gen=${generationId} originalError="${(originalError as Error).message}"`,
+    );
+
+    // Skip if CRON already finalized this generation
+    const preCheck = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { status: true },
+    });
+    if (
+      preCheck?.status === GenerationStatus.FAILED ||
+      preCheck?.status === GenerationStatus.COMPLETED
+    ) {
+      this.logger.warn(
+        `Generation ${generationId} already ${preCheck.status} before Seedream safety fallback — aborting`,
+      );
+      throw originalError;
+    }
+
+    const inputImages = await this.prisma.generationInputImage.findMany({
+      where: { generationId },
+      orderBy: { order: 'asc' },
+    });
+    const imageUrls = inputImages
+      .map((img) => img.url)
+      .filter((url): url is string => !!url);
+
+    const result = await this.seedreamProvider.generateImage({
+      id: generationId,
+      prompt,
+      resolution: Resolution.RES_2K,
+      aspectRatio,
+      imageUrls: imageUrls.length ? imageUrls : undefined,
+    });
+
+    // Tag as safety fallback so we can differentiate from direct Seedream runs
+    const existing = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { parameters: true },
+    });
+    const params =
+      existing?.parameters && typeof existing.parameters === 'object'
+        ? (existing.parameters as Record<string, unknown>)
+        : {};
+    await this.prisma.generation.update({
+      where: { id: generationId },
+      data: {
+        parameters: {
+          ...params,
+          seedreamSafetyFallback: true,
+          seedreamFallbackFrom: context,
+        },
+      },
+    });
+
+    return { outputUrls: result.outputUrls, modelUsed: 'sem-censura-fallback' };
   }
 
   // ─── Safety refinement retry ────────────────────────────────

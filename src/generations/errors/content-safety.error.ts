@@ -51,6 +51,9 @@ export class ContentSafetyError extends Error {
     /blocked.*safety/i,
     /support.*code/i,
     /não pôde gerar/i,
+    /flagged as sensitive/i,
+    /sensitive.*content/i,
+    /inappropriate.*content/i,
   ];
 
   /**

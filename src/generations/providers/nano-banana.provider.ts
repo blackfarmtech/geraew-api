@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GenerationResult } from './geraew.provider';
+import { ContentSafetyError } from '../errors/content-safety.error';
 
 const RESOLUTION_MAP: Record<string, string> = {
   RES_1K: '1K',
@@ -106,6 +107,10 @@ export class NanoBananaProvider {
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
+      const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(
         `Nano Banana createTask error (${createResponse.status}): ${errorText}`,
       );
@@ -114,6 +119,10 @@ export class NanoBananaProvider {
     const createData = (await createResponse.json()) as CreateTaskResponse;
 
     if (createData.code !== 200) {
+      const safetyError = ContentSafetyError.fromErrorMessage(createData.msg);
+      if (safetyError) {
+        throw safetyError;
+      }
       throw new Error(
         `Nano Banana createTask failed: ${createData.msg} (code ${createData.code})`,
       );
@@ -199,9 +208,12 @@ export class NanoBananaProvider {
       }
 
       if (data.data.state === 'fail') {
-        throw new Error(
-          `Nano Banana generation failed: ${data.data.failMsg ?? data.data.failCode ?? 'unknown error'}`,
-        );
+        const failMsg = data.data.failMsg ?? data.data.failCode ?? 'unknown error';
+        const safetyError = ContentSafetyError.fromErrorMessage(failMsg);
+        if (safetyError) {
+          throw safetyError;
+        }
+        throw new Error(`Nano Banana generation failed: ${failMsg}`);
       }
 
       if (data.data.state === 'success') {
