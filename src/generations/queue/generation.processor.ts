@@ -735,14 +735,20 @@ export class GenerationProcessor extends WorkerHost {
 
   private isSafetyRelatedError(error: unknown): boolean {
     if (error instanceof ContentSafetyError) return true;
-    if (
-      error instanceof Error &&
-      error.message.includes('no video data returned')
-    ) {
-      this.logger.warn(
-        `Treating "${error.message}" as potential silent safety block`,
-      );
-      return true;
+    if (error instanceof Error) {
+      if (error.message.includes('no video data returned')) {
+        this.logger.warn(
+          `Treating "${error.message}" as potential silent safety block`,
+        );
+        return true;
+      }
+      // Safety net: raw Error with a safety-related message slipped past provider conversion
+      if (ContentSafetyError.fromErrorMessage(error.message)) {
+        this.logger.warn(
+          `Detected safety pattern in raw Error message: "${error.message}"`,
+        );
+        return true;
+      }
     }
     return false;
   }
