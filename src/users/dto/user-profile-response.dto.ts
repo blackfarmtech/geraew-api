@@ -40,4 +40,5 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional() plan: PlanInfoDto | null;
   @ApiPropertyOptional() credits: CreditInfoDto | null;
   @ApiPropertyOptional() subscription: SubscriptionInfoDto | null;
+  @ApiProperty() feedbackSubmitted: boolean;
 }

@@ -35,6 +35,7 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { ModelsModule } from './models/models.module';
 import { PendingGrantsModule } from './pending-grants/pending-grants.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 
 @Module({
@@ -106,6 +107,7 @@ import { PendingGrantsModule } from './pending-grants/pending-grants.module';
     AffiliatesModule,
     ModelsModule,
     PendingGrantsModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [

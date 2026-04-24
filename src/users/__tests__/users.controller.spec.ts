@@ -42,6 +42,7 @@ const mockProfile: UserProfileResponseDto = {
     currentPeriodEnd: now,
     cancelAtPeriodEnd: false,
   },
+  feedbackSubmitted: false,
 };
 
 const mockUsersService = {

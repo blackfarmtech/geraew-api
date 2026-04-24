@@ -18,6 +18,7 @@ export class UsersService {
           include: { plan: true },
         },
         creditBalance: true,
+        feedback: { select: { id: true } },
       },
     });
 
@@ -70,6 +71,7 @@ export class UsersService {
           cancelAtPeriodEnd: activeSubscription.cancelAtPeriodEnd,
         }
         : null,
+      feedbackSubmitted: !!user.feedback,
     };
   }
 

@@ -35,6 +35,7 @@ model User {
   creditBalance           CreditBalance?
   creditTransactions      CreditTransaction[]
   emailVerificationTokens EmailVerificationToken[]
+  feedback                Feedback?
   folders                 Folder[]
   generations             Generation[]
   passwordResetTokens     PasswordResetToken[]
@@ -370,6 +371,25 @@ model EmailVerificationToken {
   @@map("email_verification_tokens")
 }
 
+model Feedback {
+  id            String   @id @default(cuid())
+  userId        String   @unique @map("user_id")
+  nps           Int
+  rating        Int
+  goal          String
+  goalOther     String?  @map("goal_other")
+  features      String[]
+  highlight     String
+  improve       String
+  wishlist      String
+  creditsAwarded Int     @default(0) @map("credits_awarded")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("feedback")
+}
+
 model WebhookLog {
   id         String   @id @default(cuid())
   provider   String
@@ -594,6 +614,7 @@ enum CreditTransactionType {
   REFERRAL_BONUS
   ADMIN_ADJUSTMENT
   ONBOARDING_BONUS
+  FEEDBACK_REWARD
 }
 
 enum PaymentStatus {
