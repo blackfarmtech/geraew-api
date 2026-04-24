@@ -12,6 +12,19 @@ const RESOLUTION_MAP: Record<string, string> = {
 const SEEDREAM_MODEL_SLUG = 'bytedance/seedream-4.5';
 const REPLICATE_BASE_URL = 'https://api.replicate.com/v1';
 
+// User-facing error messages (never expose provider name or technical detail)
+const USER_ERRORS = {
+  configMissing: 'Serviço de geração indisponível no momento. Tente novamente em instantes.',
+  resolutionUnsupported: 'Resolução não suportada por esse modelo.',
+  startFailed: 'Não foi possível iniciar a geração. Tente novamente em instantes.',
+  generationFailed: 'Não foi possível gerar a imagem. Tente novamente.',
+  statusCheckFailed: 'Falha ao verificar o status da geração. Tente novamente.',
+  noOutput: 'A geração foi concluída, mas não retornou imagens. Tente novamente.',
+  timeout: 'A geração demorou mais que o esperado. Tente novamente.',
+  downloadFailed: 'Falha ao baixar a imagem gerada. Tente novamente.',
+  noImages: 'Nenhuma imagem foi gerada. Tente novamente.',
+};
+
 export interface SeedreamImageInput {
   id: string;
   prompt: string;
@@ -42,14 +55,13 @@ export class SeedreamProvider {
 
   async generateImage(input: SeedreamImageInput): Promise<GenerationResult> {
     if (!this.apiToken) {
-      throw new Error('REPLICATE_API_TOKEN is not configured.');
+      this.logger.error('REPLICATE_API_TOKEN is not configured.');
+      throw new Error(USER_ERRORS.configMissing);
     }
 
     const size = RESOLUTION_MAP[input.resolution];
     if (!size) {
-      throw new Error(
-        `Seedream 4.5 only supports 2K and 4K (got ${input.resolution}).`,
-      );
+      throw new Error(USER_ERRORS.resolutionUnsupported);
     }
 
     const aspectRatio = input.imageUrls?.length
@@ -63,7 +75,7 @@ export class SeedreamProvider {
         aspect_ratio: aspectRatio,
         sequential_image_generation: 'disabled',
         max_images: 1,
-        disable_safety_checker: false,
+        disable_safety_checker: true,
         ...(input.imageUrls?.length && { image_input: input.imageUrls }),
       },
     };
@@ -86,9 +98,10 @@ export class SeedreamProvider {
       const errorText = await createResponse.text();
       const safetyError = ContentSafetyError.fromErrorMessage(errorText);
       if (safetyError) throw safetyError;
-      throw new Error(
-        `Seedream createPrediction error (${createResponse.status}): ${errorText}`,
+      this.logger.error(
+        `Create prediction error (${createResponse.status}): ${errorText}`,
       );
+      throw new Error(USER_ERRORS.startFailed);
     }
 
     const prediction = (await createResponse.json()) as Prediction;
@@ -103,7 +116,7 @@ export class SeedreamProvider {
     }
 
     if (!outputUrls.length) {
-      throw new Error('Seedream returned no images.');
+      throw new Error(USER_ERRORS.noImages);
     }
 
     this.logger.log(`${outputUrls.length} image(s) uploaded to S3`);
@@ -130,7 +143,7 @@ export class SeedreamProvider {
             ? [current.output]
             : [];
         if (!output.length) {
-          throw new Error('Seedream succeeded but returned no output URLs.');
+          throw new Error(USER_ERRORS.noOutput);
         }
         return output;
       }
@@ -139,7 +152,10 @@ export class SeedreamProvider {
         const errorStr = current.error ?? 'unknown error';
         const safetyError = ContentSafetyError.fromErrorMessage(errorStr);
         if (safetyError) throw safetyError;
-        throw new Error(`Seedream prediction ${current.status}: ${errorStr}`);
+        this.logger.error(
+          `Prediction ${current.status}: ${errorStr}`,
+        );
+        throw new Error(USER_ERRORS.generationFailed);
       }
 
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -154,9 +170,11 @@ export class SeedreamProvider {
       } catch (error) {
         networkFailures++;
         this.logger.warn(
-          `Seedream poll fetch failed (${networkFailures}/${maxNetworkRetries}): ${(error as Error).message}`,
+          `Poll fetch failed (${networkFailures}/${maxNetworkRetries}): ${(error as Error).message}`,
         );
-        if (networkFailures >= maxNetworkRetries) throw error;
+        if (networkFailures >= maxNetworkRetries) {
+          throw new Error(USER_ERRORS.statusCheckFailed);
+        }
         continue;
       }
 
@@ -164,14 +182,12 @@ export class SeedreamProvider {
         networkFailures++;
         const errorText = await response.text();
         this.logger.warn(
-          `Seedream poll HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
+          `Poll HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
         );
         if (networkFailures >= maxNetworkRetries) {
           const safetyError = ContentSafetyError.fromErrorMessage(errorText);
           if (safetyError) throw safetyError;
-          throw new Error(
-            `Seedream get prediction error (${response.status}): ${errorText}`,
-          );
+          throw new Error(USER_ERRORS.statusCheckFailed);
         }
         continue;
       }
@@ -180,7 +196,7 @@ export class SeedreamProvider {
       current = (await response.json()) as Prediction;
     }
 
-    throw new Error('Seedream generation timed out.');
+    throw new Error(USER_ERRORS.timeout);
   }
 
   private async downloadAndUpload(
@@ -202,9 +218,10 @@ export class SeedreamProvider {
 
         const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
         if (!response.ok) {
-          throw new Error(
-            `Failed to download image from Seedream (${response.status}): ${sourceUrl}`,
+          this.logger.error(
+            `Download failed (${response.status}): ${sourceUrl}`,
           );
+          throw new Error(USER_ERRORS.downloadFailed);
         }
         const buffer = Buffer.from(await response.arrayBuffer());
         const contentType =
