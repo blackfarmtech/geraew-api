@@ -46,6 +46,7 @@ export class ContentSafetyError extends Error {
     /couldn.*t be submitted/i,
     /diretrizes de uso/i,
     /safety.*filter/i,
+    /safety.*checker/i,
     /content.*policy/i,
     /responsible\s*ai/i,
     /blocked.*safety/i,
@@ -54,6 +55,8 @@ export class ContentSafetyError extends Error {
     /flagged as sensitive/i,
     /sensitive.*content/i,
     /inappropriate.*content/i,
+    /nsfw/i,
+    /\bE005\b/,
   ];
 
   /**

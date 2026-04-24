@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GenerationResult } from './geraew.provider';
+import { ContentSafetyError } from '../errors/content-safety.error';
 
 const RESOLUTION_MAP: Record<string, string> = {
   RES_2K: '2K',
@@ -62,7 +63,7 @@ export class SeedreamProvider {
         aspect_ratio: aspectRatio,
         sequential_image_generation: 'disabled',
         max_images: 1,
-        disable_safety_checker: true,
+        disable_safety_checker: false,
         ...(input.imageUrls?.length && { image_input: input.imageUrls }),
       },
     };
@@ -83,6 +84,8 @@ export class SeedreamProvider {
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
+      const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+      if (safetyError) throw safetyError;
       throw new Error(
         `Seedream createPrediction error (${createResponse.status}): ${errorText}`,
       );
@@ -133,9 +136,10 @@ export class SeedreamProvider {
       }
 
       if (current.status === 'failed' || current.status === 'canceled') {
-        throw new Error(
-          `Seedream prediction ${current.status}: ${current.error ?? 'unknown error'}`,
-        );
+        const errorStr = current.error ?? 'unknown error';
+        const safetyError = ContentSafetyError.fromErrorMessage(errorStr);
+        if (safetyError) throw safetyError;
+        throw new Error(`Seedream prediction ${current.status}: ${errorStr}`);
       }
 
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -163,6 +167,8 @@ export class SeedreamProvider {
           `Seedream poll HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
         );
         if (networkFailures >= maxNetworkRetries) {
+          const safetyError = ContentSafetyError.fromErrorMessage(errorText);
+          if (safetyError) throw safetyError;
           throw new Error(
             `Seedream get prediction error (${response.status}): ${errorText}`,
           );
