@@ -215,6 +215,7 @@ export class PaymentsService {
     externalPaymentId: string,
     currency: string,
     referredByCode?: string,
+    provider: 'stripe' | 'abacatepay' = 'stripe',
   ): Promise<void> {
     const creditPackage = await this.prisma.creditPackage.findUnique({
       where: { id: packageId },
@@ -259,7 +260,7 @@ export class PaymentsService {
           amountCents,
           currency: currency.toUpperCase(),
           status: 'COMPLETED',
-          provider: 'stripe',
+          provider,
           externalPaymentId,
           creditPackageId: packageId,
         },

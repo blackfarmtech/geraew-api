@@ -33,6 +33,7 @@ import { PromptEnhancerModule } from './prompt-enhancer/prompt-enhancer.module';
 import { PromptAgentModule } from './prompt-agent/prompt-agent.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 import { PromptsModule } from './prompts/prompts.module';
+import { PromptPostsModule } from './prompt-posts/prompt-posts.module';
 import { ModelsModule } from './models/models.module';
 import { PendingGrantsModule } from './pending-grants/pending-grants.module';
 import { FeedbackModule } from './feedback/feedback.module';
@@ -101,6 +102,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     GenerationsModule,
     GalleryModule,
     PromptsModule,
+    PromptPostsModule,
     FoldersModule,
     VideoEditorModule,
     PromptEnhancerModule,

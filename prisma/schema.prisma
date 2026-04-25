@@ -372,19 +372,19 @@ model EmailVerificationToken {
 }
 
 model Feedback {
-  id            String   @id @default(cuid())
-  userId        String   @unique @map("user_id")
-  nps           Int
-  rating        Int
-  goal          String
-  goalOther     String?  @map("goal_other")
-  features      String[]
-  highlight     String
-  improve       String
-  wishlist      String
-  creditsAwarded Int     @default(0) @map("credits_awarded")
-  createdAt     DateTime @default(now()) @map("created_at")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  userId         String   @unique @map("user_id")
+  nps            Int
+  rating         Int
+  goal           String
+  goalOther      String?  @map("goal_other")
+  features       String[]
+  highlight      String
+  improve        String
+  wishlist       String
+  creditsAwarded Int      @default(0) @map("credits_awarded")
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@map("feedback")
@@ -435,22 +435,22 @@ model GenerationFolder {
 }
 
 model Affiliate {
-  id                    String                  @id @default(cuid())
-  userId                String?                 @unique @map("user_id")
-  code                  String                  @unique
+  id                    String                 @id @default(cuid())
+  userId                String?                @unique @map("user_id")
+  code                  String                 @unique
   name                  String
-  commissionPercent     Int                     @default(30) @map("commission_percent")
-  isActive              Boolean                 @default(true) @map("is_active")
-  discountPercent       Int?                    @map("discount_percent")
-  discountAppliesTo     AffiliateDiscountScope  @default(FIRST_PURCHASE) @map("discount_applies_to")
-  stripeCouponId        String?                 @map("stripe_coupon_id")
-  stripePromotionCodeId String?                 @map("stripe_promotion_code_id")
-  createdAt             DateTime                @default(now()) @map("created_at")
-  updatedAt             DateTime                @updatedAt @map("updated_at")
-  pixKey                String?                 @map("pix_key")
-  pixKeyType            PixKeyType?             @map("pix_key_type")
+  commissionPercent     Int                    @default(30) @map("commission_percent")
+  isActive              Boolean                @default(true) @map("is_active")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  pixKey                String?                @map("pix_key")
+  pixKeyType            PixKeyType?            @map("pix_key_type")
+  discountAppliesTo     AffiliateDiscountScope @default(FIRST_PURCHASE) @map("discount_applies_to")
+  discountPercent       Int?                   @map("discount_percent")
+  stripeCouponId        String?                @map("stripe_coupon_id")
+  stripePromotionCodeId String?                @map("stripe_promotion_code_id")
   earnings              AffiliateEarning[]
-  user                  User?                   @relation(fields: [userId], references: [id])
+  user                  User?                  @relation(fields: [userId], references: [id])
 
   @@index([code])
   @@map("affiliates")
@@ -545,17 +545,55 @@ model PromptTemplate {
   type         String
   prompt       String
   imageUrl     String?        @map("image_url")
-  thumbnailUrl String?        @map("thumbnail_url")
   aiModel      String?        @map("ai_model")
-  sortOrder  Int            @default(0) @map("sort_order")
-  isActive   Boolean        @default(true) @map("is_active")
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
-  category   PromptCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder    Int            @default(0) @map("sort_order")
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  thumbnailUrl String?        @map("thumbnail_url")
+  category     PromptCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@index([categoryId])
   @@index([isActive])
   @@map("prompt_templates")
+}
+
+model PromptPost {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  caption     String?
+  isPublished Boolean           @default(true) @map("is_published")
+  viewCount   Int               @default(0) @map("view_count")
+  copyCount   Int               @default(0) @map("copy_count")
+  useCount    Int               @default(0) @map("use_count")
+  createdById String?           @map("created_by_id")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  slides      PromptPostSlide[]
+
+  @@index([slug])
+  @@index([isPublished, createdAt(sort: Desc)])
+  @@map("prompt_posts")
+}
+
+model PromptPostSlide {
+  id             String         @id @default(cuid())
+  postId         String         @map("post_id")
+  order          Int            @default(0)
+  prompt         String
+  imageUrl       String         @map("image_url")
+  thumbnailUrl   String?        @map("thumbnail_url")
+  aspectRatio    String?        @map("aspect_ratio")
+  generationType GenerationType @default(TEXT_TO_IMAGE) @map("generation_type")
+  aiModel        String?        @map("ai_model")
+  copyCount      Int            @default(0) @map("copy_count")
+  useCount       Int            @default(0) @map("use_count")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  post           PromptPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, order])
+  @@map("prompt_post_slides")
 }
 
 model AiModel {
