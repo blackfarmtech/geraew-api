@@ -74,6 +74,7 @@ import { FeedbackModule } from './feedback/feedback.module';
       fallbacks: {
         'en-*': 'en',
         'pt-*': 'pt-BR',
+        'es-*': 'es',
       },
       loaderOptions: {
         path: path.join(__dirname, '/i18n/'),
