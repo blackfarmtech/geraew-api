@@ -13,6 +13,7 @@ import { WanProvider } from '../providers/wan.provider';
 import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
 import { SeedreamProvider } from '../providers/seedream.provider';
+import { GptImageProvider } from '../providers/gpt-image.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -56,6 +57,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly faceSwapProvider: FaceSwapProvider,
     private readonly veoProvider: VeoProvider,
     private readonly seedreamProvider: SeedreamProvider,
+    private readonly gptImageProvider: GptImageProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {
@@ -145,6 +147,44 @@ export class GenerationProcessor extends WorkerHost {
       return;
     }
 
+    if (data.model === 'gpt-image-2') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      try {
+        const result = await this.gptImageProvider.generateImage({
+          id: data.generationId,
+          prompt: data.prompt,
+          resolution: data.resolution,
+          aspectRatio: data.aspectRatio,
+          imageUrls,
+        });
+        await this.completeGeneration(data.generationId, result, startTime);
+      } catch (error) {
+        if (this.isSafetyRelatedError(error)) {
+          const result = await this.fallbackToSeedream(
+            data.generationId,
+            data.prompt,
+            data.aspectRatio,
+            error,
+            'processImage:gpt-image-2',
+          );
+          await this.completeGeneration(data.generationId, result, startTime);
+          return;
+        }
+        throw error;
+      }
+      return;
+    }
+
     const images = data.hasInputImages
       ? await this.loadInputImagesAsBase64(data.generationId)
       : undefined;
@@ -206,6 +246,44 @@ export class GenerationProcessor extends WorkerHost {
       });
 
       await this.completeGeneration(data.generationId, result, startTime);
+      return;
+    }
+
+    if (data.model === 'gpt-image-2') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      try {
+        const result = await this.gptImageProvider.generateImage({
+          id: data.generationId,
+          prompt: data.prompt,
+          resolution: data.resolution,
+          aspectRatio: data.aspectRatio,
+          imageUrls,
+        });
+        await this.completeGeneration(data.generationId, result, startTime);
+      } catch (error) {
+        if (this.isSafetyRelatedError(error)) {
+          const result = await this.fallbackToSeedream(
+            data.generationId,
+            data.prompt,
+            data.aspectRatio,
+            error,
+            'processImageWithFallback:gpt-image-2',
+          );
+          await this.completeGeneration(data.generationId, result, startTime);
+          return;
+        }
+        throw error;
+      }
       return;
     }
 

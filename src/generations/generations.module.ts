@@ -15,6 +15,7 @@ import { WanProvider } from './providers/wan.provider';
 import { FaceSwapProvider } from './providers/face-swap.provider';
 import { VeoProvider } from './providers/veo.provider';
 import { SeedreamProvider } from './providers/seedream.provider';
+import { GptImageProvider } from './providers/gpt-image.provider';
 import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
 import { ModelsModule } from '../models/models.module';
 
@@ -47,6 +48,7 @@ import { ModelsModule } from '../models/models.module';
     FaceSwapProvider,
     VeoProvider,
     SeedreamProvider,
+    GptImageProvider,
   ],
   exports: [GenerationsService],
 })

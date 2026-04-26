@@ -63,6 +63,8 @@ function getModelVariant(model: string | undefined | null): string | null {
     'nano-banana-2': 'NB2',
     // Sem censura
     'sem-censura': 'SEM_CENSURA',
+    // GPT Image 2 (Kie API)
+    'gpt-image-2': 'GPT_IMAGE_2',
     // GeraEW provider (video)
     'geraew-fast': 'GERAEW_FAST',
     'geraew-quality': 'GERAEW_QUALITY',
@@ -195,6 +197,14 @@ export class GenerationsService {
 
     if (dto.model === 'sem-censura') {
       await this.modelsService.assertActiveBySlug(dto.model, AiModelType.IMAGE);
+    }
+
+    if (dto.model === 'gpt-image-2') {
+      if (dto.aspect_ratio === '1:1' && dto.resolution === Resolution.RES_4K) {
+        throw new BadRequestException(
+          'GPT Image 2 não suporta 4K com proporção 1:1. Use 2K ou outra proporção.',
+        );
+      }
     }
 
     const type =
