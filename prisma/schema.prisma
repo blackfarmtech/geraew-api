@@ -43,6 +43,7 @@ model User {
   refreshTokens           RefreshToken[]
   subscriptions           Subscription[]
   freeGenerations         UserFreeGeneration[]
+  weeklyClaims            WeeklyClaim[]
   videoProjects           VideoProject[]
 
   @@index([email])
@@ -192,6 +193,39 @@ model UserFreeGeneration {
   @@unique([userId, type])
   @@index([userId])
   @@map("user_free_generations")
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  variant     String?
+  badge       String?
+  title       String
+  description String
+  imageUrl    String?  @map("image_url")
+  ctaLabel    String?  @map("cta_label")
+  ctaAction   Json?    @map("cta_action")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, sortOrder])
+  @@map("announcements")
+}
+
+model WeeklyClaim {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  weekKey   String   @map("week_key") // ISO date of Wednesday in BRT, e.g. "2026-04-29"
+  amount    Int      @default(4)
+  claimedAt DateTime @default(now()) @map("claimed_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekKey])
+  @@index([userId])
+  @@index([weekKey])
+  @@map("weekly_claims")
 }
 
 model PendingFreeGenerationGrant {

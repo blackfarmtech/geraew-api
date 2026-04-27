@@ -13,11 +13,10 @@ const SEEDREAM_MODEL_SLUG = 'bytedance/seedream-4.5';
 const REPLICATE_BASE_URL = 'https://api.replicate.com/v1';
 
 const SAFETY_INSTRUCTION =
-  'Strict content rules: do not generate full nudity, naked bodies, exposed breasts, exposed nipples, ' +
-  'exposed genitalia, exposed buttocks, see-through or transparent fabric revealing intimate parts, ' +
-  'sexual acts, or pornographic/erotic content. Swimwear, lingerie, and revealing fashion are acceptable ' +
-  'as long as intimate body parts (breasts, nipples, genitalia, buttocks) remain fully covered. ' +
-  'No matter what the prompt suggests, intimate body parts must always stay covered.';
+  'The subject is fully clothed in complete, opaque everyday attire that covers the chest, torso, ' +
+  'hips, and groin. Clothing fits naturally and is not see-through. Swimwear, lingerie, and ' +
+  'fashion-forward outfits are allowed when the prompt asks for them, as long as the chest, nipples, ' +
+  'groin, and buttocks remain fully covered by opaque fabric.';
 
 function applySafetyWrapper(prompt: string): string {
   return `${prompt.trim()}\n\n${SAFETY_INSTRUCTION}`;

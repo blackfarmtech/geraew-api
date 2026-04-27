@@ -37,6 +37,8 @@ import { PromptPostsModule } from './prompt-posts/prompt-posts.module';
 import { ModelsModule } from './models/models.module';
 import { PendingGrantsModule } from './pending-grants/pending-grants.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { RewardsModule } from './rewards/rewards.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 
 @Module({
@@ -111,6 +113,8 @@ import { FeedbackModule } from './feedback/feedback.module';
     ModelsModule,
     PendingGrantsModule,
     FeedbackModule,
+    RewardsModule,
+    AnnouncementsModule,
   ],
   controllers: [AppController],
   providers: [

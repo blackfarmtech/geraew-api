@@ -22,7 +22,7 @@ const RAW_BLOCKLIST: readonly string[] = [
   'mamilo', 'mamilos', 'nipple', 'nipples',
 
   // Atos sexuais
-  'sexo', 'sexual',
+  'sexo', 'sexual', 'sensual',
   'fuck', 'fucking',
   'foder', 'fodendo',
   'transando', 'trepando',
