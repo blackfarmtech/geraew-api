@@ -469,6 +469,7 @@ export class AdminService {
       resolution: gen.resolution,
       durationSeconds: gen.durationSeconds,
       hasAudio: gen.hasAudio,
+      modelUsed: gen.modelUsed,
       creditsConsumed: gen.creditsConsumed,
       outputUrls: gen.outputs?.map((o) => o.url) ?? [],
       errorMessage: gen.errorMessage,

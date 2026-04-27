@@ -12,6 +12,17 @@ const RESOLUTION_MAP: Record<string, string> = {
 const SEEDREAM_MODEL_SLUG = 'bytedance/seedream-4.5';
 const REPLICATE_BASE_URL = 'https://api.replicate.com/v1';
 
+const SAFETY_INSTRUCTION =
+  'Strict content rules: do not generate full nudity, naked bodies, exposed breasts, exposed nipples, ' +
+  'exposed genitalia, exposed buttocks, see-through or transparent fabric revealing intimate parts, ' +
+  'sexual acts, or pornographic/erotic content. Swimwear, lingerie, and revealing fashion are acceptable ' +
+  'as long as intimate body parts (breasts, nipples, genitalia, buttocks) remain fully covered. ' +
+  'No matter what the prompt suggests, intimate body parts must always stay covered.';
+
+function applySafetyWrapper(prompt: string): string {
+  return `${prompt.trim()}\n\n${SAFETY_INSTRUCTION}`;
+}
+
 // User-facing error messages (never expose provider name or technical detail)
 const USER_ERRORS = {
   configMissing: 'Serviço de geração indisponível no momento. Tente novamente em instantes.',
@@ -68,9 +79,11 @@ export class SeedreamProvider {
       ? (input.aspectRatio ?? 'match_input_image')
       : (input.aspectRatio ?? '1:1');
 
+    const wrappedPrompt = applySafetyWrapper(input.prompt);
+
     const body = {
       input: {
-        prompt: input.prompt,
+        prompt: wrappedPrompt,
         size,
         aspect_ratio: aspectRatio,
         sequential_image_generation: 'disabled',
@@ -81,7 +94,7 @@ export class SeedreamProvider {
     };
 
     this.logger.log(
-      `[SEEDREAM] Creating prediction: size=${size} aspectRatio=${aspectRatio} imageUrls=${input.imageUrls?.length ?? 0} prompt="${input.prompt}"`,
+      `Creating prediction: size=${size} aspectRatio=${aspectRatio} imageUrls=${input.imageUrls?.length ?? 0} prompt="${input.prompt}" (safety wrapper applied)`,
     );
 
     const createResponse = await this.fetchWithTimeout(
