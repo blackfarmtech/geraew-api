@@ -38,13 +38,15 @@ model User {
   feedback                Feedback?
   folders                 Folder[]
   generations             Generation[]
+  influencers             influencers[]
   passwordResetTokens     PasswordResetToken[]
   payments                Payment[]
   refreshTokens           RefreshToken[]
   subscriptions           Subscription[]
   freeGenerations         UserFreeGeneration[]
-  weeklyClaims            WeeklyClaim[]
   videoProjects           VideoProject[]
+  voice_profiles          voice_profiles[]
+  weeklyClaims            WeeklyClaim[]
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
@@ -67,6 +69,8 @@ model Plan {
   stripePriceId            String?        @map("stripe_price_id")
   createdAt                DateTime       @default(now()) @map("created_at")
   updatedAt                DateTime       @updatedAt @map("updated_at")
+  voice_clone_limit        Int?
+  voice_clone_professional Boolean        @default(false)
   prices                   PlanPrice[]
   subscriptions            Subscription[] @relation("currentPlan")
   scheduledSubscriptions   Subscription[] @relation("scheduledPlan")
@@ -217,7 +221,7 @@ model Announcement {
 model WeeklyClaim {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  weekKey   String   @map("week_key") // ISO date of Wednesday in BRT, e.g. "2026-04-29"
+  weekKey   String   @map("week_key")
   amount    Int      @default(4)
   claimedAt DateTime @default(now()) @map("claimed_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -293,11 +297,15 @@ model Generation {
   updatedAt              DateTime               @updatedAt @map("updated_at")
   usedFreeGeneration     Boolean                @default(false) @map("used_free_generation")
   usedFreeGenerationType FreeGenerationType?    @map("used_free_generation_type")
+  voice_profile_id       String?
+  influencer_id          String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
   inputImages            GenerationInputImage[]
   outputs                GenerationOutput[]
+  influencers            influencers?           @relation(fields: [influencer_id], references: [id])
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voice_profiles         voice_profiles?        @relation(fields: [voice_profile_id], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -305,6 +313,8 @@ model Generation {
   @@index([createdAt(sort: Desc)])
   @@index([userId, isDeleted, createdAt(sort: Desc)])
   @@index([expiresAt])
+  @@index([influencer_id])
+  @@index([voice_profile_id])
   @@map("generations")
 }
 
@@ -648,6 +658,50 @@ model AiModel {
   @@map("ai_models")
 }
 
+model influencers {
+  id               String          @id
+  user_id          String
+  name             String
+  description      String?
+  avatar_url       String?
+  voice_profile_id String?
+  is_deleted       Boolean         @default(false)
+  created_at       DateTime        @default(now())
+  updated_at       DateTime
+  image_urls       String[]        @default([])
+  generations      Generation[]
+  users            User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  voice_profiles   voice_profiles? @relation(fields: [voice_profile_id], references: [id])
+
+  @@index([user_id, is_deleted])
+  @@index([voice_profile_id])
+}
+
+model voice_profiles {
+  id                  String             @id
+  user_id             String
+  name                String
+  provider            AiModelProvider
+  external_voice_id   String
+  sample_url          String?
+  sample_expires_at   DateTime?
+  language            String             @default("pt-BR")
+  status              VoiceProfileStatus @default(READY)
+  is_deleted          Boolean            @default(false)
+  created_at          DateTime           @default(now())
+  updated_at          DateTime
+  clone_type          String             @default("INSTANT")
+  training_started_at DateTime?
+  preview_url         String?
+  generations         Generation[]
+  influencers         influencers[]
+  users               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([sample_expires_at])
+  @@index([status, clone_type])
+  @@index([user_id, is_deleted])
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -669,6 +723,8 @@ enum GenerationType {
   REFERENCE_VIDEO
   FACE_SWAP
   VIRTUAL_TRY_ON
+  SPOKEN_VIDEO
+  VOICE_CLONE
 }
 
 enum GenerationStatus {
@@ -728,6 +784,7 @@ enum GenerationImageRole {
 enum AiModelProvider {
   GERAEW
   KIE
+  ELEVENLABS
 }
 
 enum AiModelType {
@@ -757,4 +814,10 @@ enum PixKeyType {
   EMAIL
   PHONE
   RANDOM
+}
+
+enum VoiceProfileStatus {
+  TRAINING
+  READY
+  FAILED
 }

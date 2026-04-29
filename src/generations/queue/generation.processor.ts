@@ -14,6 +14,7 @@ import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
 import { SeedreamProvider } from '../providers/seedream.provider';
 import { GptImageProvider } from '../providers/gpt-image.provider';
+import { WavespeedAudioProvider } from '../providers/wavespeed-audio.provider';
 import { GenerationEventsService } from '../generation-events.service';
 import { PromptEnhancerService } from '../../prompt-enhancer/prompt-enhancer.service';
 import { ContentSafetyError } from '../errors/content-safety.error';
@@ -38,6 +39,8 @@ import {
   TextToVideoKieJobData,
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
+  TextToSpeechJobData,
+  VoiceCloneJobData,
 } from './generation-queue.constants';
 
 @Processor(GENERATION_QUEUE, {
@@ -58,6 +61,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly veoProvider: VeoProvider,
     private readonly seedreamProvider: SeedreamProvider,
     private readonly gptImageProvider: GptImageProvider,
+    private readonly wavespeedAudioProvider: WavespeedAudioProvider,
     private readonly generationEvents: GenerationEventsService,
     private readonly promptEnhancer: PromptEnhancerService,
   ) {
@@ -94,6 +98,10 @@ export class GenerationProcessor extends WorkerHost {
         return this.processImageToVideoKie(job.data as ImageToVideoKieJobData);
       case GenerationJobName.REFERENCE_TO_VIDEO_KIE:
         return this.processReferenceToVideoKie(job.data as ReferenceToVideoKieJobData);
+      case GenerationJobName.TEXT_TO_SPEECH:
+        return this.processTextToSpeech(job.data as TextToSpeechJobData);
+      case GenerationJobName.VOICE_CLONE:
+        return this.processVoiceClone(job.data as VoiceCloneJobData);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
@@ -810,6 +818,45 @@ export class GenerationProcessor extends WorkerHost {
     await this.completeGeneration(data.generationId, result, startTime);
   }
 
+  // ─── Audio process methods ──────────────────────────────────
+
+  private async processTextToSpeech(data: TextToSpeechJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[TEXT_TO_SPEECH] ${data.generationId} voice=${data.voiceId} language=${data.language ?? 'auto'} speed=${data.speed ?? 1} text="${data.text.slice(0, 80)}"`,
+    );
+
+    const result = await this.wavespeedAudioProvider.generateTextToSpeech({
+      id: data.generationId,
+      text: data.text,
+      voiceId: data.voiceId,
+      language: data.language,
+      speed: data.speed,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  private async processVoiceClone(data: VoiceCloneJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[VOICE_CLONE] ${data.generationId} audio=${data.audioUrl} language=${data.language ?? 'auto'} text="${data.text.slice(0, 80)}"`,
+    );
+
+    const result = await this.wavespeedAudioProvider.generateVoiceClone({
+      id: data.generationId,
+      text: data.text,
+      audioUrl: data.audioUrl,
+      language: data.language,
+    });
+
+    await this.completeGeneration(data.generationId, result, startTime);
+  }
+
   // ─── Safety helpers ─────────────────────────────────────────
 
   private isSafetyRelatedError(error: unknown): boolean {
@@ -1056,6 +1103,8 @@ export class GenerationProcessor extends WorkerHost {
       generation?.type === GenerationType.TEXT_TO_IMAGE ||
       generation?.type === GenerationType.IMAGE_TO_IMAGE;
 
+    const isAudio = generation?.type === GenerationType.VOICE_CLONE;
+
     // For images: generate thumbnails/blur synchronously (fast).
     // For videos: skip thumbnails now, generate them async after delivery.
     let thumbnailUrls: (string | null)[] = result.outputUrls.map(() => null);
@@ -1125,7 +1174,7 @@ export class GenerationProcessor extends WorkerHost {
     );
 
     // Fire-and-forget: generate video thumbnails + blur AFTER delivery
-    if (!isImage) {
+    if (!isImage && !isAudio) {
       this.generateVideoPostProcessing(generationId, result.outputUrls).catch(
         (err) =>
           this.logger.warn(

@@ -16,6 +16,7 @@ import { FaceSwapProvider } from './providers/face-swap.provider';
 import { VeoProvider } from './providers/veo.provider';
 import { SeedreamProvider } from './providers/seedream.provider';
 import { GptImageProvider } from './providers/gpt-image.provider';
+import { WavespeedAudioProvider } from './providers/wavespeed-audio.provider';
 import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
 import { ModelsModule } from '../models/models.module';
 
@@ -49,6 +50,7 @@ import { ModelsModule } from '../models/models.module';
     VeoProvider,
     SeedreamProvider,
     GptImageProvider,
+    WavespeedAudioProvider,
   ],
   exports: [GenerationsService],
 })

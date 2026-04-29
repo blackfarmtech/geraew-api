@@ -42,6 +42,8 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
+import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
+import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { containsNsfwContent } from './utils/nsfw-blocklist';
 
 /**
@@ -120,6 +122,8 @@ import {
   TextToVideoKieJobData,
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
+  TextToSpeechJobData,
+  VoiceCloneJobData,
 } from './queue/generation-queue.constants';
 
 type GenerationWithRelations = {
@@ -1542,6 +1546,127 @@ CRITICAL REQUIREMENTS:
     };
   }
 
+  // ─── Audio — WaveSpeed OmniVoice ─────────────────────────
+
+  async generateTextToSpeech(
+    userId: string,
+    dto: GenerateTextToSpeechDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const TTS_CREDIT_COST = 10;
+    const type = GenerationType.VOICE_CLONE;
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, TTS_CREDIT_COST);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.text,
+        modelUsed: 'wavespeed-ai/omnivoice/text-to-speech',
+        resolution: Resolution.RES_1K,
+        hasAudio: true,
+        creditsConsumed: TTS_CREDIT_COST,
+        usedFreeGeneration: false,
+        parameters: {
+          mode: 'tts',
+          voiceId: dto.voice_id,
+          language: dto.language,
+          speed: dto.speed,
+        },
+      },
+    });
+
+    await this.debitCredits(
+      userId,
+      TTS_CREDIT_COST,
+      generation.id,
+      type,
+      Resolution.RES_1K,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.TEXT_TO_SPEECH,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: TTS_CREDIT_COST,
+        text: dto.text,
+        voiceId: dto.voice_id,
+        language: dto.language,
+        speed: dto.speed,
+      } satisfies TextToSpeechJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: TTS_CREDIT_COST,
+    };
+  }
+
+  async generateVoiceClone(
+    userId: string,
+    dto: GenerateVoiceCloneDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const VOICE_CLONE_CREDIT_COST = 15;
+    const type = GenerationType.VOICE_CLONE;
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, VOICE_CLONE_CREDIT_COST);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.text,
+        modelUsed: 'wavespeed-ai/omnivoice/voice-clone',
+        resolution: Resolution.RES_1K,
+        hasAudio: true,
+        creditsConsumed: VOICE_CLONE_CREDIT_COST,
+        usedFreeGeneration: false,
+        parameters: {
+          mode: 'clone',
+          language: dto.language,
+        },
+      },
+    });
+
+    const audioUrl = await this.uploadBase64Audio(
+      dto.audio,
+      dto.audio_mime_type ?? 'audio/mpeg',
+      generation.id,
+    );
+
+    await this.debitCredits(
+      userId,
+      VOICE_CLONE_CREDIT_COST,
+      generation.id,
+      type,
+      Resolution.RES_1K,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.VOICE_CLONE,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: VOICE_CLONE_CREDIT_COST,
+        text: dto.text,
+        audioUrl,
+        language: dto.language,
+      } satisfies VoiceCloneJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: VOICE_CLONE_CREDIT_COST,
+    };
+  }
+
   // ─── Shared helpers ───────────────────────────────────────
 
   private async checkVeoAccess(
@@ -1869,5 +1994,30 @@ CRITICAL REQUIREMENTS:
       mimeType,
     );
     return publicUrl;
+  }
+
+  private async uploadBase64Audio(
+    base64: string,
+    mimeType: string,
+    generationId: string,
+  ): Promise<string> {
+    const buffer = Buffer.from(base64, 'base64');
+    const subtype = mimeType.split('/')[1] ?? 'mpeg';
+    const ext =
+      subtype.includes('wav') || subtype === 'wave'
+        ? 'wav'
+        : subtype.includes('webm')
+          ? 'webm'
+          : subtype.includes('ogg')
+            ? 'ogg'
+            : subtype.includes('mp4')
+              ? 'm4a'
+              : 'mp3';
+    return this.uploadsService.uploadBuffer(
+      buffer,
+      `inputs/${generationId}`,
+      `reference.${ext}`,
+      mimeType,
+    );
   }
 }

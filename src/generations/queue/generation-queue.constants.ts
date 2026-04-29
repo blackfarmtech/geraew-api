@@ -13,6 +13,8 @@ export enum GenerationJobName {
   TEXT_TO_VIDEO_KIE = 'text-to-video-kie',
   IMAGE_TO_VIDEO_KIE = 'image-to-video-kie',
   REFERENCE_TO_VIDEO_KIE = 'reference-to-video-kie',
+  TEXT_TO_SPEECH = 'text-to-speech',
+  VOICE_CLONE = 'voice-clone',
 }
 
 interface BaseJobData {
@@ -97,6 +99,19 @@ export interface ReferenceToVideoKieJobData extends TextToVideoKieJobData {
   imageUrls: string[];
 }
 
+export interface TextToSpeechJobData extends BaseJobData {
+  text: string;
+  voiceId: string;
+  language?: string;
+  speed?: number;
+}
+
+export interface VoiceCloneJobData extends BaseJobData {
+  text: string;
+  audioUrl: string;
+  language?: string;
+}
+
 export type GenerationJobData =
   | ImageJobData
   | ImageNanoBananaJobData
@@ -108,7 +123,9 @@ export type GenerationJobData =
   | FaceSwapJobData
   | TextToVideoKieJobData
   | ImageToVideoKieJobData
-  | ReferenceToVideoKieJobData;
+  | ReferenceToVideoKieJobData
+  | TextToSpeechJobData
+  | VoiceCloneJobData;
 
 export const IMAGE_JOB_TIMEOUT = 5 * 60 * 1000; // 5 min
 export const VIDEO_JOB_TIMEOUT = 12 * 60 * 1000; // 12 min

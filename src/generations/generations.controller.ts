@@ -43,6 +43,8 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
+import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
+import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -234,6 +236,30 @@ export class GenerationsController {
     @Body() dto: GenerateVeoKieReferenceToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateReferenceToVideoKie(userId, dto);
+  }
+
+  @Post('text-to-speech')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera áudio TTS via WaveSpeed OmniVoice (vozes padrão)' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async textToSpeech(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateTextToSpeechDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateTextToSpeech(userId, dto);
+  }
+
+  @Post('voice-clone')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Clona voz via WaveSpeed OmniVoice — gera áudio com voz de referência',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async voiceClone(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateVoiceCloneDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateVoiceClone(userId, dto);
   }
 
   @Get()
