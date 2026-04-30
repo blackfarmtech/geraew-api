@@ -687,13 +687,12 @@ model VoiceProfile {
   language    String             @default("pt-BR")
   status      VoiceProfileStatus @default(READY)
   isDeleted   Boolean            @default(false) @map("is_deleted")
-  deletedAt   DateTime?          @map("deleted_at")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deletedAt   DateTime?          @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   generations Generation[]
   influencers influencers[]
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId, isDeleted])
   @@index([deletedAt])

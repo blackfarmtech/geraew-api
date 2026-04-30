@@ -3,7 +3,6 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
@@ -13,13 +12,14 @@ import {
   PromptSectionsResponseDto,
   PromptTemplateDto,
 } from './dto/prompt-response.dto';
+import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('prompts')
-@ApiBearerAuth()
 @Controller('api/v1/prompts')
 export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Lista todas as secoes com categorias e prompts' })
   @ApiResponse({
@@ -32,6 +32,7 @@ export class PromptsController {
     return { sections };
   }
 
+  @Public()
   @Get('search')
   @ApiOperation({ summary: 'Busca prompts por titulo ou conteudo' })
   @ApiQuery({
@@ -51,6 +52,7 @@ export class PromptsController {
     return this.promptsService.searchPrompts(query || '');
   }
 
+  @Public()
   @Get(':slug')
   @ApiOperation({ summary: 'Retorna uma secao pelo slug' })
   @ApiParam({
