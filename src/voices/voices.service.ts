@@ -70,7 +70,13 @@ export class VoicesService {
         id: true,
         type: true,
         status: true,
+        prompt: true,
         parameters: true,
+        outputs: {
+          orderBy: { order: 'asc' },
+          take: 1,
+          select: { url: true, mimeType: true },
+        },
       },
     });
 
@@ -111,6 +117,26 @@ export class VoicesService {
       userId,
     );
 
+    // Copy the synthesized output (preview) to a persistent path so it survives
+    // even if the user later deletes the source generation.
+    const output = generation.outputs[0];
+    let previewUrl: string | null = null;
+    if (output?.url) {
+      try {
+        previewUrl = await this.copyPreviewToPersistent(
+          output.url,
+          output.mimeType,
+          userId,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Could not persist preview audio for voice (gen ${generation.id}): ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
+    }
+
     const voice = await this.prisma.voiceProfile.create({
       data: {
         userId,
@@ -118,6 +144,8 @@ export class VoicesService {
         provider: AiModelProvider.WAVESPEED,
         sampleUrl: persistentUrl,
         sampleMime: sampleMime ?? undefined,
+        previewUrl: previewUrl ?? undefined,
+        previewText: generation.prompt?.trim() || undefined,
         language,
         status: VoiceProfileStatus.READY,
       },
@@ -237,6 +265,28 @@ export class VoicesService {
     );
   }
 
+  private async copyPreviewToPersistent(
+    sourceUrl: string,
+    mimeType: string | null,
+    userId: string,
+  ): Promise<string> {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      throw new Error(`preview fetch failed (status ${response.status})`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType =
+      mimeType ?? response.headers.get('content-type') ?? 'audio/mpeg';
+    const ext = this.extFromMime(contentType);
+
+    return this.uploadsService.uploadBuffer(
+      buffer,
+      `voices/${userId}`,
+      `preview.${ext}`,
+      contentType,
+    );
+  }
+
   private extFromMime(mime: string): string {
     const subtype = mime.split('/')[1] ?? 'mpeg';
     if (subtype.includes('wav') || subtype === 'wave') return 'wav';
@@ -251,6 +301,9 @@ export class VoicesService {
     name: string;
     language: string;
     status: VoiceProfileStatus;
+    sampleUrl: string;
+    previewUrl: string | null;
+    previewText: string | null;
     createdAt: Date;
   }): VoiceResponseDto {
     return {
@@ -258,6 +311,9 @@ export class VoicesService {
       name: voice.name,
       language: voice.language,
       status: voice.status,
+      sampleUrl: voice.sampleUrl,
+      previewUrl: voice.previewUrl,
+      previewText: voice.previewText,
       createdAt: voice.createdAt,
     };
   }

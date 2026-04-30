@@ -52,12 +52,26 @@ export class WavespeedAudioProvider {
       'WAVESPEED_BASE_URL',
       'https://api.wavespeed.ai',
     );
-    this.apiKey = this.configService.get<string>('WAVESPEED_API_KEY', '');
+    this.apiKey = (this.configService.get<string>('WAVESPEED_API_KEY', '') ?? '').trim();
+    if (!this.apiKey) {
+      this.logger.warn(
+        'WAVESPEED_API_KEY is not set. Audio generation will fail with a 401 from the provider.',
+      );
+    }
+  }
+
+  private ensureConfigured(): void {
+    if (!this.apiKey) {
+      throw new Error(
+        'Não foi possível gerar o áudio agora. Entre em contato com o suporte.',
+      );
+    }
   }
 
   async generateTextToSpeech(
     input: WavespeedTextToSpeechInput,
   ): Promise<GenerationResult> {
+    this.ensureConfigured();
     const model = 'wavespeed-ai/omnivoice/text-to-speech';
     const body: Record<string, unknown> = {
       text: input.text,
@@ -80,6 +94,7 @@ export class WavespeedAudioProvider {
   async generateVoiceClone(
     input: WavespeedVoiceCloneInput,
   ): Promise<GenerationResult> {
+    this.ensureConfigured();
     const model = 'wavespeed-ai/omnivoice/voice-clone';
     const body: Record<string, unknown> = {
       text: input.text,
@@ -234,9 +249,23 @@ export class WavespeedAudioProvider {
   /** Maps HTTP status from WaveSpeed to a user-friendly message in pt-BR. */
   private friendlyHttpMessage(status: number, body: string): string {
     if (status === 401 || status === 403) {
-      // Often returned when the audio sample is unreachable or in an
-      // unsupported format (webm, ogg). Hint the user about format.
-      return 'Não foi possível processar o áudio de referência. Use um arquivo mp3 ou wav e tente novamente.';
+      const lower = body.toLowerCase();
+      // Auth-related failures: don't expose the cause to the user.
+      if (
+        lower.includes('unauthorized') ||
+        lower.includes('invalid') ||
+        lower.includes('api key') ||
+        lower.includes('apikey') ||
+        lower.includes('token') ||
+        lower.includes('credential') ||
+        lower.includes('forbidden')
+      ) {
+        return 'Não foi possível gerar o áudio agora. Tente novamente em alguns instantes — se persistir, entre em contato com o suporte.';
+      }
+      // Otherwise it's most likely the Bronze-tier rate limit (WaveSpeed
+      // returns 401 instead of 429 in that case) or an unreachable/unsupported
+      // reference audio.
+      return 'Não foi possível gerar o áudio agora. Pode ser limite de gerações simultâneas ou um áudio de referência incompatível (use mp3 ou wav). Aguarde alguns segundos e tente novamente.';
     }
     if (status === 413) {
       return 'O áudio de referência é muito grande. Use um arquivo menor (até 15MB).';

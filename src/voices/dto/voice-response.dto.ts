@@ -14,6 +14,15 @@ export class VoiceResponseDto {
   status: string;
 
   @ApiProperty()
+  sampleUrl: string;
+
+  @ApiProperty({ nullable: true, required: false })
+  previewUrl: string | null;
+
+  @ApiProperty({ nullable: true, required: false })
+  previewText: string | null;
+
+  @ApiProperty()
   createdAt: Date;
 }
 
