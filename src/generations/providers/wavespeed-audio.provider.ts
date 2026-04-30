@@ -102,32 +102,67 @@ export class WavespeedAudioProvider {
     model: string,
     body: Record<string, unknown>,
   ): Promise<string> {
-    const response = await this.fetchWithTimeout(
-      `${this.baseUrl}/api/v3/${model}`,
-      {
-        method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(body),
-      },
-      60_000,
+    // Retry once on transient errors (401/429/5xx). WaveSpeed occasionally
+    // returns 401 on rapid follow-up calls / concurrent requests / when their
+    // auth cache is being refreshed — a small delay is enough to recover.
+    const maxAttempts = 2;
+    const transientStatuses = new Set([401, 408, 429, 500, 502, 503, 504]);
+    let lastErrorText = '';
+    let lastStatus = 0;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await this.fetchWithTimeout(
+        `${this.baseUrl}/api/v3/${model}`,
+        {
+          method: 'POST',
+          headers: this.headers(),
+          body: JSON.stringify(body),
+        },
+        60_000,
+      );
+
+      if (response.ok) {
+        const data = (await response.json()) as CreatePredictionResponse;
+        const predictionId = data.data?.id ?? data.id;
+        if (!predictionId) {
+          this.logger.error(
+            `WaveSpeed createPrediction missing id in response: ${JSON.stringify(data)}`,
+          );
+          throw new Error(
+            'O serviço de áudio não respondeu como esperado. Tente novamente em alguns instantes.',
+          );
+        }
+        if (attempt > 1) {
+          this.logger.log(
+            `WaveSpeed prediction created on retry attempt=${attempt}: ${predictionId}`,
+          );
+        } else {
+          this.logger.log(`WaveSpeed prediction created: ${predictionId}`);
+        }
+        return predictionId;
+      }
+
+      lastStatus = response.status;
+      lastErrorText = await response.text();
+
+      const shouldRetry =
+        attempt < maxAttempts && transientStatuses.has(response.status);
+
+      if (shouldRetry) {
+        this.logger.warn(
+          `[WAVESPEED_RETRY] createPrediction attempt=${attempt}/${maxAttempts} status=${response.status} body=${lastErrorText.slice(0, 200)}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        continue;
+      }
+
+      break;
+    }
+
+    this.logger.error(
+      `WaveSpeed createPrediction failed status=${lastStatus} body=${lastErrorText}`,
     );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `WaveSpeed createPrediction error (${response.status}): ${errorText}`,
-      );
-    }
-
-    const data = (await response.json()) as CreatePredictionResponse;
-    const predictionId = data.data?.id ?? data.id;
-    if (!predictionId) {
-      throw new Error(
-        `WaveSpeed createPrediction: missing prediction id in response`,
-      );
-    }
-    this.logger.log(`WaveSpeed prediction created: ${predictionId}`);
-    return predictionId;
+    throw new Error(this.friendlyHttpMessage(lastStatus, lastErrorText));
   }
 
   private async pollPrediction(
@@ -148,29 +183,42 @@ export class WavespeedAudioProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
-          `WaveSpeed result error (${response.status}): ${errorText}`,
+        this.logger.error(
+          `WaveSpeed result failed status=${response.status} predictionId=${predictionId} body=${errorText}`,
         );
+        throw new Error(this.friendlyHttpMessage(response.status, errorText));
       }
 
       const payload = (await response.json()) as PredictionResultResponse;
       const data = payload.data;
       if (!data) {
-        throw new Error('WaveSpeed result: empty payload');
+        this.logger.error(
+          `WaveSpeed result empty payload for predictionId=${predictionId}`,
+        );
+        throw new Error(
+          'Resposta inesperada do serviço de áudio. Tente gerar de novo.',
+        );
       }
 
       if (data.status === 'completed') {
         const audioUrl = data.outputs?.[0];
         if (!audioUrl) {
-          throw new Error('WaveSpeed completed but returned no audio URL.');
+          this.logger.error(
+            `WaveSpeed completed without audio URL predictionId=${predictionId}`,
+          );
+          throw new Error(
+            'A geração foi concluída mas o áudio não pôde ser recuperado. Tente novamente.',
+          );
         }
         return audioUrl;
       }
 
       if (data.status === 'failed') {
-        throw new Error(
-          `WaveSpeed prediction failed: ${data.error ?? 'unknown error'}`,
+        const rawError = data.error ?? 'unknown error';
+        this.logger.error(
+          `WaveSpeed prediction failed predictionId=${predictionId} error=${rawError}`,
         );
+        throw new Error(this.friendlyProviderError(rawError));
       }
 
       this.logger.debug(
@@ -178,7 +226,57 @@ export class WavespeedAudioProvider {
       );
     }
 
-    throw new Error('WaveSpeed audio generation timed out.');
+    throw new Error(
+      'A geração de áudio demorou mais que o esperado. Tente um texto mais curto ou tente de novo em alguns instantes.',
+    );
+  }
+
+  /** Maps HTTP status from WaveSpeed to a user-friendly message in pt-BR. */
+  private friendlyHttpMessage(status: number, body: string): string {
+    if (status === 401 || status === 403) {
+      // Often returned when the audio sample is unreachable or in an
+      // unsupported format (webm, ogg). Hint the user about format.
+      return 'Não foi possível processar o áudio de referência. Use um arquivo mp3 ou wav e tente novamente.';
+    }
+    if (status === 413) {
+      return 'O áudio de referência é muito grande. Use um arquivo menor (até 15MB).';
+    }
+    if (status === 415) {
+      return 'Formato de áudio não suportado. Use mp3 ou wav.';
+    }
+    if (status === 429) {
+      return 'Estamos com muitas gerações simultâneas no momento. Aguarde alguns segundos e tente novamente.';
+    }
+    if (status >= 500) {
+      return 'O serviço de áudio está instável no momento. Tente novamente em alguns minutos.';
+    }
+    // Bad request or other 4xx — try to surface a hint if the body has it
+    const lower = body.toLowerCase();
+    if (lower.includes('format') || lower.includes('codec')) {
+      return 'Formato de áudio não suportado. Use mp3 ou wav.';
+    }
+    if (lower.includes('language')) {
+      return 'O idioma selecionado não está disponível para essa voz.';
+    }
+    return 'Não foi possível gerar o áudio agora. Tente novamente em alguns instantes.';
+  }
+
+  /** Maps WaveSpeed prediction.error strings to a user-friendly message. */
+  private friendlyProviderError(raw: string): string {
+    const lower = raw.toLowerCase();
+    if (lower.includes('format') || lower.includes('codec') || lower.includes('decode')) {
+      return 'O áudio de referência está em um formato que não conseguimos processar. Use mp3 ou wav.';
+    }
+    if (lower.includes('too short') || lower.includes('duration')) {
+      return 'O áudio de referência é muito curto. Use uma amostra com pelo menos 5 segundos de fala clara.';
+    }
+    if (lower.includes('language')) {
+      return 'O idioma selecionado não é suportado pela voz escolhida.';
+    }
+    if (lower.includes('content') || lower.includes('moderation') || lower.includes('safety')) {
+      return 'O conteúdo foi bloqueado pela moderação. Reformule o texto e tente novamente.';
+    }
+    return 'A geração de áudio falhou. Tente novamente — se persistir, tente outro texto ou áudio de referência.';
   }
 
   private async downloadAndUpload(
@@ -188,8 +286,11 @@ export class WavespeedAudioProvider {
   ): Promise<string> {
     const response = await this.fetchWithTimeout(sourceUrl, {}, 120_000);
     if (!response.ok) {
+      this.logger.error(
+        `Failed to download audio from WaveSpeed status=${response.status} url=${sourceUrl}`,
+      );
       throw new Error(
-        `Failed to download audio from WaveSpeed (${response.status}): ${sourceUrl}`,
+        'Falha ao baixar o áudio gerado. Tente novamente em alguns instantes.',
       );
     }
     const contentType =

@@ -45,7 +45,7 @@ model User {
   subscriptions           Subscription[]
   freeGenerations         UserFreeGeneration[]
   videoProjects           VideoProject[]
-  voice_profiles          voice_profiles[]
+  voiceProfiles           VoiceProfile[]
   weeklyClaims            WeeklyClaim[]
 
   @@index([email])
@@ -297,7 +297,7 @@ model Generation {
   updatedAt              DateTime               @updatedAt @map("updated_at")
   usedFreeGeneration     Boolean                @default(false) @map("used_free_generation")
   usedFreeGenerationType FreeGenerationType?    @map("used_free_generation_type")
-  voice_profile_id       String?
+  voiceProfileId         String?                @map("voice_profile_id")
   influencer_id          String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
@@ -305,7 +305,7 @@ model Generation {
   outputs                GenerationOutput[]
   influencers            influencers?           @relation(fields: [influencer_id], references: [id])
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voice_profiles         voice_profiles?        @relation(fields: [voice_profile_id], references: [id])
+  voiceProfile           VoiceProfile?          @relation(fields: [voiceProfileId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -314,7 +314,7 @@ model Generation {
   @@index([userId, isDeleted, createdAt(sort: Desc)])
   @@index([expiresAt])
   @@index([influencer_id])
-  @@index([voice_profile_id])
+  @@index([voiceProfileId])
   @@map("generations")
 }
 
@@ -659,47 +659,45 @@ model AiModel {
 }
 
 model influencers {
-  id               String          @id
+  id               String        @id
   user_id          String
   name             String
   description      String?
   avatar_url       String?
   voice_profile_id String?
-  is_deleted       Boolean         @default(false)
-  created_at       DateTime        @default(now())
+  is_deleted       Boolean       @default(false)
+  created_at       DateTime      @default(now())
   updated_at       DateTime
-  image_urls       String[]        @default([])
+  image_urls       String[]      @default([])
   generations      Generation[]
-  users            User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  voice_profiles   voice_profiles? @relation(fields: [voice_profile_id], references: [id])
+  users            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  voiceProfile     VoiceProfile? @relation(fields: [voice_profile_id], references: [id])
 
   @@index([user_id, is_deleted])
   @@index([voice_profile_id])
 }
 
-model voice_profiles {
-  id                  String             @id
-  user_id             String
-  name                String
-  provider            AiModelProvider
-  external_voice_id   String
-  sample_url          String?
-  sample_expires_at   DateTime?
-  language            String             @default("pt-BR")
-  status              VoiceProfileStatus @default(READY)
-  is_deleted          Boolean            @default(false)
-  created_at          DateTime           @default(now())
-  updated_at          DateTime
-  clone_type          String             @default("INSTANT")
-  training_started_at DateTime?
-  preview_url         String?
-  generations         Generation[]
-  influencers         influencers[]
-  users               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+model VoiceProfile {
+  id          String             @id @default(cuid())
+  userId      String             @map("user_id")
+  name        String
+  provider    AiModelProvider    @default(WAVESPEED)
+  sampleUrl   String             @map("sample_url")
+  sampleMime  String?            @map("sample_mime")
+  language    String             @default("pt-BR")
+  status      VoiceProfileStatus @default(READY)
+  isDeleted   Boolean            @default(false) @map("is_deleted")
+  deletedAt   DateTime?          @map("deleted_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
 
-  @@index([sample_expires_at])
-  @@index([status, clone_type])
-  @@index([user_id, is_deleted])
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations Generation[]
+  influencers influencers[]
+
+  @@index([userId, isDeleted])
+  @@index([deletedAt])
+  @@map("voice_profiles")
 }
 
 enum UserRole {
@@ -785,6 +783,7 @@ enum AiModelProvider {
   GERAEW
   KIE
   ELEVENLABS
+  WAVESPEED
 }
 
 enum AiModelType {

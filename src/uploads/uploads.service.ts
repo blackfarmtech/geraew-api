@@ -183,6 +183,46 @@ export class UploadsService {
    * Re-muxes an MP4 buffer with -movflags +faststart so the moov atom
    * is at the beginning of the file, enabling streaming playback.
    */
+  /**
+   * Transcodes any input audio buffer to MP3 (mono, 96kbps, 24kHz).
+   * Used to normalize browser-recorded webm/ogg/m4a samples before sending
+   * to providers that only accept mp3/wav (e.g. WaveSpeed OmniVoice).
+   */
+  async transcodeAudioToMp3(buffer: Buffer): Promise<Buffer> {
+    const tempDir = path.join('/tmp', `audio-${randomUUID()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const inputPath = path.join(tempDir, 'input');
+    const outputPath = path.join(tempDir, 'output.mp3');
+
+    try {
+      fs.writeFileSync(inputPath, buffer);
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputPath)
+          .audioCodec('libmp3lame')
+          .audioChannels(1)
+          .audioBitrate('96k')
+          .audioFrequency(24000)
+          .output(outputPath)
+          .on('end', () => resolve())
+          .on('error', (err: Error) => reject(err))
+          .run();
+      });
+
+      const result = fs.readFileSync(outputPath);
+      this.logger.log(
+        `Audio transcoded to mp3: ${buffer.length} → ${result.length} bytes`,
+      );
+      return result;
+    } finally {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   private async applyFaststart(buffer: Buffer): Promise<Buffer> {
     const tempDir = path.join('/tmp', `faststart-${randomUUID()}`);
     fs.mkdirSync(tempDir, { recursive: true });

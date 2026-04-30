@@ -39,6 +39,7 @@ import { PendingGrantsModule } from './pending-grants/pending-grants.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { VoicesModule } from './voices/voices.module';
 
 
 @Module({
@@ -115,6 +116,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     FeedbackModule,
     RewardsModule,
     AnnouncementsModule,
+    VoicesModule,
   ],
   controllers: [AppController],
   providers: [

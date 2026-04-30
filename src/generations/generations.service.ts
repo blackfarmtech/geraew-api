@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreditsService, resolveFreeGenerationType } from '../credits/credits.service';
 import { PlansService } from '../plans/plans.service';
 import { ModelsService } from '../models/models.service';
+import { VoicesService } from '../voices/voices.service';
 import {
   AiModelType,
   FreeGenerationType,
@@ -158,6 +159,7 @@ export class GenerationsService {
     private readonly plansService: PlansService,
     private readonly uploadsService: UploadsService,
     private readonly modelsService: ModelsService,
+    private readonly voicesService: VoicesService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
     private readonly generationProcessor: GenerationProcessor,
   ) { }
@@ -1552,6 +1554,15 @@ CRITICAL REQUIREMENTS:
     userId: string,
     dto: GenerateTextToSpeechDto,
   ): Promise<CreateGenerationResponseDto> {
+    // voiceId prefixed with `clone:` means the user picked a saved voice
+    // profile — we route to voice-clone with the persisted sample instead
+    // of a stock TTS voice. Cost is the same as TTS in this case.
+    const clonePrefix = 'clone:';
+    if (dto.voice_id.startsWith(clonePrefix)) {
+      const voiceProfileId = dto.voice_id.slice(clonePrefix.length);
+      return this.generateTtsWithSavedVoice(userId, dto, voiceProfileId);
+    }
+
     const TTS_CREDIT_COST = 10;
     const type = GenerationType.VOICE_CLONE;
 
@@ -1606,6 +1617,71 @@ CRITICAL REQUIREMENTS:
     };
   }
 
+  private async generateTtsWithSavedVoice(
+    userId: string,
+    dto: GenerateTextToSpeechDto,
+    voiceProfileId: string,
+  ): Promise<CreateGenerationResponseDto> {
+    const TTS_CREDIT_COST = 10;
+    const type = GenerationType.VOICE_CLONE;
+
+    const voice = await this.voicesService.getForUse(userId, voiceProfileId);
+    if (!voice) {
+      throw new NotFoundException(
+        'Voz salva não encontrada ou não está pronta.',
+      );
+    }
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, TTS_CREDIT_COST);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.text,
+        modelUsed: 'wavespeed-ai/omnivoice/voice-clone',
+        resolution: Resolution.RES_1K,
+        hasAudio: true,
+        creditsConsumed: TTS_CREDIT_COST,
+        usedFreeGeneration: false,
+        voiceProfileId: voice.id,
+        parameters: {
+          mode: 'tts-cloned',
+          voiceProfileId: voice.id,
+          language: dto.language ?? voice.language,
+        },
+      },
+    });
+
+    await this.debitCredits(
+      userId,
+      TTS_CREDIT_COST,
+      generation.id,
+      type,
+      Resolution.RES_1K,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.VOICE_CLONE,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: TTS_CREDIT_COST,
+        text: dto.text,
+        audioUrl: voice.sampleUrl,
+        language: dto.language ?? voice.language,
+      } satisfies VoiceCloneJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: TTS_CREDIT_COST,
+    };
+  }
+
   async generateVoiceClone(
     userId: string,
     dto: GenerateVoiceCloneDto,
@@ -1634,11 +1710,26 @@ CRITICAL REQUIREMENTS:
       },
     });
 
-    const audioUrl = await this.uploadBase64Audio(
+    const inputMime = dto.audio_mime_type ?? 'audio/mpeg';
+    const { url: audioUrl, mimeType: storedMime } = await this.uploadBase64Audio(
       dto.audio,
-      dto.audio_mime_type ?? 'audio/mpeg',
+      inputMime,
       generation.id,
     );
+
+    // Persist the sample URL so the user can later promote this clone
+    // into a saved VoiceProfile via POST /voices.
+    await this.prisma.generation.update({
+      where: { id: generation.id },
+      data: {
+        parameters: {
+          mode: 'clone',
+          language: dto.language,
+          sampleUrl: audioUrl,
+          sampleMime: storedMime,
+        },
+      },
+    });
 
     await this.debitCredits(
       userId,
@@ -2000,24 +2091,39 @@ CRITICAL REQUIREMENTS:
     base64: string,
     mimeType: string,
     generationId: string,
-  ): Promise<string> {
-    const buffer = Buffer.from(base64, 'base64');
+  ): Promise<{ url: string; mimeType: string }> {
+    let buffer: Buffer = Buffer.from(base64, 'base64');
     const subtype = mimeType.split('/')[1] ?? 'mpeg';
-    const ext =
-      subtype.includes('wav') || subtype === 'wave'
-        ? 'wav'
-        : subtype.includes('webm')
-          ? 'webm'
-          : subtype.includes('ogg')
-            ? 'ogg'
-            : subtype.includes('mp4')
-              ? 'm4a'
-              : 'mp3';
-    return this.uploadsService.uploadBuffer(
+    const isMp3 = subtype.includes('mpeg') || subtype === 'mp3';
+
+    let finalMime = mimeType;
+    let ext = 'mp3';
+
+    // WaveSpeed OmniVoice voice-clone only accepts mp3/wav. Browser recordings
+    // come in as webm (Chrome/Firefox) or m4a (Safari) — we transcode them to
+    // mp3 here so any subsequent generation works without surprise format errors.
+    if (!isMp3) {
+      try {
+        buffer = await this.uploadsService.transcodeAudioToMp3(buffer);
+        finalMime = 'audio/mpeg';
+      } catch (err) {
+        this.logger.error(
+          `Audio transcode failed for gen=${generationId}: ${(err as Error).message}`,
+        );
+        throw new BadRequestException(
+          'Não foi possível processar o áudio enviado. Tente novamente com um arquivo mp3 ou wav.',
+        );
+      }
+    }
+
+    // Use 'samples/' (not 'inputs/') so the post-generation cleanup doesn't
+    // delete it — user may want to save this voice as a profile afterward.
+    const url = await this.uploadsService.uploadBuffer(
       buffer,
-      `inputs/${generationId}`,
+      `samples/${generationId}`,
       `reference.${ext}`,
-      mimeType,
+      finalMime,
     );
+    return { url, mimeType: finalMime };
   }
 }

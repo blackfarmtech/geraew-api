@@ -19,6 +19,7 @@ import { GptImageProvider } from './providers/gpt-image.provider';
 import { WavespeedAudioProvider } from './providers/wavespeed-audio.provider';
 import { PromptEnhancerModule } from '../prompt-enhancer/prompt-enhancer.module';
 import { ModelsModule } from '../models/models.module';
+import { VoicesModule } from '../voices/voices.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ModelsModule } from '../models/models.module';
     UploadsModule,
     PromptEnhancerModule,
     ModelsModule,
+    VoicesModule,
     BullModule.registerQueue({
       name: GENERATION_QUEUE,
       defaultJobOptions: {
