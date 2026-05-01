@@ -14,11 +14,15 @@ export class SubscriptionRenewalService {
     try {
       const now = new Date();
 
+      // Apenas subs sem provedor externo (Free/internas). Subs do Stripe são
+      // renovadas pelo webhook invoice.payment_succeeded — renovar aqui daria
+      // créditos antes (ou sem) cobrar e duplicaria a entrada no ledger.
       const expiredSubscriptions = await this.prisma.subscription.findMany({
         where: {
           status: SubscriptionStatus.ACTIVE,
           currentPeriodEnd: { lte: now },
           cancelAtPeriodEnd: false,
+          paymentProvider: null,
         },
         include: { plan: true },
       });
@@ -37,12 +41,14 @@ export class SubscriptionRenewalService {
         }
       }
 
-      // Handle subscriptions that should be canceled at period end
+      // Handle subscriptions that should be canceled at period end.
+      // Para Stripe, customer.subscription.deleted (webhook) faz isso.
       const cancelingSubscriptions = await this.prisma.subscription.findMany({
         where: {
           status: SubscriptionStatus.ACTIVE,
           currentPeriodEnd: { lte: now },
           cancelAtPeriodEnd: true,
+          paymentProvider: null,
         },
       });
 

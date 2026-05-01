@@ -193,6 +193,22 @@ describe('SubscriptionRenewalService', () => {
       expect(updateCall.data.currentPeriodEnd).toEqual(expectedNewEnd);
     });
 
+    it('NÃO deve renovar subs com paymentProvider definido (Stripe é tratado pelo webhook)', async () => {
+      mockPrisma.subscription.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.handleSubscriptionRenewal();
+
+      // Confirma o filtro paymentProvider: null em ambas as queries
+      expect(mockPrisma.subscription.findMany.mock.calls[0][0].where).toEqual(
+        expect.objectContaining({ paymentProvider: null }),
+      );
+      expect(mockPrisma.subscription.findMany.mock.calls[1][0].where).toEqual(
+        expect.objectContaining({ paymentProvider: null }),
+      );
+    });
+
     it('deve resetar créditos para o valor de creditsPerMonth do plano', async () => {
       const sub = makeSubscription({
         plan: mockPlanPro,
