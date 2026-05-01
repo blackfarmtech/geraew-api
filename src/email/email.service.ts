@@ -189,6 +189,46 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  async sendAffiliatePaymentEmail(params: {
+    to: string;
+    name: string;
+    totalCents: number;
+    earningsCount: number;
+    attachment?: { filename: string; content: string; contentType?: string };
+  }): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping affiliate payment email');
+      return;
+    }
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [params.to],
+        subject: 'Suas comissões foram pagas — Geraew',
+        html: this.getAffiliatePaymentTemplate(params.name, params.totalCents, params.earningsCount),
+        ...(params.attachment && {
+          attachments: [
+            {
+              filename: params.attachment.filename,
+              content: params.attachment.content,
+              contentType: params.attachment.contentType,
+            },
+          ],
+        }),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send affiliate payment email to ${params.to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`Affiliate payment email sent to ${params.to}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send affiliate payment email: ${error.message}`);
+    }
+  }
+
   // --- Templates ---
 
   private getVerificationTemplate(_name: string, code: string): string {
@@ -470,6 +510,63 @@ export class EmailService implements OnModuleInit {
             <td style="padding: 0 40px 40px;">
               <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
               <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Este email é a confirmação da sua assinatura. Guarde-o para seus registros.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getAffiliatePaymentTemplate(
+    name: string,
+    totalCents: number,
+    earningsCount: number,
+  ): string {
+    const dashboardUrl = `${this.frontendUrl}/painel-afiliado`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+    const totalFormatted = (totalCents / 100).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+    const earningsLabel = earningsCount === 1 ? '1 comissão paga' : `${earningsCount} comissões pagas`;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Pagamento enviado, ${name}! 🎉</h1>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Suas comissões do programa de afiliados foram pagas e já estão a caminho da sua chave Pix cadastrada.</p>
+              <div style="margin: 0 0 28px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; text-align: center;">
+                <p style="margin: 0 0 4px; font-size: 13px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Valor pago</p>
+                <p style="margin: 0 0 8px; font-size: 32px; font-weight: 700; color: #1a1a1a; line-height: 1;">${totalFormatted}</p>
+                <p style="margin: 0; font-size: 13px; color: #999;">${earningsLabel}</p>
+              </div>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">O comprovante de pagamento está anexado a este email. Guarde-o para seus registros.</p>
+              <div style="margin: 0 0 0;">
+                <a href="${dashboardUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Ver painel de afiliado
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Continue divulgando e ganhando — toda nova venda gera uma nova comissão pra você.</p>
             </td>
           </tr>
         </table>

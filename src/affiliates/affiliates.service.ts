@@ -1,17 +1,22 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { PixKeyType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../payments/stripe.service';
+import { EmailService } from '../email/email.service';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
 import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
 import { UpdatePixKeyDto } from './dto/update-pix-key.dto';
+import { MarkEarningsPaidDto } from './dto/mark-paid.dto';
 import { AffiliateDiscountScope } from '@prisma/client';
 
 @Injectable()
 export class AffiliatesService {
+  private readonly logger = new Logger(AffiliatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(dto: CreateAffiliateDto) {
@@ -168,7 +173,28 @@ export class AffiliatesService {
     };
   }
 
-  async markEarningsPaid(earningIds: string[]) {
+  async markEarningsPaid(dto: MarkEarningsPaidDto) {
+    const { earningIds, receiptBase64, receiptFilename, receiptMimeType } = dto;
+
+    // Capture earnings + affiliate info before updating (so we can group by affiliate for email)
+    const earnings = await this.prisma.affiliateEarning.findMany({
+      where: { id: { in: earningIds }, status: 'PENDING' },
+      select: {
+        id: true,
+        commissionCents: true,
+        createdAt: true,
+        affiliate: {
+          select: {
+            id: true,
+            name: true,
+            pixKey: true,
+            pixKeyType: true,
+            user: { select: { email: true, name: true } },
+          },
+        },
+      },
+    });
+
     const result = await this.prisma.affiliateEarning.updateMany({
       where: {
         id: { in: earningIds },
@@ -179,6 +205,52 @@ export class AffiliatesService {
         paidAt: new Date(),
       },
     });
+
+    // Group by affiliate and dispatch one email per affiliate
+    const byAffiliate = new Map<
+      string,
+      { email: string; name: string; totalCents: number; count: number }
+    >();
+
+    for (const earning of earnings) {
+      const email = earning.affiliate.user?.email;
+      if (!email) {
+        this.logger.warn(
+          `Skipping payment email for affiliate ${earning.affiliate.id} — no linked user email`,
+        );
+        continue;
+      }
+      const current = byAffiliate.get(earning.affiliate.id) ?? {
+        email,
+        name: earning.affiliate.user?.name || earning.affiliate.name,
+        totalCents: 0,
+        count: 0,
+      };
+      current.totalCents += earning.commissionCents;
+      current.count += 1;
+      byAffiliate.set(earning.affiliate.id, current);
+    }
+
+    const attachment =
+      receiptBase64 && receiptFilename
+        ? {
+            filename: receiptFilename,
+            content: receiptBase64,
+            contentType: receiptMimeType,
+          }
+        : undefined;
+
+    await Promise.all(
+      Array.from(byAffiliate.values()).map((info) =>
+        this.emailService.sendAffiliatePaymentEmail({
+          to: info.email,
+          name: info.name,
+          totalCents: info.totalCents,
+          earningsCount: info.count,
+          attachment,
+        }),
+      ),
+    );
 
     return { updated: result.count };
   }

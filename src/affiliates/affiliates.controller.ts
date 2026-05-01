@@ -86,6 +86,6 @@ export class AffiliatesController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Marcar comissões como pagas' })
   async markPaid(@Body() dto: MarkEarningsPaidDto) {
-    return this.affiliatesService.markEarningsPaid(dto.earningIds);
+    return this.affiliatesService.markEarningsPaid(dto);
   }
 }
