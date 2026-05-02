@@ -189,6 +189,42 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  async sendPaymentFailedEmail(
+    to: string,
+    name: string,
+    planName: string,
+    attemptNumber: number,
+    maxAttempts: number,
+    canceled: boolean,
+  ): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping payment failed email');
+      return;
+    }
+
+    const subject = canceled
+      ? `Sua assinatura ${planName} foi cancelada — Geraew`
+      : `Não conseguimos cobrar sua assinatura ${planName} — Geraew`;
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject,
+        html: this.getPaymentFailedTemplate(name, planName, attemptNumber, maxAttempts, canceled),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send payment failed email to ${to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`Payment failed email sent to ${to} (canceled=${canceled})`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send payment failed email: ${error.message}`);
+    }
+  }
+
   async sendAffiliatePaymentEmail(params: {
     to: string;
     name: string;
@@ -510,6 +546,63 @@ export class EmailService implements OnModuleInit {
             <td style="padding: 0 40px 40px;">
               <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
               <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Este email é a confirmação da sua assinatura. Guarde-o para seus registros.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getPaymentFailedTemplate(
+    name: string,
+    planName: string,
+    attemptNumber: number,
+    maxAttempts: number,
+    canceled: boolean,
+  ): string {
+    const billingUrl = `${this.frontendUrl}/perfil`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+
+    const headline = canceled
+      ? `Sua assinatura ${planName} foi cancelada`
+      : `Não conseguimos cobrar sua assinatura ${planName}`;
+
+    const intro = canceled
+      ? `Olá, ${name}. Tentamos cobrar sua assinatura <strong>${maxAttempts}</strong> vezes e em todas as tentativas o pagamento foi recusado. Por isso, sua assinatura foi cancelada e sua conta voltou para o plano gratuito.`
+      : `Olá, ${name}. A cobrança da sua assinatura foi recusada (tentativa <strong>${attemptNumber} de ${maxAttempts}</strong>). Os motivos mais comuns são saldo insuficiente, cartão expirado ou bloqueio do banco.`;
+
+    const ctaLabel = canceled ? 'Reativar minha assinatura' : 'Atualizar forma de pagamento';
+    const helperText = canceled
+      ? `Você pode reassinar a qualquer momento e voltar a usar todos os recursos do plano ${planName}.`
+      : `Vamos tentar cobrar novamente nos próximos dias. Para evitar a perda de acesso, atualize seu cartão ou garanta saldo suficiente o quanto antes.`;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">${headline}</h1>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">${intro}</p>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">${helperText}</p>
+              <div style="margin: 0 0 28px;">
+                <a href="${billingUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  ${ctaLabel}
+                </a>
+              </div>
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.6;">Se precisar de ajuda, é só responder este email.</p>
             </td>
           </tr>
         </table>

@@ -446,6 +446,7 @@ export class PaymentsService {
   ): Promise<void> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { externalSubscriptionId: stripeSubscriptionId },
+      include: { plan: true, user: true },
     });
 
     if (!subscription) {
@@ -457,9 +458,10 @@ export class PaymentsService {
 
     const newRetryCount = subscription.paymentRetryCount + 1;
     const maxRetries = 3;
+    const isCanceled = newRetryCount >= maxRetries;
 
     await this.prisma.$transaction(async (tx) => {
-      if (newRetryCount >= maxRetries) {
+      if (isCanceled) {
         // Downgrade automatico apos 3 falhas: cancelar subscription
         await tx.subscription.update({
           where: { id: subscription.id },
@@ -499,13 +501,24 @@ export class PaymentsService {
       });
     });
 
-    if (newRetryCount >= maxRetries) {
+    if (isCanceled) {
       this.logger.warn(
         `Subscription ${subscription.id} canceled after ${maxRetries} failed payment attempts`,
       );
     } else {
       this.logger.warn(
         `Payment failed for subscription ${subscription.id}, retry count: ${newRetryCount}`,
+      );
+    }
+
+    if (subscription.user?.email) {
+      await this.emailService.sendPaymentFailedEmail(
+        subscription.user.email,
+        subscription.user.name,
+        subscription.plan.name,
+        newRetryCount,
+        maxRetries,
+        isCanceled,
       );
     }
   }
