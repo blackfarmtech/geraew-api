@@ -795,7 +795,7 @@ export class PromptEnhancerService {
     }
 
     const response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: SYSTEM_PROMPT,
       messages: [
@@ -973,7 +973,7 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     );
 
     const response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: PromptEnhancerService.SAFETY_REFINER_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: originalPrompt }],
@@ -1040,7 +1040,7 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     this.logger.log(`[INFLUENCER] Input: ${hasReferenceImage ? '[reference image]' : JSON.stringify(characterSelections)}`);
 
     const response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [
