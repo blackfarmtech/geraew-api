@@ -15,10 +15,10 @@ const ALLOWED_AUDIO_MIME_TYPES = [
 export class GenerateVoiceCloneDto {
   @ApiProperty({
     description: 'Texto a ser sintetizado com a voz clonada',
-    maxLength: 2000,
+    maxLength: 900,
   })
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(900)
   text: string;
 
   @ApiProperty({

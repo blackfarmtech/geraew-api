@@ -42,4 +42,21 @@ export class ModelsController {
       sortOrder: m.sortOrder,
     }));
   }
+
+  @Public()
+  @Get('audio')
+  @ApiOperation({ summary: 'Lista modelos de áudio disponíveis (público)' })
+  @ApiResponse({ status: 200, type: [AiModelResponseDto] })
+  async listAudio(): Promise<AiModelResponseDto[]> {
+    const models = await this.modelsService.listAudioModels();
+    return models.map((m) => ({
+      slug: m.slug,
+      label: m.label,
+      description: m.description,
+      provider: m.provider,
+      isActive: m.isActive,
+      statusMessage: m.statusMessage,
+      sortOrder: m.sortOrder,
+    }));
+  }
 }

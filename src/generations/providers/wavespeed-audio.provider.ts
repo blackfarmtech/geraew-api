@@ -72,6 +72,14 @@ export class WavespeedAudioProvider {
     input: WavespeedTextToSpeechInput,
   ): Promise<GenerationResult> {
     this.ensureConfigured();
+
+    if (input.voiceId.startsWith('inworld:')) {
+      return this.generateInworldTextToSpeech({
+        ...input,
+        voiceId: input.voiceId.slice('inworld:'.length),
+      });
+    }
+
     const model = 'wavespeed-ai/omnivoice/text-to-speech';
     const body: Record<string, unknown> = {
       text: input.text,
@@ -82,6 +90,27 @@ export class WavespeedAudioProvider {
 
     this.logger.log(
       `[TTS] gen=${input.id} voice=${input.voiceId} language=${input.language ?? 'auto'} speed=${input.speed ?? 1} text="${input.text.slice(0, 80)}"`,
+    );
+
+    const predictionId = await this.createPrediction(model, body);
+    const audioUrl = await this.pollPrediction(predictionId);
+    const outputUrl = await this.downloadAndUpload(audioUrl, input.id, 0);
+
+    return { outputUrls: [outputUrl], modelUsed: model };
+  }
+
+  private async generateInworldTextToSpeech(
+    input: WavespeedTextToSpeechInput,
+  ): Promise<GenerationResult> {
+    const model = 'inworld/inworld-1.5-max/text-to-speech';
+    const body: Record<string, unknown> = {
+      text: input.text,
+      voice_id: input.voiceId,
+    };
+    if (typeof input.speed === 'number') body.speaking_rate = input.speed;
+
+    this.logger.log(
+      `[TTS_INWORLD] gen=${input.id} voice=${input.voiceId} speaking_rate=${input.speed ?? 1} text="${input.text.slice(0, 80)}"`,
     );
 
     const predictionId = await this.createPrediction(model, body);

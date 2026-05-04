@@ -11,8 +11,8 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-const VARIANTS = ['feature', 'maintenance', 'promo', 'openai', 'gift'] as const;
-const ACTION_TYPES = ['open-image-panel', 'open-video-panel', 'open-weekly-claim', 'href'] as const;
+const VARIANTS = ['feature', 'maintenance', 'promo', 'openai', 'gift', 'mic'] as const;
+const ACTION_TYPES = ['open-image-panel', 'open-video-panel', 'open-audio-panel', 'open-weekly-claim', 'href'] as const;
 
 export class CtaActionDto {
   @IsIn(ACTION_TYPES)

@@ -98,12 +98,40 @@ export class GenerationProcessor extends WorkerHost {
         return this.processImageToVideoKie(job.data as ImageToVideoKieJobData);
       case GenerationJobName.REFERENCE_TO_VIDEO_KIE:
         return this.processReferenceToVideoKie(job.data as ReferenceToVideoKieJobData);
-      case GenerationJobName.TEXT_TO_SPEECH:
-        return this.processTextToSpeech(job.data as TextToSpeechJobData);
-      case GenerationJobName.VOICE_CLONE:
-        return this.processVoiceClone(job.data as VoiceCloneJobData);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
+    }
+  }
+
+  // ─── Direct audio runners (no queue) ────────────────────────
+  // Audio generations bypass BullMQ — they're fast, single-provider
+  // (WaveSpeed), and we don't want the Redis hop adding silent failure modes.
+
+  async runTextToSpeechDirectly(data: TextToSpeechJobData): Promise<void> {
+    try {
+      await this.processTextToSpeech(data);
+    } catch (error) {
+      await this.handleFailure(
+        data.generationId,
+        data.userId,
+        data.creditsConsumed,
+        error as Error,
+        data.usedFreeGeneration,
+      );
+    }
+  }
+
+  async runVoiceCloneDirectly(data: VoiceCloneJobData): Promise<void> {
+    try {
+      await this.processVoiceClone(data);
+    } catch (error) {
+      await this.handleFailure(
+        data.generationId,
+        data.userId,
+        data.creditsConsumed,
+        error as Error,
+        data.usedFreeGeneration,
+      );
     }
   }
 

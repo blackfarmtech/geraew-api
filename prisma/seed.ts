@@ -427,6 +427,42 @@ async function main() {
   console.log(`✅ Created ${imageModels.length} AI image models`);
 
   // ============================================
+  // Seed AI Models (audio)
+  // ============================================
+  console.log('🎙️  Creating AI audio models...');
+
+  const audioModels = [
+    {
+      slug: 'audio-generation',
+      label: 'Geração de áudio',
+      description:
+        'Gateway para geração de áudio (TTS Inworld 1.5 Max + clonagem OmniVoice). Desativar este modelo bloqueia todas as gerações de áudio temporariamente.',
+      provider: 'WAVESPEED' as const,
+      modelVariant: 'wavespeed/inworld+omnivoice',
+      sortOrder: 100,
+    },
+  ];
+
+  for (const model of audioModels) {
+    await prisma.aiModel.upsert({
+      where: { slug: model.slug },
+      update: {}, // não sobrescrever se admin já togou
+      create: {
+        slug: model.slug,
+        label: model.label,
+        description: model.description,
+        provider: model.provider,
+        modelVariant: model.modelVariant,
+        sortOrder: model.sortOrder,
+        type: 'AUDIO',
+        isActive: true,
+      },
+    });
+  }
+
+  console.log(`✅ Created ${audioModels.length} AI audio models`);
+
+  // ============================================
   // Seed Test Users (Development only)
   // ============================================
   if (process.env.NODE_ENV === 'development') {

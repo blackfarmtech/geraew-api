@@ -179,6 +179,28 @@ export class GenerationsService {
       );
   }
 
+  private runTextToSpeechDirectly(data: TextToSpeechJobData): void {
+    this.generationProcessor
+      .runTextToSpeechDirectly(data)
+      .catch((err) =>
+        this.logger.error(
+          `TTS direct run failed for ${data.generationId}: ${(err as Error).message}`,
+          (err as Error).stack,
+        ),
+      );
+  }
+
+  private runVoiceCloneDirectly(data: VoiceCloneJobData): void {
+    this.generationProcessor
+      .runVoiceCloneDirectly(data)
+      .catch((err) =>
+        this.logger.error(
+          `Voice clone direct run failed for ${data.generationId}: ${(err as Error).message}`,
+          (err as Error).stack,
+        ),
+      );
+  }
+
   // ─── Image generation (text-to-image / image-to-image) ────
 
   async generateImage(
@@ -1550,6 +1572,29 @@ CRITICAL REQUIREMENTS:
 
   // ─── Audio — WaveSpeed OmniVoice ─────────────────────────
 
+  /**
+   * Tabela de créditos para áudio. Threshold de 400 chars define se o texto
+   * é "curto" (até 399) ou "longo" (400+). Voice clone (criar nova ou usar
+   * voz salva) sempre usa a tabela CLONE, mais cara que TTS.
+   */
+  private static readonly AUDIO_TIER_THRESHOLD = 400;
+  private static readonly TTS_CREDIT_COST_SHORT = 35;
+  private static readonly TTS_CREDIT_COST_LONG = 45;
+  private static readonly CLONE_CREDIT_COST_SHORT = 65;
+  private static readonly CLONE_CREDIT_COST_LONG = 80;
+
+  private ttsCreditCost(textLength: number): number {
+    return textLength >= GenerationsService.AUDIO_TIER_THRESHOLD
+      ? GenerationsService.TTS_CREDIT_COST_LONG
+      : GenerationsService.TTS_CREDIT_COST_SHORT;
+  }
+
+  private cloneCreditCost(textLength: number): number {
+    return textLength >= GenerationsService.AUDIO_TIER_THRESHOLD
+      ? GenerationsService.CLONE_CREDIT_COST_LONG
+      : GenerationsService.CLONE_CREDIT_COST_SHORT;
+  }
+
   async generateTextToSpeech(
     userId: string,
     dto: GenerateTextToSpeechDto,
@@ -1563,11 +1608,12 @@ CRITICAL REQUIREMENTS:
       return this.generateTtsWithSavedVoice(userId, dto, voiceProfileId);
     }
 
-    const TTS_CREDIT_COST = 10;
+    const ttsCreditCost = this.ttsCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
 
+    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, TTS_CREDIT_COST);
+    await this.ensureSufficientBalance(userId, ttsCreditCost);
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -1578,7 +1624,7 @@ CRITICAL REQUIREMENTS:
         modelUsed: 'wavespeed-ai/omnivoice/text-to-speech',
         resolution: Resolution.RES_1K,
         hasAudio: true,
-        creditsConsumed: TTS_CREDIT_COST,
+        creditsConsumed: ttsCreditCost,
         usedFreeGeneration: false,
         parameters: {
           mode: 'tts',
@@ -1591,29 +1637,26 @@ CRITICAL REQUIREMENTS:
 
     await this.debitCredits(
       userId,
-      TTS_CREDIT_COST,
+      ttsCreditCost,
       generation.id,
       type,
       Resolution.RES_1K,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.TEXT_TO_SPEECH,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: TTS_CREDIT_COST,
-        text: dto.text,
-        voiceId: dto.voice_id,
-        language: dto.language,
-        speed: dto.speed,
-      } satisfies TextToSpeechJobData,
-    );
+    this.runTextToSpeechDirectly({
+      generationId: generation.id,
+      userId,
+      creditsConsumed: ttsCreditCost,
+      text: dto.text,
+      voiceId: dto.voice_id,
+      language: dto.language,
+      speed: dto.speed,
+    });
 
     return {
       id: generation.id,
       status: GenerationStatus.PROCESSING,
-      creditsConsumed: TTS_CREDIT_COST,
+      creditsConsumed: ttsCreditCost,
     };
   }
 
@@ -1622,8 +1665,12 @@ CRITICAL REQUIREMENTS:
     dto: GenerateTextToSpeechDto,
     voiceProfileId: string,
   ): Promise<CreateGenerationResponseDto> {
-    const TTS_CREDIT_COST = 10;
+    // TTS com voz já salva: cobra a mesma tabela das vozes padrão (TTS).
+    // O custo alto (CLONE) é só na hora de criar a voz pela primeira vez.
+    const ttsCreditCost = this.ttsCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
+
+    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
 
     const voice = await this.voicesService.getForUse(userId, voiceProfileId);
     if (!voice) {
@@ -1633,7 +1680,7 @@ CRITICAL REQUIREMENTS:
     }
 
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, TTS_CREDIT_COST);
+    await this.ensureSufficientBalance(userId, ttsCreditCost);
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -1644,7 +1691,7 @@ CRITICAL REQUIREMENTS:
         modelUsed: 'wavespeed-ai/omnivoice/voice-clone',
         resolution: Resolution.RES_1K,
         hasAudio: true,
-        creditsConsumed: TTS_CREDIT_COST,
+        creditsConsumed: ttsCreditCost,
         usedFreeGeneration: false,
         voiceProfileId: voice.id,
         parameters: {
@@ -1657,28 +1704,25 @@ CRITICAL REQUIREMENTS:
 
     await this.debitCredits(
       userId,
-      TTS_CREDIT_COST,
+      ttsCreditCost,
       generation.id,
       type,
       Resolution.RES_1K,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.VOICE_CLONE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: TTS_CREDIT_COST,
-        text: dto.text,
-        audioUrl: voice.sampleUrl,
-        language: dto.language ?? voice.language,
-      } satisfies VoiceCloneJobData,
-    );
+    this.runVoiceCloneDirectly({
+      generationId: generation.id,
+      userId,
+      creditsConsumed: ttsCreditCost,
+      text: dto.text,
+      audioUrl: voice.sampleUrl,
+      language: dto.language ?? voice.language,
+    });
 
     return {
       id: generation.id,
       status: GenerationStatus.PROCESSING,
-      creditsConsumed: TTS_CREDIT_COST,
+      creditsConsumed: ttsCreditCost,
     };
   }
 
@@ -1686,11 +1730,12 @@ CRITICAL REQUIREMENTS:
     userId: string,
     dto: GenerateVoiceCloneDto,
   ): Promise<CreateGenerationResponseDto> {
-    const VOICE_CLONE_CREDIT_COST = 15;
+    const cloneCreditCost = this.cloneCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
 
+    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
     await this.checkConcurrentLimit(userId);
-    await this.ensureSufficientBalance(userId, VOICE_CLONE_CREDIT_COST);
+    await this.ensureSufficientBalance(userId, cloneCreditCost);
 
     const generation = await this.prisma.generation.create({
       data: {
@@ -1701,7 +1746,7 @@ CRITICAL REQUIREMENTS:
         modelUsed: 'wavespeed-ai/omnivoice/voice-clone',
         resolution: Resolution.RES_1K,
         hasAudio: true,
-        creditsConsumed: VOICE_CLONE_CREDIT_COST,
+        creditsConsumed: cloneCreditCost,
         usedFreeGeneration: false,
         parameters: {
           mode: 'clone',
@@ -1733,28 +1778,25 @@ CRITICAL REQUIREMENTS:
 
     await this.debitCredits(
       userId,
-      VOICE_CLONE_CREDIT_COST,
+      cloneCreditCost,
       generation.id,
       type,
       Resolution.RES_1K,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.VOICE_CLONE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: VOICE_CLONE_CREDIT_COST,
-        text: dto.text,
-        audioUrl,
-        language: dto.language,
-      } satisfies VoiceCloneJobData,
-    );
+    this.runVoiceCloneDirectly({
+      generationId: generation.id,
+      userId,
+      creditsConsumed: cloneCreditCost,
+      text: dto.text,
+      audioUrl,
+      language: dto.language,
+    });
 
     return {
       id: generation.id,
       status: GenerationStatus.PROCESSING,
-      creditsConsumed: VOICE_CLONE_CREDIT_COST,
+      creditsConsumed: cloneCreditCost,
     };
   }
 

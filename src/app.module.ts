@@ -40,6 +40,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { VoicesModule } from './voices/voices.module';
+import { InworldVoicesModule } from './inworld-voices/inworld-voices.module';
 
 
 @Module({
@@ -117,6 +118,7 @@ import { VoicesModule } from './voices/voices.module';
     RewardsModule,
     AnnouncementsModule,
     VoicesModule,
+    InworldVoicesModule,
   ],
   controllers: [AppController],
   providers: [

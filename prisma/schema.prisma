@@ -790,6 +790,7 @@ enum AiModelProvider {
 enum AiModelType {
   VIDEO
   IMAGE
+  AUDIO
 }
 
 enum FreeGenerationType {

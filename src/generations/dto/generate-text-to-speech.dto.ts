@@ -10,9 +10,9 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GenerateTextToSpeechDto {
-  @ApiProperty({ description: 'Texto a ser sintetizado em fala', maxLength: 2000 })
+  @ApiProperty({ description: 'Texto a ser sintetizado em fala', maxLength: 900 })
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(900)
   text: string;
 
   @ApiProperty({ description: 'ID da voz padrão a ser usada' })
