@@ -139,8 +139,15 @@ export class PlansService {
       total = cost.creditsPerUnit * durationSeconds;
     }
 
-    // 1-4 vídeos custam o mesmo (preço de 1)
-    const effectiveSamples = sampleCount <= 4 ? 1 : sampleCount;
+    // Modelos Veo (GERAEW_FAST / GERAEW_QUALITY) cobram proporcional ao sampleCount.
+    // Demais modelos mantêm a regra: 1-4 amostras custam o mesmo (preço de 1).
+    const isVeoVideo =
+      modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
+    const effectiveSamples = isVeoVideo
+      ? sampleCount
+      : sampleCount <= 4
+        ? 1
+        : sampleCount;
     return total * Math.max(effectiveSamples, 1);
   }
 
