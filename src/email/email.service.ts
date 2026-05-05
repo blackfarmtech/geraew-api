@@ -265,6 +265,71 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  // --- Raw senders (usados pelo módulo admin-emails para broadcasts) ---
+
+  /**
+   * Envia 1 email avulso já com HTML pronto (sem template wrapper).
+   * O caller é responsável por compor o HTML final.
+   */
+  async sendRawEmail(params: {
+    to: string;
+    subject: string;
+    html: string;
+  }): Promise<{ id: string | null }> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping raw email');
+      return { id: null };
+    }
+    const { data, error } = await this.client.emails.send({
+      from: this.fromEmail,
+      to: [params.to],
+      subject: params.subject,
+      html: params.html,
+    });
+    if (error) {
+      throw new Error(`Resend error: ${JSON.stringify(error)}`);
+    }
+    return { id: data?.id ?? null };
+  }
+
+  /**
+   * Envia em batch via Resend (até 100 por chamada). Retorna o array de
+   * resultados na mesma ordem dos inputs.
+   */
+  async sendBatchEmails(
+    items: Array<{ to: string; subject: string; html: string }>,
+  ): Promise<Array<{ id: string | null; error: string | null }>> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping batch');
+      return items.map(() => ({ id: null, error: 'email service not configured' }));
+    }
+    if (!items.length) return [];
+
+    const payload = items.map((it) => ({
+      from: this.fromEmail,
+      to: [it.to],
+      subject: it.subject,
+      html: it.html,
+    }));
+
+    try {
+      const { data, error } = await this.client.batch.send(payload);
+      if (error) {
+        // Falha do batch inteiro — retorna erro pra cada item
+        const msg = JSON.stringify(error);
+        return items.map(() => ({ id: null, error: msg }));
+      }
+      const results = data?.data ?? [];
+      return items.map((_, i) => ({
+        id: results[i]?.id ?? null,
+        error: results[i]?.id ? null : 'no id returned',
+      }));
+    } catch (error: any) {
+      const msg = error?.message ?? 'unknown';
+      return items.map(() => ({ id: null, error: msg }));
+    }
+  }
+
   // --- Templates ---
 
   private getVerificationTemplate(_name: string, code: string): string {

@@ -41,6 +41,8 @@ import { RewardsModule } from './rewards/rewards.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { VoicesModule } from './voices/voices.module';
 import { InworldVoicesModule } from './inworld-voices/inworld-voices.module';
+import { AdminEmailsModule } from './admin-emails/admin-emails.module';
+import { ResendWebhooksModule } from './resend-webhooks/resend-webhooks.module';
 
 
 @Module({
@@ -119,6 +121,8 @@ import { InworldVoicesModule } from './inworld-voices/inworld-voices.module';
     AnnouncementsModule,
     VoicesModule,
     InworldVoicesModule,
+    AdminEmailsModule,
+    ResendWebhooksModule,
   ],
   controllers: [AppController],
   providers: [

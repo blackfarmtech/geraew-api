@@ -30,6 +30,7 @@ model User {
   currency                String                   @default("BRL")
   locale                  String                   @default("pt-BR")
   timezone                String?
+  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
   affiliateEarnings       AffiliateEarning[]       @relation("referred_user_earnings")
   affiliate               Affiliate?
   creditBalance           CreditBalance?
@@ -701,6 +702,55 @@ model VoiceProfile {
   @@map("voice_profiles")
 }
 
+model EmailBroadcast {
+  id              String                       @id @default(cuid())
+  subject         String
+  bodyMarkdown    String                       @map("body_markdown")
+  bodyHtml        String                       @map("body_html")
+  recipientType   EmailBroadcastRecipientType  @map("recipient_type")
+  recipientFilter Json?                        @map("recipient_filter")
+  totalRecipients Int                          @default(0) @map("total_recipients")
+  sentCount       Int                          @default(0) @map("sent_count")
+  failedCount     Int                          @default(0) @map("failed_count")
+  status          EmailBroadcastStatus         @default(PENDING)
+  triggeredById   String                       @map("triggered_by_id")
+  triggeredBy     User                         @relation("admin_email_broadcasts", fields: [triggeredById], references: [id])
+  startedAt       DateTime?                    @map("started_at")
+  completedAt     DateTime?                    @map("completed_at")
+  errorMessage    String?                      @map("error_message")
+  createdAt       DateTime                     @default(now()) @map("created_at")
+  updatedAt       DateTime                     @updatedAt @map("updated_at")
+  recipients      EmailBroadcastRecipient[]
+
+  @@index([triggeredById])
+  @@index([status])
+  @@map("email_broadcasts")
+}
+
+model EmailBroadcastRecipient {
+  id            String                       @id @default(cuid())
+  broadcastId   String                       @map("broadcast_id")
+  broadcast     EmailBroadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  email         String
+  userId        String?                      @map("user_id")
+  name          String?
+  plan          String?
+  status        EmailBroadcastDeliveryStatus @default(PENDING)
+  resendEmailId String?                      @map("resend_email_id")
+  errorMessage  String?                      @map("error_message")
+  deliveredAt   DateTime?                    @map("delivered_at")
+  openedAt      DateTime?                    @map("opened_at")
+  clickedAt     DateTime?                    @map("clicked_at")
+  bouncedAt     DateTime?                    @map("bounced_at")
+  createdAt     DateTime                     @default(now()) @map("created_at")
+  updatedAt     DateTime                     @updatedAt @map("updated_at")
+
+  @@index([broadcastId])
+  @@index([email])
+  @@index([resendEmailId])
+  @@map("email_broadcast_recipients")
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -821,4 +871,31 @@ enum VoiceProfileStatus {
   TRAINING
   READY
   FAILED
+}
+
+enum EmailBroadcastRecipientType {
+  ALL
+  ALL_PAID
+  BY_PLAN
+  CUSTOM_LIST
+  SINGLE
+}
+
+enum EmailBroadcastStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIAL_FAILURE
+  FAILED
+}
+
+enum EmailBroadcastDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
 }
