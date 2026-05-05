@@ -375,10 +375,10 @@ async function main() {
   console.log('🎬 Creating AI video models...');
 
   const videoModels = [
-    { slug: 'geraew-quality', label: 'Geraew Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 0 },
-    { slug: 'geraew-fast',    label: 'Geraew Fast',    provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST',    sortOrder: 1 },
-    { slug: 'veo3',           label: 'Veo 3.1 Quality', provider: 'KIE' as const,   modelVariant: 'VEO_MAX',        sortOrder: 2 },
-    { slug: 'veo3_fast',      label: 'Veo 3.1 Fast',    provider: 'KIE' as const,   modelVariant: 'VEO_FAST',       sortOrder: 3 },
+    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 0 },
+    { slug: 'geraew-fast',    label: 'Veo 3.1 Fast',    provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST',    sortOrder: 1 },
+    { slug: 'veo3',           label: 'Geraew Quality',  provider: 'KIE' as const,    modelVariant: 'VEO_MAX',        sortOrder: 2 },
+    { slug: 'veo3_fast',      label: 'Geraew Fast',     provider: 'KIE' as const,    modelVariant: 'VEO_FAST',       sortOrder: 3 },
   ];
 
   for (const model of videoModels) {

@@ -412,7 +412,7 @@ export class EmailService implements OnModuleInit {
                   <li>1 generación Nano Banana Pro</li>
                   <li>1 Face Swap</li>
                   <li>1 Virtual Try-On</li>
-                  <li>1 Geraew Fast</li>
+                  <li>1 Veo 3.1 Fast</li>
                   <li>1 Upscale</li>
                 </ul>
               </div>

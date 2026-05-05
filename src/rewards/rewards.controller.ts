@@ -13,7 +13,7 @@ export class RewardsController {
   constructor(private readonly rewardsService: RewardsService) {}
 
   @Get('weekly-claim')
-  @ApiOperation({ summary: 'Status do resgate semanal de gerações Geraew Fast' })
+  @ApiOperation({ summary: 'Status do resgate semanal de gerações Veo 3.1 Fast' })
   async getStatus(@CurrentUser() user: JwtPayload) {
     return this.rewardsService.getWeeklyClaimStatus(user.sub);
   }
