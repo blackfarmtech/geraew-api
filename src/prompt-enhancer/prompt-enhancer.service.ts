@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
 import * as sharp from 'sharp';
 import { EnhanceInfluencerDto } from './dto/enhance-influencer.dto';
+import { GeraewChatClient, ChatPart } from './geraew-chat.client';
 
 /*
  * ─────────────────────────────────────────────────────────────────────────────
@@ -712,15 +711,10 @@ export interface GenerationContext {
 @Injectable()
 export class PromptEnhancerService {
   private readonly logger = new Logger(PromptEnhancerService.name);
-  private anthropic: Anthropic;
 
   private static readonly MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5MB to stay safely under 5MB limit
 
-  constructor(private configService: ConfigService) {
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
-  }
+  constructor(private readonly chatClient: GeraewChatClient) {}
 
   private async compressImageForVision(
     base64Data: string,
@@ -773,42 +767,30 @@ export class PromptEnhancerService {
       textMessage = `${contextParts.join(' ')}\n\nUser prompt: ${prompt}`;
     }
 
-    // Build multimodal content if images are provided
-    let userContent: Anthropic.MessageCreateParams['messages'][0]['content'] = textMessage;
+    // Build multimodal parts if images are provided
+    const parts: ChatPart[] = [];
 
     if (images && images.length > 0) {
       const compressedImages = await Promise.all(
         images.map((img) => this.compressImageForVision(img.base64)),
       );
-
-      userContent = [
-        ...compressedImages.map((img) => ({
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: img.mime_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: img.base64,
-          },
-        })),
-        { type: 'text' as const, text: textMessage },
-      ];
+      for (const img of compressedImages) {
+        parts.push({ inline_data: { base64: img.base64, mime_type: img.mime_type } });
+      }
     }
+    parts.push({ text: textMessage });
 
-    const response = await this.anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-      system: SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content: userContent },
-      ],
+    const response = await this.chatClient.chat({
+      system_instruction: SYSTEM_PROMPT,
+      max_output_tokens: 1500,
       temperature: 0.7,
+      messages: [{ role: 'user', parts }],
     });
 
-    const content = response.content[0];
-    const rawText = content.type === 'text' ? content.text.trim() : '';
+    const rawText = (response.text || '').trim();
 
     if (!rawText) {
-      this.logger.warn('Anthropic returned empty response for prompt enhancement');
+      this.logger.warn('Geraew chat returned empty response for prompt enhancement');
       return { prompt, negativePrompt: '' };
     }
 
@@ -825,7 +807,7 @@ export class PromptEnhancerService {
         negativePrompt: parsed.negativePrompt || '',
       };
     } catch {
-      this.logger.warn(`Anthropic returned non-JSON response: ${cleaned}`);
+      this.logger.warn(`Geraew chat returned non-JSON response: ${cleaned}`);
       // Fallback: use the raw text as prompt
       return { prompt: cleaned, negativePrompt: '' };
     }
@@ -972,20 +954,17 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
       `[SAFETY REFINER] Refining prompt blocked by safety filters`,
     );
 
-    const response = await this.anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-      system: PromptEnhancerService.SAFETY_REFINER_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: originalPrompt }],
+    const response = await this.chatClient.chat({
+      system_instruction: PromptEnhancerService.SAFETY_REFINER_SYSTEM_PROMPT,
+      max_output_tokens: 1500,
       temperature: 0.7,
+      messages: [{ role: 'user', parts: [{ text: originalPrompt }] }],
     });
 
-    const content = response.content[0];
-    const refinedPrompt =
-      content.type === 'text' ? content.text.trim() : '';
+    const refinedPrompt = (response.text || '').trim();
 
     if (!refinedPrompt) {
-      this.logger.warn('[SAFETY REFINER] Empty response from Claude');
+      this.logger.warn('[SAFETY REFINER] Empty response from Geraew chat');
       return null;
     }
 
@@ -1010,7 +989,7 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     this.logger.log(`[INFLUENCER] Has reference image: ${hasReferenceImage}`);
 
     let systemPrompt = INFLUENCER_SYSTEM_PROMPT;
-    const messageContent: Anthropic.Messages.ContentBlockParam[] = [];
+    const parts: ChatPart[] = [];
 
     if (hasReferenceImage) {
       // Compress the reference image for vision
@@ -1018,44 +997,34 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
 
       systemPrompt = INFLUENCER_SYSTEM_PROMPT + `\n\n## REFERENCE IMAGE MODE\n\nThe user has provided a reference image instead of selecting characteristics manually. You MUST:\n1. Analyze the person in the reference image carefully\n2. Generate a NEW, ORIGINAL character inspired by the person in the image\n3. Capture the overall aesthetic, facial structure, and vibe but create a UNIQUE individual — NOT a copy or clone\n4. Retain the general energy, style, and look while introducing subtle differences\n5. IGNORE the characterSelections JSON — use ONLY the reference image as inspiration\n6. Still follow ALL other rules (candid iPhone photo, variety, eye contact, etc.)\n7. NEVER use words like: deepfake, clone, replica, copy, identical, same person`;
 
-      messageContent.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: (compressed.mime_type || referenceImageMimeType || 'image/png') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: compressed.base64,
+      parts.push({
+        inline_data: {
+          base64: compressed.base64,
+          mime_type: compressed.mime_type || referenceImageMimeType || 'image/png',
         },
       });
-      messageContent.push({
-        type: 'text',
+      parts.push({
         text: 'Generate a new, original character inspired by the person in this reference image. Capture a similar overall aesthetic, facial structure, and vibe, but create a unique individual — not a copy. Retain the general energy and style while introducing subtle differences that make this person distinctly their own.',
       });
     } else {
-      messageContent.push({
-        type: 'text',
-        text: JSON.stringify(characterSelections),
-      });
+      parts.push({ text: JSON.stringify(characterSelections) });
     }
 
     this.logger.log(`[INFLUENCER] Input: ${hasReferenceImage ? '[reference image]' : JSON.stringify(characterSelections)}`);
 
-    const response = await this.anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: messageContent },
-      ],
+    const response = await this.chatClient.chat({
+      system_instruction: systemPrompt,
+      max_output_tokens: 2000,
       temperature: 1.0,
+      messages: [{ role: 'user', parts }],
     });
 
-    const content = response.content[0];
-    let result = content.type === 'text' ? content.text.trim() : '';
+    let result = (response.text || '').trim();
 
-    this.logger.log(`[INFLUENCER] Raw Anthropic response: ${result}`);
+    this.logger.log(`[INFLUENCER] Raw Geraew chat response: ${result}`);
 
     if (!result) {
-      this.logger.warn('[INFLUENCER] Anthropic returned empty response');
+      this.logger.warn('[INFLUENCER] Geraew chat returned empty response');
       throw new Error('Failed to generate influencer prompt');
     }
 
