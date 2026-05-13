@@ -43,6 +43,7 @@ import { VoicesModule } from './voices/voices.module';
 import { InworldVoicesModule } from './inworld-voices/inworld-voices.module';
 import { AdminEmailsModule } from './admin-emails/admin-emails.module';
 import { ResendWebhooksModule } from './resend-webhooks/resend-webhooks.module';
+import { AvatarsModule } from './avatars/avatars.module';
 
 
 @Module({
@@ -123,6 +124,7 @@ import { ResendWebhooksModule } from './resend-webhooks/resend-webhooks.module';
     InworldVoicesModule,
     AdminEmailsModule,
     ResendWebhooksModule,
+    AvatarsModule,
   ],
   controllers: [AppController],
   providers: [

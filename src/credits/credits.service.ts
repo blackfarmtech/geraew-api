@@ -357,6 +357,168 @@ export class CreditsService {
     });
   }
 
+  /**
+   * Debit credits for avatar training. Symmetric to debit() but the resulting
+   * transactions link to userAvatarId instead of generationId, with type
+   * AVATAR_TRAINING_DEBIT so it shows up separately in the user's history.
+   */
+  async debitForAvatar(
+    userId: string,
+    amount: number,
+    userAvatarId: string,
+    description?: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const [balance] = await tx.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
+        userId,
+      );
+
+      if (!balance) {
+        throw new NotFoundException('Saldo de créditos não encontrado');
+      }
+
+      const totalAvailable =
+        balance.plan_credits_remaining + balance.bonus_credits_remaining;
+
+      if (totalAvailable < amount) {
+        throw new BadRequestException({
+          code: 'INSUFFICIENT_CREDITS',
+          message: `Créditos insuficientes. Necessário: ${amount}, disponível: ${totalAvailable}.`,
+          statusCode: 402,
+        });
+      }
+
+      let remainingDebit = amount;
+      let planDebit = 0;
+      let bonusDebit = 0;
+
+      if (balance.plan_credits_remaining >= remainingDebit) {
+        planDebit = remainingDebit;
+        remainingDebit = 0;
+      } else {
+        planDebit = balance.plan_credits_remaining;
+        remainingDebit -= planDebit;
+        bonusDebit = remainingDebit;
+      }
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          planCreditsRemaining: balance.plan_credits_remaining - planDebit,
+          bonusCreditsRemaining: balance.bonus_credits_remaining - bonusDebit,
+          planCreditsUsed: balance.plan_credits_used + planDebit,
+        },
+      });
+
+      if (planDebit > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.AVATAR_TRAINING_DEBIT,
+            amount: -planDebit,
+            source: 'plan',
+            description: description || `Treinamento de avatar — ${planDebit} créditos do plano`,
+            userAvatarId,
+          },
+        });
+      }
+
+      if (bonusDebit > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.AVATAR_TRAINING_DEBIT,
+            amount: -bonusDebit,
+            source: 'bonus',
+            description: description || `Treinamento de avatar — ${bonusDebit} créditos bônus`,
+            userAvatarId,
+          },
+        });
+      }
+    });
+  }
+
+  /**
+   * Refund credits for a failed avatar training. Looks up the original
+   * AVATAR_TRAINING_DEBIT transactions for the avatar and reverses them
+   * to the same buckets (plan/bonus). If no debit found, falls back to bonus.
+   */
+  async refundForAvatar(
+    userId: string,
+    userAvatarId: string,
+    amount: number,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const debitTransactions = await tx.creditTransaction.findMany({
+        where: {
+          userAvatarId,
+          type: CreditTransactionType.AVATAR_TRAINING_DEBIT,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      let planRefund = 0;
+      let bonusRefund = 0;
+
+      for (const debit of debitTransactions) {
+        if (debit.source === 'plan') {
+          planRefund += Math.abs(debit.amount);
+        } else {
+          bonusRefund += Math.abs(debit.amount);
+        }
+      }
+
+      if (debitTransactions.length === 0) {
+        bonusRefund = amount;
+      }
+
+      const [balance] = await tx.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
+        userId,
+      );
+
+      if (!balance) {
+        throw new NotFoundException('Saldo de créditos não encontrado');
+      }
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          planCreditsRemaining: balance.plan_credits_remaining + planRefund,
+          bonusCreditsRemaining: balance.bonus_credits_remaining + bonusRefund,
+          planCreditsUsed: balance.plan_credits_used - planRefund,
+        },
+      });
+
+      if (planRefund > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.AVATAR_TRAINING_REFUND,
+            amount: planRefund,
+            source: 'plan',
+            description: `Estorno de treinamento de avatar — ${planRefund} créditos do plano`,
+            userAvatarId,
+          },
+        });
+      }
+
+      if (bonusRefund > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.AVATAR_TRAINING_REFUND,
+            amount: bonusRefund,
+            source: 'bonus',
+            description: `Estorno de treinamento de avatar — ${bonusRefund} créditos bônus`,
+            userAvatarId,
+          },
+        });
+      }
+    });
+  }
+
   async hasFreeGeneration(
     userId: string,
     type: FreeGenerationType,

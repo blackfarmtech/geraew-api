@@ -4,6 +4,7 @@ import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 export enum UploadPurpose {
   GENERATION_INPUT = 'generation_input',
   REFERENCE_VIDEO = 'reference_video',
+  AVATAR_SOURCE = 'avatar_source',
 }
 
 const ALLOWED_CONTENT_TYPES = [

@@ -47,6 +47,7 @@ model User {
   freeGenerations         UserFreeGeneration[]
   videoProjects           VideoProject[]
   voiceProfiles           VoiceProfile[]
+  userAvatars             UserAvatar[]
   weeklyClaims            WeeklyClaim[]
 
   @@index([email])
@@ -72,6 +73,8 @@ model Plan {
   updatedAt                DateTime       @updatedAt @map("updated_at")
   voice_clone_limit        Int?
   voice_clone_professional Boolean        @default(false)
+  avatar_clone_enabled     Boolean        @default(false)
+  avatar_clone_limit       Int            @default(0)
   prices                   PlanPrice[]
   subscriptions            Subscription[] @relation("currentPlan")
   scheduledSubscriptions   Subscription[] @relation("scheduledPlan")
@@ -249,22 +252,25 @@ model PendingFreeGenerationGrant {
 }
 
 model CreditTransaction {
-  id           String                @id @default(cuid())
-  userId       String                @map("user_id")
-  type         CreditTransactionType
-  amount       Int
-  source       String                @default("plan")
-  description  String?
-  generationId String?               @map("generation_id")
-  paymentId    String?               @map("payment_id")
-  metadata     Json?
-  createdAt    DateTime              @default(now()) @map("created_at")
-  generation   Generation?           @relation(fields: [generationId], references: [id])
-  payment      Payment?              @relation(fields: [paymentId], references: [id])
-  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String                @id @default(cuid())
+  userId        String                @map("user_id")
+  type          CreditTransactionType
+  amount        Int
+  source        String                @default("plan")
+  description   String?
+  generationId  String?               @map("generation_id")
+  userAvatarId  String?               @map("user_avatar_id")
+  paymentId     String?               @map("payment_id")
+  metadata      Json?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  generation    Generation?           @relation(fields: [generationId], references: [id])
+  userAvatar    UserAvatar?           @relation(fields: [userAvatarId], references: [id])
+  payment       Payment?              @relation(fields: [paymentId], references: [id])
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([generationId])
+  @@index([userAvatarId])
   @@index([type])
   @@index([createdAt])
   @@map("credit_transactions")
@@ -299,6 +305,7 @@ model Generation {
   usedFreeGeneration     Boolean                @default(false) @map("used_free_generation")
   usedFreeGenerationType FreeGenerationType?    @map("used_free_generation_type")
   voiceProfileId         String?                @map("voice_profile_id")
+  userAvatarId           String?                @map("user_avatar_id")
   influencer_id          String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
@@ -307,6 +314,7 @@ model Generation {
   influencers            influencers?           @relation(fields: [influencer_id], references: [id])
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   voiceProfile           VoiceProfile?          @relation(fields: [voiceProfileId], references: [id])
+  userAvatar             UserAvatar?            @relation("avatar_generations", fields: [userAvatarId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -316,6 +324,7 @@ model Generation {
   @@index([expiresAt])
   @@index([influencer_id])
   @@index([voiceProfileId])
+  @@index([userAvatarId])
   @@map("generations")
 }
 
@@ -702,6 +711,55 @@ model VoiceProfile {
   @@map("voice_profiles")
 }
 
+model UserAvatar {
+  id                  String              @id @default(cuid())
+  userId              String              @map("user_id")
+  name                String
+  provider            AiModelProvider     @default(HEYGEN)
+  status              AvatarStatus        @default(PENDING)
+
+  // HeyGen identifiers
+  heygenLookId        String?             @unique @map("heygen_look_id")
+  heygenGroupId       String?             @unique @map("heygen_group_id")
+
+  // Consent flow (HeyGen redirects user to a consent page)
+  consentStatus       AvatarConsentStatus @default(NOT_REQUIRED) @map("consent_status")
+  consentUrl          String?             @map("consent_url")
+  consentApprovedAt   DateTime?           @map("consent_approved_at") @db.Timestamptz(6)
+
+  // Source media (audit + preview)
+  sourceVideoKey      String              @map("source_video_key")
+  sourceVideoUrl      String              @map("source_video_url")
+  previewImageUrl     String?             @map("preview_image_url")
+  previewVideoUrl     String?             @map("preview_video_url")
+
+  // HeyGen capabilities (cached at READY time)
+  defaultVoiceId      String?             @map("default_voice_id")
+  supportedEngines    String[]            @default([]) @map("supported_engines")
+
+  // Cost & error
+  creditsConsumed     Int                 @default(0) @map("credits_consumed")
+  errorMessage        String?             @map("error_message")
+  errorCode           String?             @map("error_code")
+
+  // Lifecycle
+  trainingStartedAt   DateTime?           @map("training_started_at") @db.Timestamptz(6)
+  trainingCompletedAt DateTime?           @map("training_completed_at") @db.Timestamptz(6)
+  isDeleted           Boolean             @default(false) @map("is_deleted")
+  deletedAt           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  generations         Generation[]        @relation("avatar_generations")
+  creditTransactions  CreditTransaction[]
+
+  @@index([userId, isDeleted])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("user_avatars")
+}
+
 model EmailBroadcast {
   id              String                       @id @default(cuid())
   subject         String
@@ -774,6 +832,7 @@ enum GenerationType {
   VIRTUAL_TRY_ON
   SPOKEN_VIDEO
   VOICE_CLONE
+  AVATAR_VIDEO
 }
 
 enum GenerationStatus {
@@ -792,6 +851,8 @@ enum CreditTransactionType {
   ADMIN_ADJUSTMENT
   ONBOARDING_BONUS
   FEEDBACK_REWARD
+  AVATAR_TRAINING_DEBIT
+  AVATAR_TRAINING_REFUND
 }
 
 enum PaymentStatus {
@@ -835,6 +896,7 @@ enum AiModelProvider {
   KIE
   ELEVENLABS
   WAVESPEED
+  HEYGEN
 }
 
 enum AiModelType {
@@ -871,6 +933,23 @@ enum VoiceProfileStatus {
   TRAINING
   READY
   FAILED
+}
+
+enum AvatarStatus {
+  PENDING
+  SUBMITTING
+  PENDING_CONSENT
+  TRAINING
+  READY
+  FAILED
+  DELETING
+}
+
+enum AvatarConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum EmailBroadcastRecipientType {
