@@ -30,12 +30,8 @@ model User {
   currency                String                   @default("BRL")
   locale                  String                   @default("pt-BR")
   timezone                String?
-<<<<<<< HEAD
   unlimitedModeImage      Boolean                  @default(false) @map("unlimited_mode_image")
   unlimitedModeVideo      Boolean                  @default(false) @map("unlimited_mode_video")
-  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
-=======
->>>>>>> 3fba4ee6d00998346e4ebb28917f72539ca052ae
   affiliateEarnings       AffiliateEarning[]       @relation("referred_user_earnings")
   affiliate               Affiliate?
   creditBalance           CreditBalance?
@@ -80,13 +76,10 @@ model Plan {
   updatedAt                DateTime       @updatedAt @map("updated_at")
   voice_clone_limit        Int?
   voice_clone_professional Boolean        @default(false)
-<<<<<<< HEAD
   unlimitedPriority        Int?           @map("unlimited_priority")
   unlimitedModels          Json?          @map("unlimited_models")
-=======
   avatar_clone_enabled     Boolean        @default(false)
   avatar_clone_limit       Int            @default(0)
->>>>>>> 3fba4ee6d00998346e4ebb28917f72539ca052ae
   prices                   PlanPrice[]
   subscriptions            Subscription[] @relation("currentPlan")
   scheduledSubscriptions   Subscription[] @relation("scheduledPlan")
