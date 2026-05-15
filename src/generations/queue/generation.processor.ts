@@ -73,33 +73,41 @@ export class GenerationProcessor extends WorkerHost {
       `Processing job ${job.id} [${job.name}] for generation ${job.data.generationId}`,
     );
 
-    switch (job.name) {
+    return this.dispatch(job.name, job.data);
+  }
+
+  /**
+   * Switch público compartilhado com o UnlimitedProcessor. Mantém os
+   * métodos de processamento privados sem duplicar lógica entre filas.
+   */
+  async dispatch(jobName: string, data: unknown): Promise<void> {
+    switch (jobName) {
       case GenerationJobName.IMAGE:
-        return this.processImage(job.data as ImageJobData);
+        return this.processImage(data as ImageJobData);
       case GenerationJobName.IMAGE_WITH_FALLBACK:
-        return this.processImageWithFallback(job.data as ImageJobData);
+        return this.processImageWithFallback(data as ImageJobData);
       case GenerationJobName.IMAGE_NANO_BANANA:
-        return this.processNanoBanana(job.data as ImageNanoBananaJobData);
+        return this.processNanoBanana(data as ImageNanoBananaJobData);
       case GenerationJobName.TEXT_TO_VIDEO:
-        return this.processTextToVideo(job.data as TextToVideoJobData);
+        return this.processTextToVideo(data as TextToVideoJobData);
       case GenerationJobName.IMAGE_TO_VIDEO:
-        return this.processImageToVideo(job.data as ImageToVideoJobData);
+        return this.processImageToVideo(data as ImageToVideoJobData);
       case GenerationJobName.REFERENCE_VIDEO:
-        return this.processReferenceVideo(job.data as ReferenceVideoJobData);
+        return this.processReferenceVideo(data as ReferenceVideoJobData);
       case GenerationJobName.MOTION_CONTROL:
-        return this.processMotionControl(job.data as MotionControlJobData);
+        return this.processMotionControl(data as MotionControlJobData);
       case GenerationJobName.VIRTUAL_TRY_ON:
-        return this.processVirtualTryOn(job.data as VirtualTryOnJobData);
+        return this.processVirtualTryOn(data as VirtualTryOnJobData);
       case GenerationJobName.FACE_SWAP:
-        return this.processFaceSwap(job.data as FaceSwapJobData);
+        return this.processFaceSwap(data as FaceSwapJobData);
       case GenerationJobName.TEXT_TO_VIDEO_KIE:
-        return this.processTextToVideoKie(job.data as TextToVideoKieJobData);
+        return this.processTextToVideoKie(data as TextToVideoKieJobData);
       case GenerationJobName.IMAGE_TO_VIDEO_KIE:
-        return this.processImageToVideoKie(job.data as ImageToVideoKieJobData);
+        return this.processImageToVideoKie(data as ImageToVideoKieJobData);
       case GenerationJobName.REFERENCE_TO_VIDEO_KIE:
-        return this.processReferenceToVideoKie(job.data as ReferenceToVideoKieJobData);
+        return this.processReferenceToVideoKie(data as ReferenceToVideoKieJobData);
       default:
-        throw new Error(`Unknown job name: ${job.name}`);
+        throw new Error(`Unknown job name: ${jobName}`);
     }
   }
 

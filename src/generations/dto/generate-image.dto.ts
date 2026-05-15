@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsIn,
   IsArray,
+  IsBoolean,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -112,4 +113,14 @@ export class GenerateImageDto {
   @IsOptional()
   @IsString()
   model_variant?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Se true, processa a geração no modo ilimitado (sem consumir créditos). Requer plano com modo ilimitado habilitado para o modelo/resolução.',
+    default: false,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  unlimited?: boolean;
 }

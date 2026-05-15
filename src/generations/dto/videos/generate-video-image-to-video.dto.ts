@@ -113,4 +113,14 @@ export class GenerateVideoImageToVideoDto {
   @IsOptional()
   @IsString()
   model_variant?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Se true, processa a geração no modo ilimitado (sem consumir créditos). Requer plano com modo ilimitado habilitado para o modelo/resolução.',
+    default: false,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  unlimited?: boolean;
 }

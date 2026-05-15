@@ -4,7 +4,11 @@ import { GenerationsController } from './generations.controller';
 import { GenerationsService } from './generations.service';
 import { GenerationEventsService } from './generation-events.service';
 import { GenerationProcessor } from './queue/generation.processor';
-import { GENERATION_QUEUE } from './queue/generation-queue.constants';
+import { UnlimitedProcessor } from './queue/unlimited.processor';
+import {
+  GENERATION_QUEUE,
+  GENERATION_UNLIMITED_QUEUE,
+} from './queue/generation-queue.constants';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CreditsModule } from '../credits/credits.module';
 import { PlansModule } from '../plans/plans.module';
@@ -39,12 +43,22 @@ import { VoicesModule } from '../voices/voices.module';
         removeOnFail: { age: 7 * 24 * 3600 },
       },
     }),
+    BullModule.registerQueue({
+      name: GENERATION_UNLIMITED_QUEUE,
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'fixed', delay: 30_000 },
+        removeOnComplete: { age: 24 * 3600 },
+        removeOnFail: { age: 7 * 24 * 3600 },
+      },
+    }),
   ],
   controllers: [GenerationsController],
   providers: [
     GenerationsService,
     GenerationEventsService,
     GenerationProcessor,
+    UnlimitedProcessor,
     GeraewProvider,
     NanoBananaProvider,
     WanProvider,

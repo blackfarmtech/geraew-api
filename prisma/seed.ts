@@ -3,6 +3,28 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Modelos liberados em modo ilimitado por plano.
+// modelVariant + resolutions válidos. Atualize aqui ao mudar a oferta dos planos.
+const UNLIMITED_MODELS = {
+  creator: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P'] },
+  ],
+  pro: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P', 'RES_1080P'] },
+  ],
+  advanced: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P'] },
+    { modelVariant: 'GERAEW_QUALITY', resolutions: ['RES_720P'] },
+    { modelVariant: 'NB2', resolutions: ['RES_1K'] },
+  ],
+  studio: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P', 'RES_1080P'] },
+    { modelVariant: 'GERAEW_QUALITY', resolutions: ['RES_720P', 'RES_1080P'] },
+    { modelVariant: 'NB2', resolutions: ['RES_1K'] },
+    { modelVariant: 'NBP', resolutions: ['RES_1K'] },
+  ],
+} as const;
+
 // Stripe Price IDs — lidos do .env (dev usa test IDs, prod usa live IDs)
 const STRIPE = {
   // ── v5 plans (BRL) ──
@@ -70,12 +92,12 @@ async function main() {
     { slug: 'free', update: { name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, isActive: true, sortOrder: 0 }, create: { slug: 'free', name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, sortOrder: 0 } },
     { slug: 'ultra-basic', update: { name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic }, create: { slug: 'ultra-basic', name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic } },
     { slug: 'basic', update: { name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 3, stripePriceId: STRIPE.planBasic }, create: { slug: 'basic', name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 3, stripePriceId: STRIPE.planBasic } },
-    { slug: 'advanced', update: { name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, isActive: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced }, create: { slug: 'advanced', name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced } },
+    { slug: 'advanced', update: { name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, isActive: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced }, create: { slug: 'advanced', name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced } },
     // ── Planos anteriores (mantidos como estavam) ──
     { slug: 'starter', update: { name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 2, stripePriceId: STRIPE.planStarter }, create: { slug: 'starter', name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 2, stripePriceId: STRIPE.planStarter } },
-    { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator } },
-    { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro } },
-    { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio } },
+    { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator } },
+    { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro } },
+    { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio } },
     // ── Legacy (Business — já estava inativo antes) ──
     { slug: 'business', update: { isActive: false, sortOrder: 99 }, create: { slug: 'business', name: 'Business', priceCents: 24990, creditsPerMonth: 10000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 99, isActive: false, stripePriceId: STRIPE.priceBusiness } },
   ];

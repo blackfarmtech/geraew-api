@@ -1,4 +1,5 @@
 export const GENERATION_QUEUE = 'generation';
+export const GENERATION_UNLIMITED_QUEUE = 'generation-unlimited';
 
 export enum GenerationJobName {
   IMAGE = 'image',
