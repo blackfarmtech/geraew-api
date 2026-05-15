@@ -291,10 +291,40 @@ export class GenerationsService {
   }
 
   /**
-   * Adquire o lock por usuário e enfileira o job na queue ilimitada com
-   * priority (do plano) + delay (do cooldown silencioso). Registra o uso
-   * para alimentar o sliding window de 24h. Libera o lock automaticamente
-   * caso o enqueue falhe — o worker libera no completed/failed.
+   * Combina elegibilidade + acquire lock numa única chamada. Garante que o
+   * lock é adquirido ANTES de qualquer escrita no banco (Generation), evitando
+   * registros órfãos em PROCESSING quando há concorrência (2 cliques rápidos,
+   * 2 abas, etc.).
+   */
+  private async reserveUnlimitedOrThrow(
+    userId: string,
+    modelVariant: string | null,
+    resolution: Resolution,
+  ): Promise<UnlimitedEligibility> {
+    const eligibility = await this.validateUnlimitedOrThrow(
+      userId,
+      modelVariant,
+      resolution,
+    );
+    const locked = await this.unlimitedService.acquireLock(userId);
+    if (!locked) {
+      throw new HttpException(
+        {
+          code: 'UNLIMITED_LOCK_HELD',
+          message:
+            'Você já tem uma geração ilimitada em andamento. Aguarde ela terminar antes de iniciar outra.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+    return eligibility;
+  }
+
+  /**
+   * Registra o uso e enfileira o job na queue ilimitada. **Pré-condição:**
+   * o lock já foi adquirido (via `reserveUnlimitedOrThrow`). Em caso de erro
+   * aqui, libera o lock pro usuário não ficar preso até o TTL expirar.
+   * O worker libera o lock no completed/failed normal.
    */
   private async enqueueUnlimitedJob(
     eligibility: UnlimitedEligibility,
@@ -307,18 +337,6 @@ export class GenerationsService {
       jobData: object;
     },
   ): Promise<void> {
-    const lockAcquired = await this.unlimitedService.acquireLock(args.userId);
-    if (!lockAcquired) {
-      throw new HttpException(
-        {
-          code: 'UNLIMITED_LOCK_HELD',
-          message:
-            'Você já tem uma geração ilimitada em andamento. Aguarde ela terminar antes de iniciar outra.',
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
     try {
       await this.unlimitedService.recordUsage({
         userId: args.userId,
@@ -387,7 +405,7 @@ export class GenerationsService {
     let freeGenType: FreeGenerationType | null = null;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
@@ -540,7 +558,7 @@ export class GenerationsService {
     let freeGenType: FreeGenerationType | null = null;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
@@ -673,7 +691,7 @@ export class GenerationsService {
     let freeGenType: FreeGenerationType | null = null;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
@@ -816,7 +834,7 @@ export class GenerationsService {
     let isFreeGeneration = false;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
@@ -935,7 +953,7 @@ export class GenerationsService {
     let isFreeGeneration = false;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
@@ -1091,7 +1109,7 @@ export class GenerationsService {
     let isFreeGeneration = false;
 
     if (isUnlimited) {
-      eligibility = await this.validateUnlimitedOrThrow(
+      eligibility = await this.reserveUnlimitedOrThrow(
         userId,
         modelVariant,
         dto.resolution,
