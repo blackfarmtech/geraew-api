@@ -30,13 +30,17 @@ model User {
   currency                String                   @default("BRL")
   locale                  String                   @default("pt-BR")
   timezone                String?
+<<<<<<< HEAD
   unlimitedModeImage      Boolean                  @default(false) @map("unlimited_mode_image")
   unlimitedModeVideo      Boolean                  @default(false) @map("unlimited_mode_video")
   adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
+=======
+>>>>>>> 3fba4ee6d00998346e4ebb28917f72539ca052ae
   affiliateEarnings       AffiliateEarning[]       @relation("referred_user_earnings")
   affiliate               Affiliate?
   creditBalance           CreditBalance?
   creditTransactions      CreditTransaction[]
+  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
   emailVerificationTokens EmailVerificationToken[]
   feedback                Feedback?
   folders                 Folder[]
@@ -46,6 +50,7 @@ model User {
   payments                Payment[]
   refreshTokens           RefreshToken[]
   subscriptions           Subscription[]
+  user_avatars            user_avatars[]
   freeGenerations         UserFreeGeneration[]
   unlimitedUsages         UnlimitedUsage[]
   videoProjects           VideoProject[]
@@ -75,8 +80,13 @@ model Plan {
   updatedAt                DateTime       @updatedAt @map("updated_at")
   voice_clone_limit        Int?
   voice_clone_professional Boolean        @default(false)
+<<<<<<< HEAD
   unlimitedPriority        Int?           @map("unlimited_priority")
   unlimitedModels          Json?          @map("unlimited_models")
+=======
+  avatar_clone_enabled     Boolean        @default(false)
+  avatar_clone_limit       Int            @default(0)
+>>>>>>> 3fba4ee6d00998346e4ebb28917f72539ca052ae
   prices                   PlanPrice[]
   subscriptions            Subscription[] @relation("currentPlan")
   scheduledSubscriptions   Subscription[] @relation("scheduledPlan")
@@ -268,24 +278,27 @@ model PendingFreeGenerationGrant {
 }
 
 model CreditTransaction {
-  id           String                @id @default(cuid())
-  userId       String                @map("user_id")
-  type         CreditTransactionType
-  amount       Int
-  source       String                @default("plan")
-  description  String?
-  generationId String?               @map("generation_id")
-  paymentId    String?               @map("payment_id")
-  metadata     Json?
-  createdAt    DateTime              @default(now()) @map("created_at")
-  generation   Generation?           @relation(fields: [generationId], references: [id])
-  payment      Payment?              @relation(fields: [paymentId], references: [id])
-  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String                @id @default(cuid())
+  userId         String                @map("user_id")
+  type           CreditTransactionType
+  amount         Int
+  source         String                @default("plan")
+  description    String?
+  generationId   String?               @map("generation_id")
+  paymentId      String?               @map("payment_id")
+  metadata       Json?
+  createdAt      DateTime              @default(now()) @map("created_at")
+  user_avatar_id String?
+  generation     Generation?           @relation(fields: [generationId], references: [id])
+  payment        Payment?              @relation(fields: [paymentId], references: [id])
+  user_avatars   user_avatars?         @relation(fields: [user_avatar_id], references: [id])
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([generationId])
   @@index([type])
   @@index([createdAt])
+  @@index([user_avatar_id])
   @@map("credit_transactions")
 }
 
@@ -319,12 +332,14 @@ model Generation {
   usedFreeGenerationType FreeGenerationType?    @map("used_free_generation_type")
   voiceProfileId         String?                @map("voice_profile_id")
   influencer_id          String?
+  user_avatar_id         String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
   inputImages            GenerationInputImage[]
   outputs                GenerationOutput[]
   unlimitedUsage         UnlimitedUsage?
   influencers            influencers?           @relation(fields: [influencer_id], references: [id])
+  user_avatars           user_avatars?          @relation(fields: [user_avatar_id], references: [id])
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   voiceProfile           VoiceProfile?          @relation(fields: [voiceProfileId], references: [id])
 
@@ -336,6 +351,7 @@ model Generation {
   @@index([expiresAt])
   @@index([influencer_id])
   @@index([voiceProfileId])
+  @@index([user_avatar_id])
   @@map("generations")
 }
 
@@ -723,24 +739,24 @@ model VoiceProfile {
 }
 
 model EmailBroadcast {
-  id              String                       @id @default(cuid())
+  id              String                      @id @default(cuid())
   subject         String
-  bodyMarkdown    String                       @map("body_markdown")
-  bodyHtml        String                       @map("body_html")
-  recipientType   EmailBroadcastRecipientType  @map("recipient_type")
-  recipientFilter Json?                        @map("recipient_filter")
-  totalRecipients Int                          @default(0) @map("total_recipients")
-  sentCount       Int                          @default(0) @map("sent_count")
-  failedCount     Int                          @default(0) @map("failed_count")
-  status          EmailBroadcastStatus         @default(PENDING)
-  triggeredById   String                       @map("triggered_by_id")
-  triggeredBy     User                         @relation("admin_email_broadcasts", fields: [triggeredById], references: [id])
-  startedAt       DateTime?                    @map("started_at")
-  completedAt     DateTime?                    @map("completed_at")
-  errorMessage    String?                      @map("error_message")
-  createdAt       DateTime                     @default(now()) @map("created_at")
-  updatedAt       DateTime                     @updatedAt @map("updated_at")
+  bodyMarkdown    String                      @map("body_markdown")
+  bodyHtml        String                      @map("body_html")
+  recipientType   EmailBroadcastRecipientType @map("recipient_type")
+  recipientFilter Json?                       @map("recipient_filter")
+  totalRecipients Int                         @default(0) @map("total_recipients")
+  sentCount       Int                         @default(0) @map("sent_count")
+  failedCount     Int                         @default(0) @map("failed_count")
+  status          EmailBroadcastStatus        @default(PENDING)
+  triggeredById   String                      @map("triggered_by_id")
+  startedAt       DateTime?                   @map("started_at")
+  completedAt     DateTime?                   @map("completed_at")
+  errorMessage    String?                     @map("error_message")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
   recipients      EmailBroadcastRecipient[]
+  triggeredBy     User                        @relation("admin_email_broadcasts", fields: [triggeredById], references: [id])
 
   @@index([triggeredById])
   @@index([status])
@@ -750,11 +766,8 @@ model EmailBroadcast {
 model EmailBroadcastRecipient {
   id            String                       @id @default(cuid())
   broadcastId   String                       @map("broadcast_id")
-  broadcast     EmailBroadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   email         String
   userId        String?                      @map("user_id")
-  name          String?
-  plan          String?
   status        EmailBroadcastDeliveryStatus @default(PENDING)
   resendEmailId String?                      @map("resend_email_id")
   errorMessage  String?                      @map("error_message")
@@ -764,11 +777,49 @@ model EmailBroadcastRecipient {
   bouncedAt     DateTime?                    @map("bounced_at")
   createdAt     DateTime                     @default(now()) @map("created_at")
   updatedAt     DateTime                     @updatedAt @map("updated_at")
+  name          String?
+  plan          String?
+  broadcast     EmailBroadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   @@index([broadcastId])
   @@index([email])
   @@index([resendEmailId])
   @@map("email_broadcast_recipients")
+}
+
+model user_avatars {
+  id                    String              @id
+  user_id               String
+  name                  String
+  provider              AiModelProvider     @default(HEYGEN)
+  status                AvatarStatus        @default(PENDING)
+  heygen_look_id        String?             @unique
+  heygen_group_id       String?             @unique
+  consent_status        AvatarConsentStatus @default(NOT_REQUIRED)
+  consent_url           String?
+  consent_approved_at   DateTime?           @db.Timestamptz(6)
+  source_video_key      String
+  source_video_url      String
+  preview_image_url     String?
+  preview_video_url     String?
+  default_voice_id      String?
+  supported_engines     String[]            @default([])
+  credits_consumed      Int                 @default(0)
+  error_message         String?
+  error_code            String?
+  training_started_at   DateTime?           @db.Timestamptz(6)
+  training_completed_at DateTime?           @db.Timestamptz(6)
+  is_deleted            Boolean             @default(false)
+  deleted_at            DateTime?           @db.Timestamptz(6)
+  created_at            DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime            @default(now()) @db.Timestamptz(6)
+  credit_transactions   CreditTransaction[]
+  generations           Generation[]
+  users                 User                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([deleted_at])
+  @@index([status])
+  @@index([user_id, is_deleted])
 }
 
 enum UserRole {
@@ -794,6 +845,7 @@ enum GenerationType {
   VIRTUAL_TRY_ON
   SPOKEN_VIDEO
   VOICE_CLONE
+  AVATAR_VIDEO
 }
 
 enum GenerationStatus {
@@ -812,6 +864,8 @@ enum CreditTransactionType {
   ADMIN_ADJUSTMENT
   ONBOARDING_BONUS
   FEEDBACK_REWARD
+  AVATAR_TRAINING_DEBIT
+  AVATAR_TRAINING_REFUND
 }
 
 enum PaymentStatus {
@@ -855,6 +909,7 @@ enum AiModelProvider {
   KIE
   ELEVENLABS
   WAVESPEED
+  HEYGEN
 }
 
 enum AiModelType {
@@ -918,4 +973,21 @@ enum EmailBroadcastDeliveryStatus {
   CLICKED
   BOUNCED
   COMPLAINED
+}
+
+enum AvatarConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AvatarStatus {
+  PENDING
+  SUBMITTING
+  PENDING_CONSENT
+  TRAINING
+  READY
+  FAILED
+  DELETING
 }

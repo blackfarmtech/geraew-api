@@ -7,6 +7,8 @@ import { HotmartWebhookController } from './hotmart-webhook.controller';
 import { HotmartWebhookService } from './hotmart-webhook.service';
 import { GreennWebhookController } from './greenn-webhook.controller';
 import { GreennWebhookService } from './greenn-webhook.service';
+import { CartpandaWebhookController } from './cartpanda-webhook.controller';
+import { CartpandaWebhookService } from './cartpanda-webhook.service';
 import { WebhookLogsModule } from '../webhook-logs/webhook-logs.module';
 import { EmailModule } from '../email/email.module';
 
@@ -16,12 +18,14 @@ import { EmailModule } from '../email/email.module';
     HublaWebhookController,
     HotmartWebhookController,
     GreennWebhookController,
+    CartpandaWebhookController,
   ],
   providers: [
     PendingGrantsService,
     HublaWebhookService,
     HotmartWebhookService,
     GreennWebhookService,
+    CartpandaWebhookService,
   ],
   exports: [PendingGrantsService],
 })
