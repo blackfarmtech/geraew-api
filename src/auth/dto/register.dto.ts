@@ -1,5 +1,7 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, Matches, IsNotEmpty, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { TrackingDto } from './tracking.dto';
 
 export class RegisterDto {
   @ApiProperty({
@@ -45,4 +47,10 @@ export class RegisterDto {
   @MaxLength(50, { message: 'Código de indicação deve ter no máximo 50 caracteres' })
   @Matches(/^[A-Za-z0-9_-]+$/, { message: 'Código de indicação contém caracteres inválidos' })
   referralCode?: string;
+
+  @ApiPropertyOptional({ description: 'Atribuição de marketing capturada na landing' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TrackingDto)
+  tracking?: TrackingDto;
 }

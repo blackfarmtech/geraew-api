@@ -11,8 +11,27 @@ import { EmailService } from '../email/email.service';
 import { LocaleContext } from '../common/utils/locale.util';
 import { t } from '../common/i18n/t';
 import { PendingGrantsService } from '../pending-grants/pending-grants.service';
+import { TrackingDto } from './dto/tracking.dto';
 
 const SIGNUP_BONUS_CREDITS = 50;
+
+function mapTrackingToUserFields(tracking?: TrackingDto) {
+  if (!tracking) return {};
+  const fields: Record<string, string | undefined> = {
+    utmSource: tracking.utm_source,
+    utmMedium: tracking.utm_medium,
+    utmCampaign: tracking.utm_campaign,
+    utmContent: tracking.utm_content,
+    utmTerm: tracking.utm_term,
+    fbclid: tracking.fbclid,
+    gclid: tracking.gclid,
+    referrer: tracking.referrer,
+    landingPage: tracking.landing_page,
+  };
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => v != null && v !== ''),
+  );
+}
 
 @Injectable()
 export class AuthService {
@@ -44,7 +63,7 @@ export class AuthService {
    * Registra um novo usuário
    */
   async register(registerDto: RegisterDto, locale?: LocaleContext): Promise<AuthResponseDto> {
-    const { email, password, name, referralCode } = registerDto;
+    const { email, password, name, referralCode, tracking } = registerDto;
 
     // Verifica se o email já está em uso
     const existingUser = await this.prisma.user.findUnique({
@@ -83,6 +102,7 @@ export class AuthService {
           ...(validReferralCode && { referredByCode: validReferralCode }),
           ...(locale?.country && { country: locale.country }),
           ...(locale && { currency: locale.currency, locale: locale.locale }),
+          ...mapTrackingToUserFields(tracking),
         },
       });
 
@@ -267,7 +287,7 @@ export class AuthService {
   /**
    * Login/Cadastro via Google OAuth (verifica ID token ou access token)
    */
-  async googleAuthWithToken(googleToken: string, referralCode?: string, locale?: LocaleContext): Promise<AuthResponseDto> {
+  async googleAuthWithToken(googleToken: string, referralCode?: string, locale?: LocaleContext, tracking?: TrackingDto): Promise<AuthResponseDto> {
     try {
       const { OAuth2Client } = await import('google-auth-library');
       const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
@@ -292,6 +312,7 @@ export class AuthService {
           avatarUrl: payload.picture,
           provider: 'google',
           referralCode,
+          tracking,
         }, locale);
       } catch {
         // Se falhar como ID token, tenta como access token
@@ -316,6 +337,7 @@ export class AuthService {
           avatarUrl: userInfo.picture,
           provider: 'google',
           referralCode,
+          tracking,
         }, locale);
       }
     } catch (error) {
@@ -334,6 +356,7 @@ export class AuthService {
     avatarUrl?: string;
     provider: string;
     referralCode?: string;
+    tracking?: TrackingDto;
   }, locale?: LocaleContext): Promise<AuthResponseDto> {
     // Busca usuário existente por email ou Google ID
     let user = await this.prisma.user.findFirst({
@@ -394,6 +417,7 @@ export class AuthService {
             ...(validReferralCode && { referredByCode: validReferralCode }),
             ...(locale?.country && { country: locale.country }),
             ...(locale && { currency: locale.currency, locale: locale.locale }),
+            ...mapTrackingToUserFields(googleUser.tracking),
           },
         });
 
