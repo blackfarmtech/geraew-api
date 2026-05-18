@@ -138,6 +138,7 @@ export class AuthController {
       googleAuthDto.googleToken,
       googleAuthDto.referralCode,
       detectLocaleFromHeaders(req.headers),
+      googleAuthDto.tracking,
     );
   }
 

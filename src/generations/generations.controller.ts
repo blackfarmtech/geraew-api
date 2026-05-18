@@ -45,6 +45,7 @@ import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-ima
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
+import { UnlimitedStatusResponseDto } from './dto/unlimited-status.dto';
 
 @ApiTags('generations')
 @ApiBearerAuth()
@@ -260,6 +261,18 @@ export class GenerationsController {
     @Body() dto: GenerateVoiceCloneDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateVoiceClone(userId, dto);
+  }
+
+  @Get('unlimited/status')
+  @ApiOperation({
+    summary:
+      'Status do modo ilimitado do usuário (elegibilidade, modelos liberados, uso 24h, lock ativo).',
+  })
+  @ApiResponse({ status: 200, type: UnlimitedStatusResponseDto })
+  async getUnlimitedStatus(
+    @CurrentUser('sub') userId: string,
+  ): Promise<UnlimitedStatusResponseDto> {
+    return this.generationsService.getUnlimitedStatus(userId);
   }
 
   @Get()

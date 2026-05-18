@@ -56,12 +56,14 @@ export class AdminEmailsController {
       bodyMarkdown: string;
       subject?: string;
       mergeVars?: Record<string, string>;
+      format?: 'markdown' | 'html';
     },
   ) {
     return this.adminEmails.renderPreview({
       bodyMarkdown: body.bodyMarkdown ?? '',
       subject: body.subject,
       mergeVars: body.mergeVars,
+      format: body.format,
     });
   }
 
@@ -74,6 +76,7 @@ export class AdminEmailsController {
       triggeredByEmail: user.email,
       subject: dto.subject,
       bodyMarkdown: dto.bodyMarkdown,
+      format: dto.format,
     });
     return { ok: true, sentTo: user.email };
   }
@@ -88,6 +91,7 @@ export class AdminEmailsController {
       bodyMarkdown: dto.bodyMarkdown,
       recipientType: dto.recipientType,
       recipientFilter: dto.recipientFilter,
+      format: dto.format,
     });
     return {
       id: broadcast.id,

@@ -1014,18 +1014,29 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
 
     const response = await this.chatClient.chat({
       system_instruction: systemPrompt,
-      max_output_tokens: 2000,
+      max_output_tokens: 6000,
       temperature: 1.0,
       messages: [{ role: 'user', parts }],
     });
 
     let result = (response.text || '').trim();
 
-    this.logger.log(`[INFLUENCER] Raw Geraew chat response: ${result}`);
+    this.logger.log(
+      `[INFLUENCER] Raw Geraew chat response (finishReason=${response.finishReason ?? 'unknown'}, tokens=${response.usage?.candidatesTokenCount ?? '?'}): ${result}`,
+    );
 
     if (!result) {
       this.logger.warn('[INFLUENCER] Geraew chat returned empty response');
       throw new Error('Failed to generate influencer prompt');
+    }
+
+    if (response.finishReason === 'MAX_TOKENS') {
+      this.logger.warn(
+        `[INFLUENCER] Response truncated by max_output_tokens (candidatesTokenCount=${response.usage?.candidatesTokenCount ?? '?'})`,
+      );
+      throw new Error(
+        'AI agent response truncated — increase max_output_tokens or shorten the schema',
+      );
     }
 
     // Strip markdown code fences if present

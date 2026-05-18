@@ -44,6 +44,7 @@ interface CreateBroadcastInput {
   bodyMarkdown: string;
   recipientType: EmailBroadcastRecipientType;
   recipientFilter?: RecipientFilter;
+  format?: 'markdown' | 'html';
 }
 
 interface SendTestInput {
@@ -51,6 +52,7 @@ interface SendTestInput {
   triggeredByEmail: string;
   subject: string;
   bodyMarkdown: string;
+  format?: 'markdown' | 'html';
 }
 
 @Injectable()
@@ -238,9 +240,18 @@ export class AdminEmailsService {
     return { count: recipients.length };
   }
 
-  // ─── Renderização do HTML completo (markdown → email final) ──────────────
-  async renderHtml(bodyMarkdown: string): Promise<string> {
-    const innerHtml = await renderMarkdownToEmailHtml(bodyMarkdown);
+  // ─── Renderização do HTML completo ───────────────────────────────────────
+  /**
+   * `format='markdown'` (default): passa pelo parser markdown + inline styles
+   * + wrapper de template padrão (logo, padding, etc.).
+   * `format='html'`: assume que o body já é um HTML completo (do `<!DOCTYPE>`
+   * até `</html>` ou um fragmento standalone) — usa direto, sem template.
+   */
+  async renderHtml(body: string, format: 'markdown' | 'html' = 'markdown'): Promise<string> {
+    if (format === 'html') {
+      return body;
+    }
+    const innerHtml = await renderMarkdownToEmailHtml(body);
     return wrapInBroadcastTemplate(innerHtml, this.logoUrl);
   }
 
@@ -253,8 +264,9 @@ export class AdminEmailsService {
     bodyMarkdown: string;
     subject?: string;
     mergeVars?: MergeTagVars;
+    format?: 'markdown' | 'html';
   }): Promise<{ html: string; subject?: string }> {
-    let html = await this.renderHtml(input.bodyMarkdown ?? '');
+    let html = await this.renderHtml(input.bodyMarkdown ?? '', input.format);
     const vars = input.mergeVars ?? {};
     if (Object.keys(vars).length > 0) {
       html = applyMergeTags(html, vars);
@@ -280,7 +292,7 @@ export class AdminEmailsService {
       );
     }
 
-    const bodyHtml = await this.renderHtml(input.bodyMarkdown);
+    const bodyHtml = await this.renderHtml(input.bodyMarkdown, input.format);
 
     const broadcast = await this.prisma.emailBroadcast.create({
       data: {
@@ -338,7 +350,7 @@ export class AdminEmailsService {
       email: input.triggeredByEmail,
     });
 
-    const renderedHtml = await this.renderHtml(input.bodyMarkdown);
+    const renderedHtml = await this.renderHtml(input.bodyMarkdown, input.format);
     const finalHtml = applyMergeTags(renderedHtml, vars);
     const finalSubject = `[TESTE] ${applyMergeTags(input.subject, vars)}`;
 

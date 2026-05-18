@@ -3,6 +3,28 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Modelos liberados em modo ilimitado por plano.
+// modelVariant + resolutions válidos. Atualize aqui ao mudar a oferta dos planos.
+const UNLIMITED_MODELS = {
+  creator: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P'] },
+  ],
+  pro: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P', 'RES_1080P'] },
+  ],
+  advanced: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P'] },
+    { modelVariant: 'GERAEW_QUALITY', resolutions: ['RES_720P'] },
+    { modelVariant: 'NB2', resolutions: ['RES_1K'] },
+  ],
+  studio: [
+    { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P', 'RES_1080P'] },
+    { modelVariant: 'GERAEW_QUALITY', resolutions: ['RES_720P', 'RES_1080P'] },
+    { modelVariant: 'NB2', resolutions: ['RES_1K'] },
+    { modelVariant: 'NBP', resolutions: ['RES_1K'] },
+  ],
+} as const;
+
 // Stripe Price IDs — lidos do .env (dev usa test IDs, prod usa live IDs)
 const STRIPE = {
   // ── v5 plans (BRL) ──
@@ -76,6 +98,15 @@ async function main() {
     { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator, avatar_clone_enabled: true, avatar_clone_limit: 3 }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator, avatar_clone_enabled: true, avatar_clone_limit: 3 } },
     { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro, avatar_clone_enabled: true, avatar_clone_limit: 5 }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro, avatar_clone_enabled: true, avatar_clone_limit: 5 } },
     { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, avatar_clone_enabled: true, avatar_clone_limit: 20 }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, avatar_clone_enabled: true, avatar_clone_limit: 20 } },
+    { slug: 'free', update: { name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, isActive: true, sortOrder: 0 }, create: { slug: 'free', name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, sortOrder: 0 } },
+    { slug: 'ultra-basic', update: { name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic }, create: { slug: 'ultra-basic', name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic } },
+    { slug: 'basic', update: { name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 3, stripePriceId: STRIPE.planBasic }, create: { slug: 'basic', name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 3, stripePriceId: STRIPE.planBasic } },
+    { slug: 'advanced', update: { name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, isActive: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced }, create: { slug: 'advanced', name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced } },
+    // ── Planos anteriores (mantidos como estavam) ──
+    { slug: 'starter', update: { name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 2, stripePriceId: STRIPE.planStarter }, create: { slug: 'starter', name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 2, stripePriceId: STRIPE.planStarter } },
+    { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator } },
+    { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro } },
+    { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio } },
     // ── Legacy (Business — já estava inativo antes) ──
     { slug: 'business', update: { isActive: false, sortOrder: 99 }, create: { slug: 'business', name: 'Business', priceCents: 24990, creditsPerMonth: 10000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 99, isActive: false, stripePriceId: STRIPE.priceBusiness } },
   ];
@@ -101,33 +132,33 @@ async function main() {
   const planPriceData: Array<{ slug: string; currency: string; priceCents: number; stripePriceId: string }> = [
     // ── v5 plans ──
     // BRL
-    { slug: 'ultra-basic', currency: 'BRL', priceCents: 1290,  stripePriceId: STRIPE.planUltraBasic },
-    { slug: 'basic',       currency: 'BRL', priceCents: 5990,  stripePriceId: STRIPE.planBasic },
-    { slug: 'advanced',    currency: 'BRL', priceCents: 24990, stripePriceId: STRIPE.planAdvanced },
+    { slug: 'ultra-basic', currency: 'BRL', priceCents: 1290, stripePriceId: STRIPE.planUltraBasic },
+    { slug: 'basic', currency: 'BRL', priceCents: 5990, stripePriceId: STRIPE.planBasic },
+    { slug: 'advanced', currency: 'BRL', priceCents: 24990, stripePriceId: STRIPE.planAdvanced },
     // USD
-    { slug: 'ultra-basic', currency: 'USD', priceCents: 290,  stripePriceId: STRIPE.planUltraBasicUsd },
-    { slug: 'basic',       currency: 'USD', priceCents: 1290, stripePriceId: STRIPE.planBasicUsd },
-    { slug: 'advanced',    currency: 'USD', priceCents: 5490, stripePriceId: STRIPE.planAdvancedUsd },
+    { slug: 'ultra-basic', currency: 'USD', priceCents: 290, stripePriceId: STRIPE.planUltraBasicUsd },
+    { slug: 'basic', currency: 'USD', priceCents: 1290, stripePriceId: STRIPE.planBasicUsd },
+    { slug: 'advanced', currency: 'USD', priceCents: 5490, stripePriceId: STRIPE.planAdvancedUsd },
     // EUR
-    { slug: 'ultra-basic', currency: 'EUR', priceCents: 290,  stripePriceId: STRIPE.planUltraBasicEur },
-    { slug: 'basic',       currency: 'EUR', priceCents: 1290, stripePriceId: STRIPE.planBasicEur },
-    { slug: 'advanced',    currency: 'EUR', priceCents: 5490, stripePriceId: STRIPE.planAdvancedEur },
+    { slug: 'ultra-basic', currency: 'EUR', priceCents: 290, stripePriceId: STRIPE.planUltraBasicEur },
+    { slug: 'basic', currency: 'EUR', priceCents: 1290, stripePriceId: STRIPE.planBasicEur },
+    { slug: 'advanced', currency: 'EUR', priceCents: 5490, stripePriceId: STRIPE.planAdvancedEur },
     // ── Legacy plans (mantidos para grandfathering — não expostos em /plans) ──
     // BRL
-    { slug: 'starter', currency: 'BRL', priceCents: 3990,  stripePriceId: STRIPE.planStarter },
-    { slug: 'creator', currency: 'BRL', priceCents: 8990,  stripePriceId: STRIPE.planCreator },
-    { slug: 'pro',     currency: 'BRL', priceCents: 17990, stripePriceId: STRIPE.planPro },
-    { slug: 'studio',  currency: 'BRL', priceCents: 36990, stripePriceId: STRIPE.planStudio },
+    { slug: 'starter', currency: 'BRL', priceCents: 3990, stripePriceId: STRIPE.planStarter },
+    { slug: 'creator', currency: 'BRL', priceCents: 8990, stripePriceId: STRIPE.planCreator },
+    { slug: 'pro', currency: 'BRL', priceCents: 17990, stripePriceId: STRIPE.planPro },
+    { slug: 'studio', currency: 'BRL', priceCents: 36990, stripePriceId: STRIPE.planStudio },
     // USD
-    { slug: 'starter', currency: 'USD', priceCents: 990,  stripePriceId: STRIPE.planStarterUsd },
+    { slug: 'starter', currency: 'USD', priceCents: 990, stripePriceId: STRIPE.planStarterUsd },
     { slug: 'creator', currency: 'USD', priceCents: 1990, stripePriceId: STRIPE.planCreatorUsd },
-    { slug: 'pro',     currency: 'USD', priceCents: 3990, stripePriceId: STRIPE.planProUsd },
-    { slug: 'studio',  currency: 'USD', priceCents: 7990, stripePriceId: STRIPE.planStudioUsd },
+    { slug: 'pro', currency: 'USD', priceCents: 3990, stripePriceId: STRIPE.planProUsd },
+    { slug: 'studio', currency: 'USD', priceCents: 7990, stripePriceId: STRIPE.planStudioUsd },
     // EUR
-    { slug: 'starter', currency: 'EUR', priceCents: 890,  stripePriceId: STRIPE.planStarterEur },
+    { slug: 'starter', currency: 'EUR', priceCents: 890, stripePriceId: STRIPE.planStarterEur },
     { slug: 'creator', currency: 'EUR', priceCents: 1890, stripePriceId: STRIPE.planCreatorEur },
-    { slug: 'pro',     currency: 'EUR', priceCents: 3790, stripePriceId: STRIPE.planProEur },
-    { slug: 'studio',  currency: 'EUR', priceCents: 7490, stripePriceId: STRIPE.planStudioEur },
+    { slug: 'pro', currency: 'EUR', priceCents: 3790, stripePriceId: STRIPE.planProEur },
+    { slug: 'studio', currency: 'EUR', priceCents: 7490, stripePriceId: STRIPE.planStudioEur },
   ];
 
   const plansBySlug = new Map(plans.map((p) => [p.slug, p]));
@@ -336,22 +367,22 @@ async function main() {
 
   const packagePriceData: Array<{ name: string; currency: string; priceCents: number; stripePriceId: string }> = [
     // BRL
-    { name: 'Boost P',   currency: 'BRL', priceCents: 1690,  stripePriceId: STRIPE.priceBoostP },
-    { name: 'Boost M',   currency: 'BRL', priceCents: 2690,  stripePriceId: STRIPE.priceBoostM },
-    { name: 'Boost G',   currency: 'BRL', priceCents: 3690,  stripePriceId: STRIPE.priceBoostG },
-    { name: 'Boost XG',  currency: 'BRL', priceCents: 6990,  stripePriceId: STRIPE.priceBoostXg },
+    { name: 'Boost P', currency: 'BRL', priceCents: 1690, stripePriceId: STRIPE.priceBoostP },
+    { name: 'Boost M', currency: 'BRL', priceCents: 2690, stripePriceId: STRIPE.priceBoostM },
+    { name: 'Boost G', currency: 'BRL', priceCents: 3690, stripePriceId: STRIPE.priceBoostG },
+    { name: 'Boost XG', currency: 'BRL', priceCents: 6990, stripePriceId: STRIPE.priceBoostXg },
     { name: 'Boost XXG', currency: 'BRL', priceCents: 14990, stripePriceId: STRIPE.priceBoostXxg },
     // USD
-    { name: 'Boost P',   currency: 'USD', priceCents: 390,  stripePriceId: STRIPE.priceBoostPUsd },
-    { name: 'Boost M',   currency: 'USD', priceCents: 690,  stripePriceId: STRIPE.priceBoostMUsd },
-    { name: 'Boost G',   currency: 'USD', priceCents: 990,  stripePriceId: STRIPE.priceBoostGUsd },
-    { name: 'Boost XG',  currency: 'USD', priceCents: 1890, stripePriceId: STRIPE.priceBoostXgUsd },
+    { name: 'Boost P', currency: 'USD', priceCents: 390, stripePriceId: STRIPE.priceBoostPUsd },
+    { name: 'Boost M', currency: 'USD', priceCents: 690, stripePriceId: STRIPE.priceBoostMUsd },
+    { name: 'Boost G', currency: 'USD', priceCents: 990, stripePriceId: STRIPE.priceBoostGUsd },
+    { name: 'Boost XG', currency: 'USD', priceCents: 1890, stripePriceId: STRIPE.priceBoostXgUsd },
     { name: 'Boost XXG', currency: 'USD', priceCents: 3990, stripePriceId: STRIPE.priceBoostXxgUsd },
     // EUR
-    { name: 'Boost P',   currency: 'EUR', priceCents: 390,  stripePriceId: STRIPE.priceBoostPEur },
-    { name: 'Boost M',   currency: 'EUR', priceCents: 650,  stripePriceId: STRIPE.priceBoostMEur },
-    { name: 'Boost G',   currency: 'EUR', priceCents: 890,  stripePriceId: STRIPE.priceBoostGEur },
-    { name: 'Boost XG',  currency: 'EUR', priceCents: 1890, stripePriceId: STRIPE.priceBoostXgEur },
+    { name: 'Boost P', currency: 'EUR', priceCents: 390, stripePriceId: STRIPE.priceBoostPEur },
+    { name: 'Boost M', currency: 'EUR', priceCents: 650, stripePriceId: STRIPE.priceBoostMEur },
+    { name: 'Boost G', currency: 'EUR', priceCents: 890, stripePriceId: STRIPE.priceBoostGEur },
+    { name: 'Boost XG', currency: 'EUR', priceCents: 1890, stripePriceId: STRIPE.priceBoostXgEur },
     { name: 'Boost XXG', currency: 'EUR', priceCents: 3990, stripePriceId: STRIPE.priceBoostXxgEur },
   ];
 
@@ -376,9 +407,9 @@ async function main() {
 
   const videoModels = [
     { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 0 },
-    { slug: 'geraew-fast',    label: 'Veo 3.1 Fast',    provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST',    sortOrder: 1 },
-    { slug: 'veo3',           label: 'Geraew Quality',  provider: 'KIE' as const,    modelVariant: 'VEO_MAX',        sortOrder: 2 },
-    { slug: 'veo3_fast',      label: 'Geraew Fast',     provider: 'KIE' as const,    modelVariant: 'VEO_FAST',       sortOrder: 3 },
+    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 1 },
+    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 2 },
+    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 3 },
   ];
 
   for (const model of videoModels) {

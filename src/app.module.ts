@@ -44,6 +44,8 @@ import { InworldVoicesModule } from './inworld-voices/inworld-voices.module';
 import { AdminEmailsModule } from './admin-emails/admin-emails.module';
 import { ResendWebhooksModule } from './resend-webhooks/resend-webhooks.module';
 import { AvatarsModule } from './avatars/avatars.module';
+import { UnlimitedModule } from './unlimited/unlimited.module';
+import { parseRedisConfig } from './common/redis-config';
 
 
 @Module({
@@ -54,17 +56,12 @@ import { AvatarsModule } from './avatars/avatars.module';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const redisUrl = new URL(config.getOrThrow<string>('REDIS_URL'));
+        const { host, port, password, username, db } = parseRedisConfig(
+          config.getOrThrow<string>('REDIS_URL'),
+          config.get<string>('REDIS_DB'),
+        );
         return {
-          connection: {
-            host: redisUrl.hostname,
-            port: parseInt(redisUrl.port, 10) || 6379,
-            password: redisUrl.password || undefined,
-            username:
-              redisUrl.username && redisUrl.username !== 'default'
-                ? redisUrl.username
-                : undefined,
-          },
+          connection: { host, port, password, username, db },
         };
       },
     }),
@@ -125,6 +122,7 @@ import { AvatarsModule } from './avatars/avatars.module';
     AdminEmailsModule,
     ResendWebhooksModule,
     AvatarsModule,
+    UnlimitedModule,
   ],
   controllers: [AppController],
   providers: [
@@ -139,4 +137,4 @@ import { AvatarsModule } from './avatars/avatars.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

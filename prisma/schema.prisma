@@ -30,11 +30,22 @@ model User {
   currency                String                   @default("BRL")
   locale                  String                   @default("pt-BR")
   timezone                String?
-  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
+  unlimitedModeImage      Boolean                  @default(false) @map("unlimited_mode_image")
+  unlimitedModeVideo      Boolean                  @default(false) @map("unlimited_mode_video")
+  utmSource               String?                  @map("utm_source")
+  utmMedium               String?                  @map("utm_medium")
+  utmCampaign             String?                  @map("utm_campaign")
+  utmContent              String?                  @map("utm_content")
+  utmTerm                 String?                  @map("utm_term")
+  fbclid                  String?
+  gclid                   String?
+  referrer                String?
+  landingPage             String?                  @map("landing_page")
   affiliateEarnings       AffiliateEarning[]       @relation("referred_user_earnings")
   affiliate               Affiliate?
   creditBalance           CreditBalance?
   creditTransactions      CreditTransaction[]
+  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
   emailVerificationTokens EmailVerificationToken[]
   feedback                Feedback?
   folders                 Folder[]
@@ -44,6 +55,7 @@ model User {
   payments                Payment[]
   refreshTokens           RefreshToken[]
   subscriptions           Subscription[]
+  unlimitedUsages         UnlimitedUsage[]
   freeGenerations         UserFreeGeneration[]
   videoProjects           VideoProject[]
   voiceProfiles           VoiceProfile[]
@@ -52,6 +64,8 @@ model User {
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
+  @@index([utmCampaign])
+  @@index([utmSource])
   @@map("users")
 }
 
@@ -75,6 +89,8 @@ model Plan {
   voice_clone_professional Boolean        @default(false)
   avatar_clone_enabled     Boolean        @default(false)
   avatar_clone_limit       Int            @default(0)
+  unlimitedPriority        Int?           @map("unlimited_priority")
+  unlimitedModels          Json?          @map("unlimited_models")
   prices                   PlanPrice[]
   subscriptions            Subscription[] @relation("currentPlan")
   scheduledSubscriptions   Subscription[] @relation("scheduledPlan")
@@ -203,6 +219,20 @@ model UserFreeGeneration {
   @@map("user_free_generations")
 }
 
+model UnlimitedUsage {
+  id           String      @id @default(cuid())
+  userId       String      @map("user_id")
+  generationId String?     @unique @map("generation_id")
+  modelVariant String      @map("model_variant")
+  resolution   Resolution
+  createdAt    DateTime    @default(now()) @map("created_at")
+  generation   Generation? @relation(fields: [generationId], references: [id])
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("unlimited_usage")
+}
+
 model Announcement {
   id          String   @id @default(cuid())
   slug        String   @unique
@@ -315,6 +345,7 @@ model Generation {
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   voiceProfile           VoiceProfile?          @relation(fields: [voiceProfileId], references: [id])
   userAvatar             UserAvatar?            @relation("avatar_generations", fields: [userAvatarId], references: [id])
+  unlimitedUsage         UnlimitedUsage?
 
   @@index([userId])
   @@index([status])
@@ -761,24 +792,24 @@ model UserAvatar {
 }
 
 model EmailBroadcast {
-  id              String                       @id @default(cuid())
+  id              String                      @id @default(cuid())
   subject         String
-  bodyMarkdown    String                       @map("body_markdown")
-  bodyHtml        String                       @map("body_html")
-  recipientType   EmailBroadcastRecipientType  @map("recipient_type")
-  recipientFilter Json?                        @map("recipient_filter")
-  totalRecipients Int                          @default(0) @map("total_recipients")
-  sentCount       Int                          @default(0) @map("sent_count")
-  failedCount     Int                          @default(0) @map("failed_count")
-  status          EmailBroadcastStatus         @default(PENDING)
-  triggeredById   String                       @map("triggered_by_id")
-  triggeredBy     User                         @relation("admin_email_broadcasts", fields: [triggeredById], references: [id])
-  startedAt       DateTime?                    @map("started_at")
-  completedAt     DateTime?                    @map("completed_at")
-  errorMessage    String?                      @map("error_message")
-  createdAt       DateTime                     @default(now()) @map("created_at")
-  updatedAt       DateTime                     @updatedAt @map("updated_at")
+  bodyMarkdown    String                      @map("body_markdown")
+  bodyHtml        String                      @map("body_html")
+  recipientType   EmailBroadcastRecipientType @map("recipient_type")
+  recipientFilter Json?                       @map("recipient_filter")
+  totalRecipients Int                         @default(0) @map("total_recipients")
+  sentCount       Int                         @default(0) @map("sent_count")
+  failedCount     Int                         @default(0) @map("failed_count")
+  status          EmailBroadcastStatus        @default(PENDING)
+  triggeredById   String                      @map("triggered_by_id")
+  startedAt       DateTime?                   @map("started_at")
+  completedAt     DateTime?                   @map("completed_at")
+  errorMessage    String?                     @map("error_message")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
   recipients      EmailBroadcastRecipient[]
+  triggeredBy     User                        @relation("admin_email_broadcasts", fields: [triggeredById], references: [id])
 
   @@index([triggeredById])
   @@index([status])
@@ -788,11 +819,8 @@ model EmailBroadcast {
 model EmailBroadcastRecipient {
   id            String                       @id @default(cuid())
   broadcastId   String                       @map("broadcast_id")
-  broadcast     EmailBroadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   email         String
   userId        String?                      @map("user_id")
-  name          String?
-  plan          String?
   status        EmailBroadcastDeliveryStatus @default(PENDING)
   resendEmailId String?                      @map("resend_email_id")
   errorMessage  String?                      @map("error_message")
@@ -802,6 +830,9 @@ model EmailBroadcastRecipient {
   bouncedAt     DateTime?                    @map("bounced_at")
   createdAt     DateTime                     @default(now()) @map("created_at")
   updatedAt     DateTime                     @updatedAt @map("updated_at")
+  name          String?
+  plan          String?
+  broadcast     EmailBroadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   @@index([broadcastId])
   @@index([email])
@@ -978,3 +1009,4 @@ enum EmailBroadcastDeliveryStatus {
   BOUNCED
   COMPLAINED
 }
+

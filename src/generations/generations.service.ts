@@ -111,6 +111,7 @@ function effectiveVideoResolution(
 import { GenerationProcessor } from './queue/generation.processor';
 import {
   GENERATION_QUEUE,
+  GENERATION_UNLIMITED_QUEUE,
   GenerationJobName,
   ImageJobData,
   ImageNanoBananaJobData,
@@ -126,6 +127,8 @@ import {
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './queue/generation-queue.constants';
+import { UnlimitedService } from '../unlimited/unlimited.service';
+import { UnlimitedEligibility } from '../unlimited/unlimited.types';
 
 type GenerationWithRelations = {
   id: string;
@@ -161,7 +164,9 @@ export class GenerationsService {
     private readonly modelsService: ModelsService,
     private readonly voicesService: VoicesService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
+    @InjectQueue(GENERATION_UNLIMITED_QUEUE) private readonly unlimitedQueue: Queue,
     private readonly generationProcessor: GenerationProcessor,
+    private readonly unlimitedService: UnlimitedService,
   ) { }
 
   private isSeedream(model: string | undefined | null): boolean {
@@ -199,6 +204,155 @@ export class GenerationsService {
           (err as Error).stack,
         ),
       );
+  }
+
+  // ─── Unlimited mode: status público ───────────────────────────
+
+  async getUnlimitedStatus(userId: string) {
+    const planContext = await this.unlimitedService.getPlanContext(userId);
+    if (!planContext) {
+      return {
+        eligible: false,
+        planSlug: null as string | null,
+        models: [],
+        usageCount: 0,
+        hasActiveJob: false,
+      };
+    }
+
+    const [usageCount, hasActiveJob] = await Promise.all([
+      this.unlimitedService.countUsageWindow(userId),
+      this.unlimitedService.isLocked(userId),
+    ]);
+
+    return {
+      eligible: true,
+      planSlug: planContext.planSlug,
+      models: planContext.models,
+      usageCount,
+      hasActiveJob,
+    };
+  }
+
+  // ─── Unlimited mode helpers ───────────────────────────────────
+
+  /**
+   * Valida elegibilidade do usuário para o modo ilimitado. Throws com HTTP
+   * apropriado quando bloqueado, retorna `UnlimitedEligibility` quando ok.
+   */
+  private async validateUnlimitedOrThrow(
+    userId: string,
+    modelVariant: string | null,
+    resolution: Resolution,
+  ): Promise<UnlimitedEligibility> {
+    if (!modelVariant) {
+      throw new BadRequestException({
+        code: 'UNLIMITED_MODEL_NOT_ALLOWED',
+        message: 'Este modelo não está disponível no modo ilimitado.',
+      });
+    }
+
+    const eligibility = await this.unlimitedService.checkEligibility(
+      userId,
+      modelVariant,
+      resolution,
+    );
+
+    if (eligibility.allowed) return eligibility;
+
+    switch (eligibility.reason) {
+      case 'plan_not_unlimited':
+        throw new ForbiddenException({
+          code: 'UNLIMITED_PLAN_REQUIRED',
+          message:
+            'Seu plano atual não inclui o modo ilimitado. Faça upgrade para Creator, Pro, Advanced ou Studio.',
+        });
+      case 'model_not_allowed':
+        throw new ForbiddenException({
+          code: 'UNLIMITED_MODEL_NOT_ALLOWED',
+          message:
+            'Este modelo/resolução não está disponível no modo ilimitado do seu plano.',
+        });
+      case 'hard_cap_reached':
+        throw new HttpException(
+          {
+            code: 'UNLIMITED_DAILY_CAP_REACHED',
+            message:
+              'Nossos servidores estão sobrecarregados no momento. Tente novamente em alguns minutos.',
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      default:
+        throw new ForbiddenException({
+          code: 'UNLIMITED_NOT_ALLOWED',
+          message: 'Geração ilimitada indisponível.',
+        });
+    }
+  }
+
+  /**
+   * Combina elegibilidade + acquire lock numa única chamada. Garante que o
+   * lock é adquirido ANTES de qualquer escrita no banco (Generation), evitando
+   * registros órfãos em PROCESSING quando há concorrência (2 cliques rápidos,
+   * 2 abas, etc.).
+   */
+  private async reserveUnlimitedOrThrow(
+    userId: string,
+    modelVariant: string | null,
+    resolution: Resolution,
+  ): Promise<UnlimitedEligibility> {
+    const eligibility = await this.validateUnlimitedOrThrow(
+      userId,
+      modelVariant,
+      resolution,
+    );
+    const locked = await this.unlimitedService.acquireLock(userId);
+    if (!locked) {
+      throw new HttpException(
+        {
+          code: 'UNLIMITED_LOCK_HELD',
+          message:
+            'Você já tem uma geração ilimitada em andamento. Aguarde ela terminar antes de iniciar outra.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+    return eligibility;
+  }
+
+  /**
+   * Registra o uso e enfileira o job na queue ilimitada. **Pré-condição:**
+   * o lock já foi adquirido (via `reserveUnlimitedOrThrow`). Em caso de erro
+   * aqui, libera o lock pro usuário não ficar preso até o TTL expirar.
+   * O worker libera o lock no completed/failed normal.
+   */
+  private async enqueueUnlimitedJob(
+    eligibility: UnlimitedEligibility,
+    args: {
+      userId: string;
+      generationId: string;
+      modelVariant: string;
+      resolution: Resolution;
+      jobName: string;
+      jobData: object;
+    },
+  ): Promise<void> {
+    try {
+      await this.unlimitedService.recordUsage({
+        userId: args.userId,
+        generationId: args.generationId,
+        modelVariant: args.modelVariant,
+        resolution: args.resolution,
+      });
+
+      await this.unlimitedQueue.add(args.jobName, args.jobData, {
+        priority: eligibility.planContext!.unlimitedPriority,
+        delay: eligibility.delayMs,
+      });
+    } catch (err) {
+      await this.unlimitedService.releaseLock(args.userId).catch(() => undefined);
+      throw err;
+    }
   }
 
   // ─── Image generation (text-to-image / image-to-image) ────
@@ -241,24 +395,37 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-
-    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
-    const isFreeGeneration = freeGenType !== null;
-
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          undefined,
-          false,
-          1,
-          modelVariant,
-        );
+    const isUnlimited = dto.unlimited === true;
 
     await this.checkConcurrentLimit(userId);
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+    let freeGenType: FreeGenerationType | null = null;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+      isFreeGeneration = freeGenType !== null;
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            undefined,
+            false,
+            1,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -273,7 +440,10 @@ export class GenerationsService {
         hasAudio: false,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
-        parameters: { mimeType: dto.mime_type },
+        parameters: {
+          mimeType: dto.mime_type,
+          ...(isUnlimited ? { unlimited: true } : {}),
+        },
       },
     });
 
@@ -294,10 +464,12 @@ export class GenerationsService {
       });
     }
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
-    } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (!isUnlimited) {
+      if (isFreeGeneration && freeGenType) {
+        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+      } else {
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      }
     }
 
     const jobData: ImageJobData = {
@@ -313,7 +485,16 @@ export class GenerationsService {
       hasInputImages: !!dto.images?.length,
     };
 
-    if (this.isSeedream(dto.model)) {
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
+        userId,
+        generationId: generation.id,
+        modelVariant: modelVariant!,
+        resolution: dto.resolution,
+        jobName: GenerationJobName.IMAGE,
+        jobData,
+      });
+    } else if (this.isSeedream(dto.model)) {
       this.runSeedreamDirectly(jobData);
     } else {
       await this.generationQueue.add(GenerationJobName.IMAGE, jobData);
@@ -367,29 +548,42 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-
-    const freeGenType = await this.resolveFreeGenForRequest(
-      userId,
-      type,
-      modelVariant,
-      freeGenerationTypeOverride,
-    );
-    const isFreeGeneration = freeGenType !== null;
-
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          undefined,
-          false,
-          1,
-          modelVariant,
-        );
+    const isUnlimited = dto.unlimited === true;
 
     await this.checkConcurrentLimit(userId);
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+    let freeGenType: FreeGenerationType | null = null;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      freeGenType = await this.resolveFreeGenForRequest(
+        userId,
+        type,
+        modelVariant,
+        freeGenerationTypeOverride,
+      );
+      isFreeGeneration = freeGenType !== null;
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            undefined,
+            false,
+            1,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -404,7 +598,11 @@ export class GenerationsService {
         hasAudio: false,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
-        parameters: { mimeType: dto.mime_type, provider: 'geraew' },
+        parameters: {
+          mimeType: dto.mime_type,
+          provider: 'geraew',
+          ...(isUnlimited ? { unlimited: true } : {}),
+        },
       },
     });
 
@@ -425,10 +623,12 @@ export class GenerationsService {
       });
     }
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
-    } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (!isUnlimited) {
+      if (isFreeGeneration && freeGenType) {
+        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+      } else {
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      }
     }
 
     const jobDataFallback: ImageJobData = {
@@ -444,7 +644,16 @@ export class GenerationsService {
       hasInputImages: !!dto.images?.length,
     };
 
-    if (this.isSeedream(dto.model)) {
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
+        userId,
+        generationId: generation.id,
+        modelVariant: modelVariant!,
+        resolution: dto.resolution,
+        jobName: GenerationJobName.IMAGE_WITH_FALLBACK,
+        jobData: jobDataFallback,
+      });
+    } else if (this.isSeedream(dto.model)) {
       this.runSeedreamDirectly(jobDataFallback);
     } else {
       await this.generationQueue.add(
@@ -472,24 +681,37 @@ export class GenerationsService {
         : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
-
-    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
-    const isFreeGeneration = freeGenType !== null;
-
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          undefined,
-          false,
-          1,
-          modelVariant,
-        );
+    const isUnlimited = dto.unlimited === true;
 
     await this.checkConcurrentLimit(userId);
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+    let freeGenType: FreeGenerationType | null = null;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+      isFreeGeneration = freeGenType !== null;
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            undefined,
+            false,
+            1,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -507,6 +729,7 @@ export class GenerationsService {
         parameters: {
           output_format: dto.output_format,
           google_search: dto.google_search,
+          ...(isUnlimited ? { unlimited: true } : {}),
         },
       },
     });
@@ -534,34 +757,46 @@ export class GenerationsService {
       imageUrls = uploadedUrls;
     }
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
-    } else {
-      await this.debitCredits(
-        userId,
-        creditsRequired,
-        generation.id,
-        type,
-        dto.resolution,
-      );
+    if (!isUnlimited) {
+      if (isFreeGeneration && freeGenType) {
+        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+      } else {
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
+      }
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE_NANO_BANANA,
-      {
-        generationId: generation.id,
+    const jobData: ImageNanoBananaJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model ?? 'nano-banana-2',
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      outputFormat: dto.output_format,
+      googleSearch: dto.google_search,
+      imageUrls,
+    };
+
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
         userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model ?? 'nano-banana-2',
+        generationId: generation.id,
+        modelVariant: modelVariant!,
         resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        outputFormat: dto.output_format,
-        googleSearch: dto.google_search,
-        imageUrls,
-      } satisfies ImageNanoBananaJobData,
-    );
+        jobName: GenerationJobName.IMAGE_NANO_BANANA,
+        jobData,
+      });
+    } else {
+      await this.generationQueue.add(GenerationJobName.IMAGE_NANO_BANANA, jobData);
+    }
 
     return {
       id: generation.id,
@@ -579,36 +814,47 @@ export class GenerationsService {
     const type = GenerationType.TEXT_TO_VIDEO;
     const hasAudio = dto.generate_audio ?? true;
 
-    const sampleCount = dto.sample_count ?? 1;
+    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
+    const isUnlimited = dto.unlimited === true;
 
     await this.modelsService.assertActiveBySlug(
       normalizeVideoModelSlug(dto.model),
       AiModelType.VIDEO,
     );
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-    const isFreeGeneration = veoAccess === 'free_generation';
-
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
     const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
 
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          dto.duration_seconds,
-          hasAudio,
-          sampleCount,
-          modelVariant,
-        );
-
     await this.checkConcurrentLimit(userId);
 
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+      isFreeGeneration = veoAccess === 'free_generation';
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            dto.duration_seconds,
+            hasAudio,
+            sampleCount,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -626,36 +872,49 @@ export class GenerationsService {
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
+        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
       },
     });
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(
-        userId,
-        generation.id,
-        FreeGenerationType.GERAEW_FAST,
-      );
-    } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (!isUnlimited) {
+      if (isFreeGeneration) {
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          FreeGenerationType.GERAEW_FAST,
+        );
+      } else {
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      }
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.TEXT_TO_VIDEO,
-      {
-        generationId: generation.id,
+    const jobData: TextToVideoJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model,
+      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      sampleCount,
+      negativePrompt: dto.negative_prompt,
+    };
+
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
         userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model,
-        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        sampleCount,
-        negativePrompt: dto.negative_prompt,
-      } satisfies TextToVideoJobData,
-    );
+        generationId: generation.id,
+        modelVariant: modelVariant!,
+        resolution: dto.resolution,
+        jobName: GenerationJobName.TEXT_TO_VIDEO,
+        jobData,
+      });
+    } else {
+      await this.generationQueue.add(GenerationJobName.TEXT_TO_VIDEO, jobData);
+    }
 
     return {
       id: generation.id,
@@ -674,36 +933,47 @@ export class GenerationsService {
     const model = dto.model ?? 'veo-3.1-generate-001';
     const hasAudio = dto.generate_audio ?? true;
 
-    const sampleCount = dto.sample_count ?? 1;
+    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
+    const isUnlimited = dto.unlimited === true;
 
     await this.modelsService.assertActiveBySlug(
       normalizeVideoModelSlug(model),
       AiModelType.VIDEO,
     );
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-    const isFreeGeneration = veoAccess === 'free_generation';
-
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
     const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
 
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          dto.duration_seconds,
-          hasAudio,
-          sampleCount,
-          modelVariant,
-        );
-
     await this.checkConcurrentLimit(userId);
 
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+      isFreeGeneration = veoAccess === 'free_generation';
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            dto.duration_seconds,
+            hasAudio,
+            sampleCount,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -721,6 +991,7 @@ export class GenerationsService {
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
+        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
       },
     });
 
@@ -760,34 +1031,46 @@ export class GenerationsService {
     }
     await this.prisma.generationInputImage.createMany({ data: inputImageData });
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(
-        userId,
-        generation.id,
-        FreeGenerationType.GERAEW_FAST,
-      );
-    } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (!isUnlimited) {
+      if (isFreeGeneration) {
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          FreeGenerationType.GERAEW_FAST,
+        );
+      } else {
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      }
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE_TO_VIDEO,
-      {
-        generationId: generation.id,
+    const jobData: ImageToVideoJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model ?? model,
+      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      sampleCount,
+      negativePrompt: dto.negative_prompt,
+      resolvedModel: model,
+    };
+
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
         userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model ?? model,
-        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        sampleCount,
-        negativePrompt: dto.negative_prompt,
-        resolvedModel: model,
-      } satisfies ImageToVideoJobData,
-    );
+        generationId: generation.id,
+        modelVariant: modelVariant!,
+        resolution: dto.resolution,
+        jobName: GenerationJobName.IMAGE_TO_VIDEO,
+        jobData,
+      });
+    } else {
+      await this.generationQueue.add(GenerationJobName.IMAGE_TO_VIDEO, jobData);
+    }
 
     return {
       id: generation.id,
@@ -806,36 +1089,47 @@ export class GenerationsService {
     const model = dto.model ?? 'veo-3.1-generate-001';
     const hasAudio = dto.generate_audio ?? true;
 
-    const sampleCount = dto.sample_count ?? 1;
+    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
+    const isUnlimited = dto.unlimited === true;
 
     await this.modelsService.assertActiveBySlug(
       normalizeVideoModelSlug(model),
       AiModelType.VIDEO,
     );
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-    const isFreeGeneration = veoAccess === 'free_generation';
-
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
     const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
 
-    const creditsRequired = isFreeGeneration
-      ? 0
-      : await this.plansService.calculateGenerationCost(
-          type,
-          dto.resolution,
-          dto.duration_seconds,
-          hasAudio,
-          sampleCount,
-          modelVariant,
-        );
-
     await this.checkConcurrentLimit(userId);
 
-    if (!isFreeGeneration) {
-      await this.ensureSufficientBalance(userId, creditsRequired);
+    let eligibility: UnlimitedEligibility | undefined;
+    let creditsRequired = 0;
+    let isFreeGeneration = false;
+
+    if (isUnlimited) {
+      eligibility = await this.reserveUnlimitedOrThrow(
+        userId,
+        modelVariant,
+        dto.resolution,
+      );
+    } else {
+      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
+      isFreeGeneration = veoAccess === 'free_generation';
+      creditsRequired = isFreeGeneration
+        ? 0
+        : await this.plansService.calculateGenerationCost(
+            type,
+            dto.resolution,
+            dto.duration_seconds,
+            hasAudio,
+            sampleCount,
+            modelVariant,
+          );
+      if (!isFreeGeneration) {
+        await this.ensureSufficientBalance(userId, creditsRequired);
+      }
     }
 
     const generation = await this.prisma.generation.create({
@@ -853,6 +1147,7 @@ export class GenerationsService {
         quantity: sampleCount,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
+        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
       },
     });
 
@@ -874,34 +1169,46 @@ export class GenerationsService {
       });
     }
 
-    if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(
-        userId,
-        generation.id,
-        FreeGenerationType.GERAEW_FAST,
-      );
-    } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+    if (!isUnlimited) {
+      if (isFreeGeneration) {
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          FreeGenerationType.GERAEW_FAST,
+        );
+      } else {
+        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      }
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.REFERENCE_VIDEO,
-      {
-        generationId: generation.id,
+    const jobData: ReferenceVideoJobData = {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model: dto.model ?? model,
+      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      sampleCount,
+      negativePrompt: dto.negative_prompt,
+      resolvedModel: model,
+    };
+
+    if (isUnlimited) {
+      await this.enqueueUnlimitedJob(eligibility!, {
         userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model: dto.model ?? model,
-        resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        sampleCount,
-        negativePrompt: dto.negative_prompt,
-        resolvedModel: model,
-      } satisfies ReferenceVideoJobData,
-    );
+        generationId: generation.id,
+        modelVariant: modelVariant!,
+        resolution: dto.resolution,
+        jobName: GenerationJobName.REFERENCE_VIDEO,
+        jobData,
+      });
+    } else {
+      await this.generationQueue.add(GenerationJobName.REFERENCE_VIDEO, jobData);
+    }
 
     return {
       id: generation.id,
