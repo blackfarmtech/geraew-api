@@ -97,6 +97,10 @@ export class HeyGenProvider {
    * POST /v3/avatars (type: digital_twin) — kicks off avatar training.
    * Returns the look ID (used as avatar_id when creating videos) and
    * the group ID (used to initiate consent and to query status).
+   *
+   * Videos pretty much always exceed HeyGen's 32MB URL-input cap, so we
+   * always go through the /v1/asset upload path here. Costs an extra hop
+   * but avoids the 'invalid_parameter: too large' rejection.
    */
   async createDigitalTwin(input: {
     name: string;
@@ -104,13 +108,17 @@ export class HeyGenProvider {
   }): Promise<HeyGenCreateDigitalTwinResult> {
     this.ensureConfigured();
 
+    this.logger.log(`[HEYGEN] createDigitalTwin name="${input.name}" fileUrl=${input.fileUrl} (uploading via /v1/asset)`);
+
+    // Upload to HeyGen's asset bucket and use the returned asset_id —
+    // /v3/avatars URL inputs are capped at 32MB.
+    const assetId = await this.uploadAsset(input.fileUrl, 'video/mp4');
+
     const body = {
       type: 'digital_twin' as const,
       name: input.name,
-      file: { type: 'url' as const, url: input.fileUrl },
+      file: { type: 'asset' as const, asset_id: assetId },
     };
-
-    this.logger.log(`[HEYGEN] createDigitalTwin name="${input.name}" fileUrl=${input.fileUrl}`);
 
     const response = await this.fetchJson<{
       data: {
@@ -469,6 +477,71 @@ export class HeyGenProvider {
     const providedBuf = Buffer.from(provided, 'hex');
     if (expectedBuf.length !== providedBuf.length) return false;
     return timingSafeEqual(expectedBuf, providedBuf);
+  }
+
+  /**
+   * POST upload.heygen.com/v1/asset — uploads a binary file and returns the
+   * asset_id. Required for files larger than 32MB (digital twin videos pretty
+   * much always hit this). Streams from the source URL straight to HeyGen so
+   * we don't buffer hundreds of MB in memory.
+   */
+  async uploadAsset(sourceUrl: string, contentType: string): Promise<string> {
+    this.ensureConfigured();
+
+    this.logger.log(`[HEYGEN] uploadAsset sourceUrl=${sourceUrl} contentType=${contentType}`);
+
+    // Fetch the source file as a stream
+    const upstream = await fetch(sourceUrl);
+    if (!upstream.ok || !upstream.body) {
+      throw new Error(
+        `Falha ao baixar o arquivo do storage para o upload na HeyGen (status=${upstream.status}).`,
+      );
+    }
+
+    const contentLength = upstream.headers.get('content-length');
+    const headers: Record<string, string> = {
+      'X-Api-Key': this.apiKey,
+      'Content-Type': contentType,
+    };
+    if (contentLength) headers['Content-Length'] = contentLength;
+
+    // 10 minute timeout — uploads of 200-500MB videos can take a while
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+
+    try {
+      const response = await fetch('https://upload.heygen.com/v1/asset', {
+        method: 'POST',
+        headers,
+        body: upstream.body,
+        signal: controller.signal,
+        // Node fetch requires this when streaming a request body
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.error(
+          `HeyGen asset upload failed status=${response.status} body=${errorBody.slice(0, 300)}`,
+        );
+        throw new Error(this.friendlyHttpMessage(response.status, errorBody));
+      }
+
+      // HeyGen returns { code, data: { id, name, file_url, ... } }
+      const json = (await response.json()) as { data?: { id?: string } };
+      const assetId = json?.data?.id;
+      if (!assetId) {
+        this.logger.error(
+          `HeyGen asset upload missing id in response: ${JSON.stringify(json).slice(0, 300)}`,
+        );
+        throw new Error('A HeyGen aceitou o upload mas não retornou um asset_id.');
+      }
+
+      this.logger.log(`[HEYGEN] ✅ uploadAsset → asset_id=${assetId}`);
+      return assetId;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // ─── Internals ────────────────────────────────────────────────────────────

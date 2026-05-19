@@ -21,11 +21,14 @@ import {
 } from './avatar-queue.constants';
 
 @Processor(AVATAR_QUEUE, {
-  // Now that video completion is driven by the HeyGen webhook, the worker job
-  // is fire-and-forget (submit + save video_id). Workers free up in seconds,
-  // so we can run more in parallel and shrink the lock window.
+  // Two job types share this queue:
+  //   - generate-video: fire-and-forget (webhook drives completion). Sub-2min.
+  //   - submit-training: digital twins upload via HeyGen /v1/asset, which can
+  //     take several minutes for large videos (200–500MB).
+  // Lock window is sized for the worst case (asset upload). The 15-min
+  // stuck-generations cron is the safety net if a worker hangs longer.
   concurrency: 10,
-  lockDuration: 2 * 60 * 1000, // 2 min — only covers submit + TTS synth latency
+  lockDuration: 10 * 60 * 1000, // 10 min
 })
 export class AvatarProcessor extends WorkerHost {
   private readonly logger = new Logger(AvatarProcessor.name);
