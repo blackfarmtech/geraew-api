@@ -117,7 +117,8 @@ export class HeyGenProvider {
     const body = {
       type: 'digital_twin' as const,
       name: input.name,
-      file: { type: 'asset' as const, asset_id: assetId },
+      // HeyGen's file discriminator accepts: 'url' | 'asset_id' | 'base64'
+      file: { type: 'asset_id' as const, asset_id: assetId },
     };
 
     const response = await this.fetchJson<{

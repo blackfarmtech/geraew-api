@@ -22,4 +22,13 @@ export class AiModelResponseDto {
 
   @ApiProperty()
   sortOrder!: number;
+
+  /**
+   * True for "gateway" entries (feature flags managed via the admin page) that
+   * shouldn't appear as selectable models in the generation panels. The
+   * frontend filters these out of dropdowns but still uses them to gate the
+   * corresponding feature (e.g. avatar video, motion control).
+   */
+  @ApiProperty()
+  isGateway!: boolean;
 }
