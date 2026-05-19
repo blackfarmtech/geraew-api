@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
+  AiModelType,
   AvatarConsentStatus,
   AvatarStatus,
   GenerationStatus,
@@ -20,6 +21,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { CreditsService } from '../credits/credits.service';
+import { ModelsService } from '../models/models.service';
 import { HeyGenProvider } from './providers/heygen.provider';
 import { CreateAvatarDto } from './dto/create-avatar.dto';
 import { GenerateAvatarVideoDto } from './dto/generate-avatar-video.dto';
@@ -29,8 +31,8 @@ import {
   AvatarResponseDto,
 } from './dto/avatar-response.dto';
 import {
-  AVATAR_VIDEO_CREDIT_COSTS,
   DEFAULT_AVATAR_TRAINING_CREDITS,
+  estimateAvatarVideoCost,
 } from './avatars.constants';
 import { AVATAR_QUEUE, AvatarJobName } from './queue/avatar-queue.constants';
 
@@ -44,6 +46,7 @@ export class AvatarsService {
     private readonly creditsService: CreditsService,
     private readonly heygen: HeyGenProvider,
     private readonly configService: ConfigService,
+    private readonly modelsService: ModelsService,
     @InjectQueue(AVATAR_QUEUE) private readonly avatarQueue: Queue,
   ) {}
 
@@ -70,6 +73,11 @@ export class AvatarsService {
   }
 
   async create(userId: string, dto: CreateAvatarDto): Promise<AvatarResponseDto> {
+    // Feature gate — admin can disable the entire avatar feature (cloning +
+    // video gen) via the 'avatar-video' AiModel toggle. Blocking here prevents
+    // users from spending credits on a clone they wouldn't be able to use.
+    await this.modelsService.assertActiveBySlug('avatar-video', AiModelType.VIDEO);
+
     // Quota gating
     const quota = await this.getQuota(userId);
     if (!quota.enabled) {
@@ -94,7 +102,7 @@ export class AvatarsService {
     const sourceMediaUrl = this.uploadsService.getPublicUrl(dto.sourceMediaKey);
     const avatarType: 'photo' | 'digital_twin' = dto.type ?? 'photo';
 
-    const trainingCost = this.getTrainingCost();
+    const trainingCost = this.getTrainingCost(avatarType);
 
     // Pre-create the row so credits.transaction can reference userAvatarId.
     // We use a separate, short transaction here; actual debit happens after.
@@ -145,6 +153,11 @@ export class AvatarsService {
     avatarId: string,
     dto: GenerateAvatarVideoDto,
   ): Promise<{ generationId: string; status: GenerationStatus; creditsConsumed: number }> {
+    // Feature gate — admin can disable avatar video generation via the
+    // 'avatar-video' AiModel toggle. Throws MODEL_DISABLED with the admin's
+    // status message if off.
+    await this.modelsService.assertActiveBySlug('avatar-video', AiModelType.VIDEO);
+
     const avatar = await this.findOwnedOrThrow(userId, avatarId);
 
     if (avatar.status !== AvatarStatus.READY) {
@@ -180,7 +193,9 @@ export class AvatarsService {
       engine = 'avatar_iv';
     }
 
-    const cost = this.getVideoCost(dto.resolution, engine);
+    // Estimate cost upfront based on script length; the HeyGen webhook reconciles
+    // this to the actual cost once the real video duration is known.
+    const cost = estimateAvatarVideoCost(dto.resolution, dto.script.length);
 
     // Map our DTO resolution to Prisma Resolution enum
     const prismaRes: Resolution =
@@ -206,6 +221,7 @@ export class AvatarsService {
           script: dto.script,
           voiceId: dto.voiceId ?? null,
           voiceProfileId: dto.voiceProfileId ?? null,
+          inworldVoiceId: dto.inworldVoiceId ?? null,
           engine,
           resolution: dto.resolution,
           aspectRatio: dto.aspectRatio,
@@ -350,20 +366,16 @@ export class AvatarsService {
     return { used, limit, enabled, planSlug };
   }
 
-  private getTrainingCost(): number {
-    const raw = this.configService.get<string>('AVATAR_TRAINING_CREDITS');
+  private getTrainingCost(avatarType: 'photo' | 'digital_twin'): number {
+    const envKey =
+      avatarType === 'photo'
+        ? 'AVATAR_TRAINING_CREDITS_PHOTO'
+        : 'AVATAR_TRAINING_CREDITS_DIGITAL_TWIN';
+    const raw = this.configService.get<string>(envKey);
     const parsed = raw ? parseInt(raw, 10) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AVATAR_TRAINING_CREDITS;
-  }
-
-  private getVideoCost(resolution: string, engine: string): number {
-    const byEngine = AVATAR_VIDEO_CREDIT_COSTS[resolution];
-    const cost = byEngine?.[engine];
-    if (!cost) {
-      // Should never happen — DTO validates both fields. Defensive fallback.
-      return 1500;
-    }
-    return cost;
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_AVATAR_TRAINING_CREDITS[avatarType];
   }
 
   private toResponse(avatar: UserAvatar): AvatarResponseDto {

@@ -336,6 +336,9 @@ model Generation {
   usedFreeGenerationType FreeGenerationType?    @map("used_free_generation_type")
   voiceProfileId         String?                @map("voice_profile_id")
   userAvatarId           String?                @map("user_avatar_id")
+  /** HeyGen's video_id — set when an avatar video is submitted, used by the
+   *  webhook to correlate completion events back to this Generation. */
+  heygenVideoId          String?                @unique @map("heygen_video_id")
   influencer_id          String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]

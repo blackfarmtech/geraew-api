@@ -1223,6 +1223,9 @@ export class GenerationsService {
     userId: string,
     dto: GenerateMotionControlDto,
   ): Promise<CreateGenerationResponseDto> {
+    // Feature gate — admin can disable motion control via /admin/modelos.
+    await this.modelsService.assertActiveBySlug('motion-control', AiModelType.VIDEO);
+
     const type = GenerationType.MOTION_CONTROL;
     const resolution = dto.resolution ?? '720p';
     const dbResolution = resolution === '1080p' ? Resolution.RES_1080P : Resolution.RES_720P;

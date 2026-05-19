@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Controller,
-  Headers,
   HttpCode,
   HttpStatus,
   Logger,
@@ -15,6 +14,20 @@ import { Request } from 'express';
 import { Public } from '../../common/decorators';
 import { HeyGenProvider } from '../providers/heygen.provider';
 import { HeyGenWebhookEvent, HeyGenWebhookService } from './heygen-webhook.service';
+
+/** HeyGen doesn't publicly document the exact header name. Try the common
+ *  variants — first one to be present (with a non-empty value) wins. */
+const SIGNATURE_HEADER_CANDIDATES = [
+  'x-heygen-signature',
+  'heygen-signature',
+  'x-hmac-signature',
+  'x-signature',
+  'x-signature-256',
+  'x-hub-signature-256',
+  'signature',
+  'webhook-signature',
+  'svix-signature',
+];
 
 @ApiTags('webhooks')
 @Controller('api/v1/webhooks')
@@ -35,15 +48,29 @@ export class HeyGenWebhookController {
   @ApiResponse({ status: 400, description: 'Invalid payload' })
   async heygenWebhook(
     @Req() req: RawBodyRequest<Request>,
-    @Headers('x-heygen-signature') signature: string,
   ): Promise<{ received: true }> {
     const rawBuffer = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
     const rawString = rawBuffer.toString('utf8');
 
-    // Verify HMAC. Refuse silently-cheap; never run handler before this.
+    // Find which header carries the signature
+    let signature: string | undefined;
+    let signatureHeader: string | undefined;
+    for (const name of SIGNATURE_HEADER_CANDIDATES) {
+      const value = req.headers[name];
+      if (typeof value === 'string' && value.length > 0) {
+        signature = value;
+        signatureHeader = name;
+        break;
+      }
+    }
+
     if (!this.heygen.verifyWebhookSignature(rawString, signature)) {
+      // Log all incoming headers so we can identify which one HeyGen uses
+      const headerDump = Object.entries(req.headers)
+        .map(([k, v]) => `${k}=${String(v).slice(0, 80)}`)
+        .join(' | ');
       this.logger.warn(
-        `[heygen-webhook] invalid signature signature=${signature?.slice(0, 16)}... rawLen=${rawString.length}`,
+        `[heygen-webhook] invalid signature — usedHeader=${signatureHeader ?? 'NONE'} value=${signature?.slice(0, 24) ?? 'undefined'}... rawLen=${rawString.length}\n[heygen-webhook] all headers: ${headerDump}`,
       );
       throw new UnauthorizedException('Invalid signature');
     }

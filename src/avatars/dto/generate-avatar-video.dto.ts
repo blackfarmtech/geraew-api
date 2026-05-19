@@ -19,11 +19,11 @@ export class GenerateAvatarVideoDto {
     description:
       'Texto que o avatar vai falar (TTS). Use a voz padrão do avatar — voiceId é opcional.',
     example: 'Oi pessoal, aqui é o seu avatar falando sobre nosso novo produto!',
-    maxLength: 1500,
+    maxLength: 3000,
   })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(1500)
+  @MaxLength(3000)
   script: string;
 
   @ApiPropertyOptional({
@@ -41,6 +41,14 @@ export class GenerateAvatarVideoDto {
   @IsOptional()
   @IsString()
   voiceProfileId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ID de uma voz pública do catálogo Inworld (ex: "Heitor", "Sarah"). Quando presente, o backend gera o áudio via Wavespeed (Inworld TTS) e passa para o HeyGen como audio_url. Mutuamente exclusivo com voiceId e voiceProfileId.',
+  })
+  @IsOptional()
+  @IsString()
+  inworldVoiceId?: string;
 
   @ApiPropertyOptional({
     description:

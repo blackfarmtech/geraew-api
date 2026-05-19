@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { CreditsModule } from '../credits/credits.module';
+import { ModelsModule } from '../models/models.module';
 import { AvatarsController } from './avatars.controller';
 import { AvatarsService } from './avatars.service';
 import { HeyGenProvider } from './providers/heygen.provider';
@@ -19,6 +20,7 @@ import { WavespeedAudioProvider } from '../generations/providers/wavespeed-audio
     PrismaModule,
     UploadsModule,
     CreditsModule,
+    ModelsModule,
     BullModule.registerQueue({
       name: AVATAR_QUEUE,
       defaultJobOptions: {

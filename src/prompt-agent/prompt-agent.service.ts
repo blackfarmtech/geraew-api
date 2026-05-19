@@ -4,11 +4,10 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
 import { CreditsService } from '../credits/credits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditTransactionType } from '@prisma/client';
+import { GeraewChatClient, ChatPart } from '../prompt-enhancer/geraew-chat.client';
 
 const CREDIT_COST = 5;
 
@@ -108,22 +107,15 @@ type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 @Injectable()
 export class PromptAgentService {
   private readonly logger = new Logger(PromptAgentService.name);
-  private readonly client: Anthropic;
 
   constructor(
-    private readonly config: ConfigService,
     private readonly creditsService: CreditsService,
     private readonly prisma: PrismaService,
-  ) {
-    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
-    if (!apiKey) {
-      this.logger.warn('ANTHROPIC_API_KEY não configurada');
-    }
-    this.client = new Anthropic({ apiKey: apiKey || '' });
-  }
+    private readonly chatClient: GeraewChatClient,
+  ) {}
 
   async analyzeImage(userId: string, image: string) {
-    const imageBlock = this.buildImageBlock(image);
+    const imageBlock = await this.buildImageBlock(image);
 
     // Debita créditos antes; estorna em erro
     await this.creditsService.debit(
@@ -135,12 +127,12 @@ export class PromptAgentService {
     );
 
     try {
-      const raw = await this.callClaude(imageBlock);
+      const raw = await this.callModel(imageBlock);
       let json: any;
       try {
         json = this.extractJson(raw);
       } catch (err: any) {
-        const retryRaw = await this.callClaude(
+        const retryRaw = await this.callModel(
           imageBlock,
           `O JSON anterior falhou a validação: ${err.message}. Retorne APENAS o JSON corrigido seguindo a estrutura obrigatória.`,
         );
@@ -215,7 +207,7 @@ export class PromptAgentService {
     }
   }
 
-  private buildImageBlock(image: string): any {
+  private async buildImageBlock(image: string): Promise<ChatPart> {
     if (image.startsWith('data:')) {
       const match = image.match(/^data:(image\/(jpeg|png|webp|gif));base64,(.+)$/);
       if (!match) {
@@ -224,7 +216,7 @@ export class PromptAgentService {
           message: 'Formato de imagem inválido. Use JPEG, PNG ou WebP em base64.',
         });
       }
-      const media_type = match[1] as MediaType;
+      const mime_type = match[1] as MediaType;
       const data = match[3];
       const sizeBytes = (data.length * 3) / 4;
       if (sizeBytes > 5 * 1024 * 1024) {
@@ -233,10 +225,11 @@ export class PromptAgentService {
           message: 'Imagem excede 5MB.',
         });
       }
-      return { type: 'image', source: { type: 'base64', media_type, data } };
+      return { inline_data: { base64: data, mime_type } };
     }
     if (/^https?:\/\//i.test(image)) {
-      return { type: 'image', source: { type: 'url', url: image } };
+      const fetched = await this.fetchImageAsBase64(image);
+      return { inline_data: fetched };
     }
     throw new BadRequestException({
       code: 'INVALID_IMAGE',
@@ -244,26 +237,57 @@ export class PromptAgentService {
     });
   }
 
-  private async callClaude(imageBlock: any, extraUserText?: string): Promise<string> {
-    const res = await this.client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+  private async fetchImageAsBase64(
+    url: string,
+  ): Promise<{ base64: string; mime_type: MediaType }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) {
+        throw new BadRequestException({
+          code: 'IMAGE_FETCH_FAILED',
+          message: `Não foi possível baixar a imagem (HTTP ${res.status}).`,
+        });
+      }
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      const mime = contentType.split(';')[0].trim();
+      const allowed: MediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowed.includes(mime as MediaType)) {
+        throw new BadRequestException({
+          code: 'INVALID_IMAGE_FORMAT',
+          message: `Tipo de imagem não suportado: ${mime || 'desconhecido'}.`,
+        });
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 5 * 1024 * 1024) {
+        throw new BadRequestException({
+          code: 'FILE_TOO_LARGE',
+          message: 'Imagem excede 5MB.',
+        });
+      }
+      return { base64: buf.toString('base64'), mime_type: mime as MediaType };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async callModel(imageBlock: ChatPart, extraUserText?: string): Promise<string> {
+    const res = await this.chatClient.chat({
+      system_instruction: SYSTEM_PROMPT,
+      max_output_tokens: 4096,
       temperature: 0.2,
-      system: [
-        { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      ] as any,
       messages: [
         {
           role: 'user',
-          content: [
+          parts: [
             imageBlock,
-            { type: 'text', text: extraUserText || 'Analise esta imagem e retorne APENAS o JSON.' },
+            { text: extraUserText || 'Analise esta imagem e retorne APENAS o JSON.' },
           ],
         },
       ],
     });
-    const textBlock = res.content.find((b: any) => b.type === 'text') as any;
-    return textBlock?.text || '';
+    return res.text || '';
   }
 
   private extractJson(text: string): any {

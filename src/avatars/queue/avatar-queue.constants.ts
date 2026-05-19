@@ -12,9 +12,10 @@ export interface SubmitTrainingJobData {
 }
 
 /**
- * Generates a video using a trained avatar. The Generation row is created
- * by AvatarsService BEFORE enqueueing — the worker only drives the HeyGen
- * call + polling + output persistence + status update.
+ * Generates a video using a trained avatar. The worker submits to HeyGen,
+ * stores the returned video_id, and returns — completion is driven by the
+ * HeyGen webhook (see HeyGenWebhookService.handleVideoEvent).
+ * StuckGenerationsService is the safety net for missed webhook deliveries.
  */
 export interface GenerateVideoJobData {
   userAvatarId: string;
@@ -24,10 +25,3 @@ export interface GenerateVideoJobData {
 }
 
 export type AvatarJobData = SubmitTrainingJobData | GenerateVideoJobData;
-
-/** How long a single HeyGen video render is allowed to run before we give up. */
-export const AVATAR_VIDEO_JOB_TIMEOUT_MS = 12 * 60 * 1000; // 12 min
-
-/** Polling interval / max attempts for /v3/videos/{id} status (worker fallback). */
-export const AVATAR_VIDEO_POLL_INTERVAL_MS = 5_000;
-export const AVATAR_VIDEO_POLL_MAX_ATTEMPTS = 144; // 12 min @ 5s

@@ -1,8 +1,14 @@
 /**
- * Default training cost in credits — overridable via AVATAR_TRAINING_CREDITS.
- * Avatar V/IV training in HeyGen self-serve is ~$1.00 per call (≈ R$5,67 a 5,67/USD).
+ * Default training cost in credits by avatar type.
+ *  - photo: faster + cheaper to create on HeyGen (single image).
+ *  - digital_twin: requires video footage; HeyGen charges more.
+ *
+ * Overridable via AVATAR_TRAINING_CREDITS_PHOTO / AVATAR_TRAINING_CREDITS_DIGITAL_TWIN.
  */
-export const DEFAULT_AVATAR_TRAINING_CREDITS = 5000;
+export const DEFAULT_AVATAR_TRAINING_CREDITS: Record<'photo' | 'digital_twin', number> = {
+  photo: 1250,
+  digital_twin: 2000,
+};
 
 /**
  * Hard timeout (minutes) for an avatar in TRAINING/PENDING_CONSENT before the
@@ -24,15 +30,49 @@ export const AVATAR_SOURCE_MAX_DURATION_S = 300;
 export const AVATAR_SOURCE_MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 
 /**
- * Per-render credit costs for avatar→video. Hard-coded for now; user said
- * pricing decision comes later. Numbers are a placeholder estimate based on
- * HeyGen self-serve ($0.0667/sec for 1080p Avatar IV) at R$5,67/USD with ~40% margin.
+ * Per-second credit rates for avatar→video, by output resolution. Same rate
+ * applies to both avatar_iv and avatar_v engines (HeyGen charges similarly).
  *
- * Cost lookup: AVATAR_VIDEO_CREDIT_COSTS[resolution][engine]
- * Rough scale: 1080p / avatar_iv — 30s video ~= 1500 credits.
+ * Pricing target: ~30% margin even on the cheapest plan (Studio), based on
+ * HeyGen self-serve ($0.05–$0.0833/sec) at R$5,67/USD.
  */
-export const AVATAR_VIDEO_CREDIT_COSTS: Record<string, Record<string, number>> = {
-  '720p': { avatar_iv: 1200, avatar_v: 1800 },
-  '1080p': { avatar_iv: 1500, avatar_v: 2200 },
-  '4k': { avatar_iv: 2400, avatar_v: 3600 },
+export const AVATAR_VIDEO_CREDITS_PER_SECOND: Record<string, number> = {
+  '720p': 50,
+  '1080p': 70,
+  '4k': 90,
 };
+
+/**
+ * Effective characters-per-second when computing the upfront estimate from
+ * the script length. PT-BR voices typically speak at ~12.5 cps; we divide by
+ * a slightly slower value to bake in a safety buffer (~15%) so the estimate
+ * tends to be HIGHER than reality. The webhook reconciles to the exact cost
+ * once HeyGen reports the real duration.
+ */
+export const AVATAR_VIDEO_ESTIMATE_CHARS_PER_SEC = 11;
+
+/** Minimum billable duration in seconds — guards against 1-2 word scripts. */
+export const AVATAR_VIDEO_MIN_DURATION_SEC = 3;
+
+/**
+ * Compute the credit estimate at submit time, based on script length.
+ * Returns an integer (always rounded up).
+ */
+export function estimateAvatarVideoCost(resolution: string, scriptLength: number): number {
+  const rate = AVATAR_VIDEO_CREDITS_PER_SECOND[resolution] ?? AVATAR_VIDEO_CREDITS_PER_SECOND['1080p'];
+  const seconds = Math.max(
+    AVATAR_VIDEO_MIN_DURATION_SEC,
+    Math.ceil(scriptLength / AVATAR_VIDEO_ESTIMATE_CHARS_PER_SEC),
+  );
+  return Math.ceil(seconds * rate);
+}
+
+/**
+ * Compute the actual credit cost after the real duration is known (from the
+ * HeyGen webhook). Used for reconciliation.
+ */
+export function actualAvatarVideoCost(resolution: string, durationSeconds: number): number {
+  const rate = AVATAR_VIDEO_CREDITS_PER_SECOND[resolution] ?? AVATAR_VIDEO_CREDITS_PER_SECOND['1080p'];
+  const billed = Math.max(AVATAR_VIDEO_MIN_DURATION_SEC, Math.ceil(durationSeconds));
+  return Math.ceil(billed * rate);
+}

@@ -358,6 +358,142 @@ export class CreditsService {
   }
 
   /**
+   * Reconciles the credits charged for a generation after the real cost is known.
+   * Used by the HeyGen avatar-video webhook: the upfront debit is an estimate
+   * based on script length, and the webhook reports the actual video duration.
+   *
+   *  - Positive deltaCredits → user was overcharged → refund (mirrors plan/bonus
+   *    proportions of the original debits).
+   *  - Negative deltaCredits → user was undercharged → debit the difference,
+   *    capped at the user's current balance (we don't model negative balances —
+   *    a tiny under-recovery is preferable to blocking the generation).
+   */
+  async adjustGenerationCost(
+    userId: string,
+    generationId: string,
+    deltaCredits: number,
+    description: string,
+  ): Promise<void> {
+    if (deltaCredits === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      const [balance] = await tx.$queryRawUnsafe<any[]>(
+        `SELECT * FROM "credit_balances" WHERE "user_id" = $1 FOR UPDATE`,
+        userId,
+      );
+      if (!balance) {
+        throw new NotFoundException('Saldo de créditos não encontrado');
+      }
+
+      if (deltaCredits > 0) {
+        // Refund the diff. Mirror the source proportions of the original debits
+        // so plan/bonus accounting stays consistent.
+        const debits = await tx.creditTransaction.findMany({
+          where: { generationId, type: CreditTransactionType.GENERATION_DEBIT },
+        });
+        const planDebited = debits
+          .filter((d) => d.source === 'plan')
+          .reduce((sum, d) => sum + Math.abs(d.amount), 0);
+        const totalDebited = debits.reduce((sum, d) => sum + Math.abs(d.amount), 0);
+
+        let planRefund = 0;
+        let bonusRefund = 0;
+        if (totalDebited > 0) {
+          planRefund = Math.round((planDebited / totalDebited) * deltaCredits);
+          bonusRefund = deltaCredits - planRefund;
+        } else {
+          bonusRefund = deltaCredits;
+        }
+
+        await tx.creditBalance.update({
+          where: { userId },
+          data: {
+            planCreditsRemaining: balance.plan_credits_remaining + planRefund,
+            bonusCreditsRemaining: balance.bonus_credits_remaining + bonusRefund,
+            planCreditsUsed: Math.max(0, balance.plan_credits_used - planRefund),
+          },
+        });
+
+        if (planRefund > 0) {
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: CreditTransactionType.GENERATION_REFUND,
+              amount: planRefund,
+              source: 'plan',
+              description,
+              generationId,
+            },
+          });
+        }
+        if (bonusRefund > 0) {
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: CreditTransactionType.GENERATION_REFUND,
+              amount: bonusRefund,
+              source: 'bonus',
+              description,
+              generationId,
+            },
+          });
+        }
+        return;
+      }
+
+      // deltaCredits < 0 — we need to debit more. Cap at current balance.
+      const shortfall = Math.abs(deltaCredits);
+      const totalAvailable =
+        balance.plan_credits_remaining + balance.bonus_credits_remaining;
+      const toDebit = Math.min(shortfall, totalAvailable);
+      if (toDebit <= 0) return;
+
+      let planDebit = 0;
+      let bonusDebit = 0;
+      if (balance.plan_credits_remaining >= toDebit) {
+        planDebit = toDebit;
+      } else {
+        planDebit = balance.plan_credits_remaining;
+        bonusDebit = toDebit - planDebit;
+      }
+
+      await tx.creditBalance.update({
+        where: { userId },
+        data: {
+          planCreditsRemaining: balance.plan_credits_remaining - planDebit,
+          bonusCreditsRemaining: balance.bonus_credits_remaining - bonusDebit,
+          planCreditsUsed: balance.plan_credits_used + planDebit,
+        },
+      });
+
+      if (planDebit > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.GENERATION_DEBIT,
+            amount: -planDebit,
+            source: 'plan',
+            description,
+            generationId,
+          },
+        });
+      }
+      if (bonusDebit > 0) {
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: CreditTransactionType.GENERATION_DEBIT,
+            amount: -bonusDebit,
+            source: 'bonus',
+            description,
+            generationId,
+          },
+        });
+      }
+    });
+  }
+
+  /**
    * Debit credits for avatar training. Symmetric to debit() but the resulting
    * transactions link to userAvatarId instead of generationId, with type
    * AVATAR_TRAINING_DEBIT so it shows up separately in the user's history.

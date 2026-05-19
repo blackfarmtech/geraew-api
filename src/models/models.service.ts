@@ -20,10 +20,9 @@ export class ModelsService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Garante que a entrada gateway de áudio exista no banco. Como o seed nem
-   * sempre roda em produção, fazemos upsert no startup. Falhas são apenas
-   * logadas (ex: enum AUDIO ainda não adicionado no Postgres) — quando o admin
-   * adicionar o valor do enum manualmente, o próximo restart cria a linha.
+   * Garante que entradas-gateway existam no banco. Como o seed nem sempre roda
+   * em produção, fazemos upsert no startup. Falhas são apenas logadas — não
+   * bloqueiam o boot.
    */
   async onModuleInit(): Promise<void> {
     try {
@@ -47,6 +46,54 @@ export class ModelsService implements OnModuleInit {
         `Failed to ensure 'audio-generation' AiModel row: ${
           err instanceof Error ? err.message : err
         }. If the error mentions the AUDIO enum, run "ALTER TYPE \\"AiModelType\\" ADD VALUE IF NOT EXISTS 'AUDIO';" in your database.`,
+      );
+    }
+
+    try {
+      await this.prisma.aiModel.upsert({
+        where: { slug: 'avatar-video' },
+        update: {},
+        create: {
+          slug: 'avatar-video',
+          label: 'Vídeo com avatar (HeyGen)',
+          description:
+            'Gateway para geração de vídeo com avatares clonados. Desativar bloqueia o botão "Gerar vídeo" nos cards de avatar e mantém o painel acessível em modo manutenção.',
+          provider: AiModelProvider.HEYGEN,
+          modelVariant: 'heygen/avatar_iv+avatar_v',
+          sortOrder: 101,
+          type: AiModelType.VIDEO,
+          isActive: true,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to ensure 'avatar-video' AiModel row: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+    }
+
+    try {
+      await this.prisma.aiModel.upsert({
+        where: { slug: 'motion-control' },
+        update: {},
+        create: {
+          slug: 'motion-control',
+          label: 'Motion Control (Kling)',
+          description:
+            'Gateway para o painel Motion Control (imagem + vídeo de referência → vídeo). Desativar coloca o botão "Gerar" em manutenção.',
+          provider: AiModelProvider.KIE,
+          modelVariant: 'kling-2.6/motion-control',
+          sortOrder: 102,
+          type: AiModelType.VIDEO,
+          isActive: true,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to ensure 'motion-control' AiModel row: ${
+          err instanceof Error ? err.message : err
+        }`,
       );
     }
   }

@@ -15,16 +15,17 @@ import { AvatarEventsService } from '../avatar-events.service';
 import { WavespeedAudioProvider } from '../../generations/providers/wavespeed-audio.provider';
 import {
   AVATAR_QUEUE,
-  AVATAR_VIDEO_POLL_INTERVAL_MS,
-  AVATAR_VIDEO_POLL_MAX_ATTEMPTS,
   AvatarJobName,
   GenerateVideoJobData,
   SubmitTrainingJobData,
 } from './avatar-queue.constants';
 
 @Processor(AVATAR_QUEUE, {
-  concurrency: 3,
-  lockDuration: 15 * 60 * 1000, // 15 min — HeyGen renders can take ~10 min
+  // Now that video completion is driven by the HeyGen webhook, the worker job
+  // is fire-and-forget (submit + save video_id). Workers free up in seconds,
+  // so we can run more in parallel and shrink the lock window.
+  concurrency: 10,
+  lockDuration: 2 * 60 * 1000, // 2 min — only covers submit + TTS synth latency
 })
 export class AvatarProcessor extends WorkerHost {
   private readonly logger = new Logger(AvatarProcessor.name);
@@ -167,10 +168,13 @@ export class AvatarProcessor extends WorkerHost {
       const script = typeof params.script === 'string' ? params.script : (generation.prompt ?? '');
       const voiceProfileId =
         typeof params.voiceProfileId === 'string' ? params.voiceProfileId : null;
+      const inworldVoiceId =
+        typeof params.inworldVoiceId === 'string' ? params.inworldVoiceId : null;
 
-      // If user picked a cloned voice, generate the audio via Wavespeed first,
-      // then upload to R2 and pass it as audio_url to HeyGen for lip-sync.
-      // Otherwise let HeyGen do TTS with the chosen/default voice_id.
+      // If the user picked a cloned voice OR an Inworld catalog voice, we
+      // synthesize the audio first (Wavespeed/OmniVoice for clones, Wavespeed/
+      // Inworld for the catalog), upload to R2, and pass the audio_url to
+      // HeyGen for lip-sync. Otherwise let HeyGen do its own TTS with voice_id.
       let audioUrl: string | undefined;
       if (voiceProfileId) {
         audioUrl = await this.synthesizeClonedAudio(
@@ -179,12 +183,18 @@ export class AvatarProcessor extends WorkerHost {
           script,
           voiceProfileId,
         );
+      } else if (inworldVoiceId) {
+        audioUrl = await this.synthesizeInworldAudio(
+          generation.id,
+          script,
+          inworldVoiceId,
+        );
       }
 
       // Resolution downgrade: the client may send '4k' (billed at the 4K
-      // credit cost) but HeyGen's avatar_iv engine doesn't render true 4K
+      // per-second rate) but HeyGen's avatar_iv engine doesn't render true 4K
       // today, so we downgrade to 1080p before the API call. The user is
-      // already billed at 4K — see AVATAR_VIDEO_CREDIT_COSTS.
+      // already billed at 4K — see AVATAR_VIDEO_CREDITS_PER_SECOND.
       const requestedResolution =
         typeof params.resolution === 'string'
           ? (params.resolution as '720p' | '1080p' | '4k')
@@ -262,54 +272,21 @@ export class AvatarProcessor extends WorkerHost {
             : typeof params.backgroundImageUrl === 'string'
               ? { type: 'image', url: params.backgroundImageUrl }
               : undefined,
+        // callback_id is echoed back in the webhook payload — useful for logs/debug
+        callbackId: generation.id,
         title: `${avatar.name} — ${new Date().toISOString()}`,
       });
 
-      const result = await this.pollVideoStatus(created.videoId);
-
-      if (result.status === 'failed' || !result.videoUrl) {
-        throw new Error(
-          result.errorMessage || 'A HeyGen retornou o vídeo com falha. Tente novamente.',
-        );
-      }
-
-      // Copy to R2
-      const persistentUrl = await this.uploadsService.uploadFromUrl(
-        result.videoUrl,
-        `generations/${generation.id}`,
-        'output.mp4',
-      );
-      const thumbnailUrl = result.thumbnailUrl
-        ? await this.uploadsService
-            .uploadFromUrl(result.thumbnailUrl, `generations/${generation.id}`, 'thumb.jpg')
-            .catch(() => null)
-        : null;
-
-      await this.prisma.$transaction(async (tx) => {
-        await tx.generationOutput.create({
-          data: {
-            generationId: generation.id,
-            url: persistentUrl,
-            thumbnailUrl: thumbnailUrl ?? undefined,
-            mimeType: 'video/mp4',
-            order: 0,
-          },
-        });
-        await tx.generation.update({
-          where: { id: generation.id },
-          data: {
-            status: GenerationStatus.COMPLETED,
-            completedAt: new Date(),
-            durationSeconds: result.durationSeconds ?? undefined,
-            processingTimeMs:
-              generation.processingStartedAt
-                ? Date.now() - generation.processingStartedAt.getTime()
-                : undefined,
-          },
-        });
+      // Save the HeyGen video_id so the webhook can find this Generation when
+      // the render completes. Worker returns immediately — no polling.
+      await this.prisma.generation.update({
+        where: { id: generation.id },
+        data: { heygenVideoId: created.videoId },
       });
 
-      this.logger.log(`generate-video done generation=${generation.id} avatar=${avatar.id}`);
+      this.logger.log(
+        `generate-video submitted generation=${generation.id} avatar=${avatar.id} heygen_video=${created.videoId} — awaiting webhook`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`generate-video failed gen=${generation.id}: ${message}`);
@@ -356,44 +333,33 @@ export class AvatarProcessor extends WorkerHost {
     return audioUrl;
   }
 
-  private async pollVideoStatus(videoId: string): Promise<{
-    status: 'completed' | 'failed' | 'timeout';
-    videoUrl: string | null;
-    thumbnailUrl: string | null;
-    durationSeconds: number | null;
-    errorMessage: string | null;
-  }> {
-    for (let attempt = 0; attempt < AVATAR_VIDEO_POLL_MAX_ATTEMPTS; attempt++) {
-      if (attempt > 0) {
-        await new Promise((r) => setTimeout(r, AVATAR_VIDEO_POLL_INTERVAL_MS));
-      }
-      const status = await this.heygen.getVideoStatus(videoId);
-      if (status.status === 'completed') {
-        return {
-          status: 'completed',
-          videoUrl: status.videoUrl,
-          thumbnailUrl: status.thumbnailUrl,
-          durationSeconds: status.durationSeconds,
-          errorMessage: null,
-        };
-      }
-      if (status.status === 'failed') {
-        return {
-          status: 'failed',
-          videoUrl: null,
-          thumbnailUrl: null,
-          durationSeconds: null,
-          errorMessage: status.errorMessage,
-        };
-      }
+  /**
+   * Generates audio using a public voice from the Inworld catalog (proxied via
+   * Wavespeed's Inworld 1.5 Max TTS) and persists it to R2 so HeyGen can
+   * lip-sync. Returns the public URL.
+   */
+  private async synthesizeInworldAudio(
+    generationId: string,
+    text: string,
+    inworldVoiceId: string,
+  ): Promise<string> {
+    this.logger.log(
+      `[AVATAR_TTS] gen=${generationId} inworldVoice=${inworldVoiceId} synthesizing…`,
+    );
+
+    // The WavespeedAudioProvider routes voiceIds prefixed with "inworld:" to
+    // Inworld 1.5 Max. The output is uploaded to R2 — exactly what HeyGen wants.
+    const result = await this.wavespeed.generateTextToSpeech({
+      id: generationId,
+      text,
+      voiceId: `inworld:${inworldVoiceId}`,
+    });
+
+    const audioUrl = result.outputUrls[0];
+    if (!audioUrl) {
+      throw new Error('Falha ao gerar áudio com a voz Inworld.');
     }
-    return {
-      status: 'timeout',
-      videoUrl: null,
-      thumbnailUrl: null,
-      durationSeconds: null,
-      errorMessage: 'A geração demorou mais que o esperado.',
-    };
+    return audioUrl;
   }
 
   private async markFailedAndRefund(
