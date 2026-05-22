@@ -1,7 +1,11 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -65,5 +69,41 @@ export class AdminUnlimitedController {
   })
   async usageOverview() {
     return this.service.getUsageOverview();
+  }
+
+  // ── Manual delay por usuário ─────────────────────────────────
+
+  @Get('users/:userId/manual-delay')
+  @ApiOperation({ summary: 'Consulta delay manual ativo do usuário' })
+  async getManualDelay(@Param('userId') userId: string) {
+    return this.service.getManualDelay(userId);
+  }
+
+  @Post('users/:userId/manual-delay')
+  @ApiOperation({
+    summary:
+      'Define delay manual em segundos para o usuário, com TTL em minutos. Soma com o delay da curva.',
+  })
+  async setManualDelay(
+    @Param('userId') userId: string,
+    @Body() body: { delaySeconds: number; ttlMinutes: number },
+  ) {
+    if (
+      typeof body?.delaySeconds !== 'number' ||
+      typeof body?.ttlMinutes !== 'number' ||
+      body.delaySeconds < 0 ||
+      body.ttlMinutes <= 0
+    ) {
+      throw new BadRequestException(
+        'delaySeconds (>=0) e ttlMinutes (>0) são obrigatórios e numéricos',
+      );
+    }
+    return this.service.setManualDelay(userId, body.delaySeconds, body.ttlMinutes);
+  }
+
+  @Delete('users/:userId/manual-delay')
+  @ApiOperation({ summary: 'Remove o delay manual do usuário (volta ao normal)' })
+  async clearManualDelay(@Param('userId') userId: string) {
+    return this.service.clearManualDelay(userId);
   }
 }

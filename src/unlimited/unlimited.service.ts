@@ -7,6 +7,7 @@ import {
   UNLIMITED_HARD_CAP,
   UNLIMITED_LOCK_KEY_PREFIX,
   UNLIMITED_LOCK_TTL_SECONDS,
+  UNLIMITED_MANUAL_DELAY_KEY_PREFIX,
   UNLIMITED_REDIS,
   UNLIMITED_WINDOW_HOURS,
 } from './unlimited.constants';
@@ -98,7 +99,7 @@ export class UnlimitedService {
     }
 
     const usageCount = await this.countUsageWindow(userId);
-    const { delayMs, hardCapHit } = this.computeDelayMs(usageCount);
+    const { delayMs: curveDelay, hardCapHit } = this.computeDelayMs(usageCount);
 
     if (hardCapHit) {
       return {
@@ -109,6 +110,10 @@ export class UnlimitedService {
         usageCount,
       };
     }
+
+    // Soma com delay manual definido por admin (se houver).
+    const manualDelay = await this.getManualDelay(userId);
+    const delayMs = curveDelay + manualDelay;
 
     return { allowed: true, planContext, delayMs, usageCount };
   }
@@ -127,6 +132,50 @@ export class UnlimitedService {
 
   async isLocked(userId: string): Promise<boolean> {
     return (await this.redis.exists(this.lockKey(userId))) === 1;
+  }
+
+  // ── Manual delay (definido por admin pra throttle individual) ────────
+
+  /**
+   * Define um delay manual em ms pro userId. O delay é somado ao delay da
+   * curva no próximo enqueue. TTL configurável — depois disso volta ao normal.
+   */
+  async setManualDelay(userId: string, delayMs: number, ttlSeconds: number): Promise<void> {
+    if (delayMs <= 0 || ttlSeconds <= 0) {
+      await this.clearManualDelay(userId);
+      return;
+    }
+    const key = this.manualDelayKey(userId);
+    await this.redis.set(key, String(delayMs), 'EX', ttlSeconds);
+  }
+
+  async getManualDelay(userId: string): Promise<number> {
+    const raw = await this.redis.get(this.manualDelayKey(userId));
+    if (!raw) return 0;
+    const value = parseInt(raw, 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  async getManualDelayInfo(
+    userId: string,
+  ): Promise<{ delayMs: number; ttlSeconds: number } | null> {
+    const key = this.manualDelayKey(userId);
+    const [raw, ttl] = await Promise.all([
+      this.redis.get(key),
+      this.redis.ttl(key),
+    ]);
+    if (!raw || ttl <= 0) return null;
+    const delayMs = parseInt(raw, 10);
+    if (!Number.isFinite(delayMs) || delayMs <= 0) return null;
+    return { delayMs, ttlSeconds: ttl };
+  }
+
+  async clearManualDelay(userId: string): Promise<void> {
+    await this.redis.del(this.manualDelayKey(userId));
+  }
+
+  private manualDelayKey(userId: string): string {
+    return `${UNLIMITED_MANUAL_DELAY_KEY_PREFIX}${userId}`;
   }
 
   // ── Registro de uso (alimenta o sliding window) ───────────────────────

@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Job, JobType, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { GENERATION_UNLIMITED_QUEUE } from '../generations/queue/generation-queue.constants';
+import { UnlimitedService } from '../unlimited/unlimited.service';
 
 const VALID_STATUS: JobType[] = [
   'waiting',
@@ -21,7 +22,34 @@ export class AdminUnlimitedService {
     private readonly prisma: PrismaService,
     @InjectQueue(GENERATION_UNLIMITED_QUEUE)
     private readonly queue: Queue,
+    private readonly unlimitedService: UnlimitedService,
   ) {}
+
+  // ── Manual delay por usuário ───────────────────────────────────
+
+  async setManualDelay(userId: string, delaySeconds: number, ttlMinutes: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+    const delayMs = Math.max(0, Math.floor(delaySeconds * 1000));
+    const ttlSeconds = Math.max(1, Math.floor(ttlMinutes * 60));
+    await this.unlimitedService.setManualDelay(userId, delayMs, ttlSeconds);
+    return { ok: true, userId, delayMs, ttlSeconds };
+  }
+
+  async clearManualDelay(userId: string) {
+    await this.unlimitedService.clearManualDelay(userId);
+    return { ok: true, userId };
+  }
+
+  async getManualDelay(userId: string) {
+    const info = await this.unlimitedService.getManualDelayInfo(userId);
+    return info ?? { delayMs: 0, ttlSeconds: 0 };
+  }
 
   // ── Queue counts ───────────────────────────────────────────────
 
@@ -191,14 +219,23 @@ export class AdminUnlimitedService {
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    const topUsers = topUsersRaw.map((row) => {
+    // Busca o delay manual de cada usuário em paralelo
+    const manualDelays = await Promise.all(
+      topUsersRaw.map((row) =>
+        this.unlimitedService.getManualDelayInfo(row.userId).catch(() => null),
+      ),
+    );
+
+    const topUsers = topUsersRaw.map((row, idx) => {
       const u = userMap.get(row.userId);
+      const manualDelay = manualDelays[idx];
       return {
         userId: row.userId,
         email: u?.email ?? null,
         name: u?.name ?? null,
         planSlug: u?.subscriptions[0]?.plan.slug ?? null,
         count: row._count._all,
+        manualDelay: manualDelay ?? null,
       };
     });
 
