@@ -173,13 +173,21 @@ export class AvatarProcessor extends WorkerHost {
         typeof params.voiceProfileId === 'string' ? params.voiceProfileId : null;
       const inworldVoiceId =
         typeof params.inworldVoiceId === 'string' ? params.inworldVoiceId : null;
+      const customAudioUrl =
+        typeof params.customAudioUrl === 'string' ? params.customAudioUrl : null;
 
-      // If the user picked a cloned voice OR an Inworld catalog voice, we
-      // synthesize the audio first (Wavespeed/OmniVoice for clones, Wavespeed/
-      // Inworld for the catalog), upload to R2, and pass the audio_url to
-      // HeyGen for lip-sync. Otherwise let HeyGen do its own TTS with voice_id.
+      // Audio source priority:
+      //  1. customAudioUrl  → user-uploaded/recorded audio; no synthesis
+      //  2. voiceProfileId  → synthesize with their cloned voice (OmniVoice)
+      //  3. inworldVoiceId  → synthesize with Inworld TTS via Wavespeed
+      //  4. fall through    → let HeyGen do its own TTS with voice_id
       let audioUrl: string | undefined;
-      if (voiceProfileId) {
+      if (customAudioUrl) {
+        audioUrl = customAudioUrl;
+        this.logger.log(
+          `[AVATAR_FLOW] gen=${generation.id} using custom audio URL (skip TTS)`,
+        );
+      } else if (voiceProfileId) {
         audioUrl = await this.synthesizeClonedAudio(
           generation.userId,
           generation.id,

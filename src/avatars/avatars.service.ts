@@ -32,6 +32,7 @@ import {
 } from './dto/avatar-response.dto';
 import {
   DEFAULT_AVATAR_TRAINING_CREDITS,
+  actualAvatarVideoCost,
   estimateAvatarVideoCost,
 } from './avatars.constants';
 import { AVATAR_QUEUE, AvatarJobName } from './queue/avatar-queue.constants';
@@ -187,15 +188,50 @@ export class AvatarsService {
       }
     }
 
+    // Mode 'custom audio' is mutually exclusive with TTS inputs. The DTO marks
+    // script optional when customAudioKey is present; enforce the other half
+    // here so we don't silently ignore voice settings the user thought applied.
+    let customAudioUrl: string | null = null;
+    if (dto.customAudioKey) {
+      if (!dto.customAudioKey.startsWith('avatar_audio/')) {
+        throw new BadRequestException(
+          'customAudioKey inválido. Faça upload via /uploads/presigned-url com purpose "avatar_audio".',
+        );
+      }
+      if (dto.script || dto.voiceId || dto.voiceProfileId || dto.inworldVoiceId) {
+        throw new BadRequestException({
+          code: 'AUDIO_MODE_CONFLICT',
+          message:
+            'No modo "áudio próprio" não envie script/voiceId/voiceProfileId/inworldVoiceId.',
+        });
+      }
+      if (!dto.audioDurationSeconds) {
+        throw new BadRequestException({
+          code: 'AUDIO_DURATION_REQUIRED',
+          message: 'Informe a duração do áudio (audioDurationSeconds).',
+        });
+      }
+      customAudioUrl = this.uploadsService.getPublicUrl(dto.customAudioKey);
+    } else if (!dto.script) {
+      // Without customAudioKey, the script is required.
+      throw new BadRequestException({
+        code: 'SCRIPT_REQUIRED',
+        message: 'Forneça um roteiro (script) ou um áudio próprio (customAudioKey).',
+      });
+    }
+
     // Engine fallback: if user requested avatar_v but look doesn't support it, downgrade
     let engine = dto.engine ?? 'avatar_iv';
     if (engine === 'avatar_v' && !avatar.supportedEngines.includes('avatar_v')) {
       engine = 'avatar_iv';
     }
 
-    // Estimate cost upfront based on script length; the HeyGen webhook reconciles
-    // this to the actual cost once the real video duration is known.
-    const cost = estimateAvatarVideoCost(dto.resolution, dto.script.length);
+    // Cost calculation:
+    //  - Custom audio mode → exact (we know the duration up front)
+    //  - Script/TTS mode → estimate (script length × cps); webhook reconciles
+    const cost = customAudioUrl
+      ? actualAvatarVideoCost(dto.resolution, dto.audioDurationSeconds!)
+      : estimateAvatarVideoCost(dto.resolution, dto.script!.length);
 
     // Map our DTO resolution to Prisma Resolution enum
     const prismaRes: Resolution =
@@ -212,16 +248,19 @@ export class AvatarsService {
         userAvatarId: avatar.id,
         type: GenerationType.AVATAR_VIDEO,
         status: GenerationStatus.PENDING,
-        prompt: dto.script,
+        prompt: dto.script ?? null,
         resolution: prismaRes,
         aspectRatio: dto.aspectRatio,
         modelUsed: `heygen-${engine}`,
         creditsConsumed: cost,
         parameters: {
-          script: dto.script,
+          script: dto.script ?? null,
           voiceId: dto.voiceId ?? null,
           voiceProfileId: dto.voiceProfileId ?? null,
           inworldVoiceId: dto.inworldVoiceId ?? null,
+          customAudioUrl: customAudioUrl ?? null,
+          customAudioKey: dto.customAudioKey ?? null,
+          audioDurationSeconds: dto.audioDurationSeconds ?? null,
           engine,
           resolution: dto.resolution,
           aspectRatio: dto.aspectRatio,

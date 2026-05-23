@@ -5,6 +5,7 @@ export enum UploadPurpose {
   GENERATION_INPUT = 'generation_input',
   REFERENCE_VIDEO = 'reference_video',
   AVATAR_SOURCE = 'avatar_source',
+  AVATAR_AUDIO = 'avatar_audio',
 }
 
 const ALLOWED_CONTENT_TYPES = [
@@ -12,6 +13,11 @@ const ALLOWED_CONTENT_TYPES = [
   'image/jpeg',
   'image/webp',
   'video/mp4',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/webm',
+  'audio/x-m4a',
 ] as const;
 
 export type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];

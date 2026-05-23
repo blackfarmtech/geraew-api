@@ -3,10 +3,13 @@ import {
   IsEnum,
   IsHexColor,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 
@@ -15,16 +18,36 @@ export type AvatarVideoAspectRatio = '16:9' | '9:16';
 export type AvatarVideoEngine = 'avatar_iv' | 'avatar_v';
 
 export class GenerateAvatarVideoDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Texto que o avatar vai falar (TTS). Use a voz padrão do avatar — voiceId é opcional.',
+      'Texto que o avatar vai falar (TTS). Obrigatório quando customAudioUrl não é informado.',
     example: 'Oi pessoal, aqui é o seu avatar falando sobre nosso novo produto!',
     maxLength: 3000,
   })
+  @IsOptional()
+  @ValidateIf((o) => !o.customAudioUrl)
   @IsString()
   @IsNotEmpty()
   @MaxLength(3000)
-  script: string;
+  script?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'fileKey (R2) de um áudio enviado pelo usuário via /uploads/presigned-url com purpose "avatar_audio". Mutuamente exclusivo com script/voiceId/voiceProfileId/inworldVoiceId — quando presente, o backend pula a síntese TTS e envia o áudio direto pra HeyGen.',
+  })
+  @IsOptional()
+  @IsString()
+  customAudioKey?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Duração do áudio enviado em segundos. Usado pra estimar o custo de forma exata quando customAudioUrl está presente. Cap em 600s (10min).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(600)
+  audioDurationSeconds?: number;
 
   @ApiPropertyOptional({
     description:
