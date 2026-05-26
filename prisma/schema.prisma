@@ -904,6 +904,7 @@ enum Resolution {
   RES_4K
   RES_720P
   RES_1080P
+  RES_480P
 }
 
 enum GenerationImageRole {

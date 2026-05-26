@@ -43,6 +43,7 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
+import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { UnlimitedStatusResponseDto } from './dto/unlimited-status.dto';
@@ -237,6 +238,17 @@ export class GenerationsController {
     @Body() dto: GenerateVeoKieReferenceToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateReferenceToVideoKie(userId, dto);
+  }
+
+  @Post('image-to-video-grok')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera vídeo a partir de imagem via Grok Imagine (Kie) — 480p/720p, duração 6-30s' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async imageToVideoGrok(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateGrokImagineImageToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateImageToVideoGrokImagine(userId, dto);
   }
 
   @Post('text-to-speech')

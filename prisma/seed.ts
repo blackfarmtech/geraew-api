@@ -277,6 +277,10 @@ async function main() {
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 4100, isPerSecond: false },
 
+    // Grok Imagine (GROK_IMAGINE) — KIE API — Fast mode (normal), no audio, duration 6-30s charged flat
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_480P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 1000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 2000, isPerSecond: false },
+
     // Virtual Try-On — NB2 (mirrors IMAGE_TO_IMAGE NB2 pricing)
     { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
     { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_2K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 130, isPerSecond: false },
@@ -410,6 +414,7 @@ async function main() {
     { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 1 },
     { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 2 },
     { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 3 },
+    { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 4 },
     {
       slug: 'avatar-video',
       label: 'Vídeo com avatar (HeyGen)',

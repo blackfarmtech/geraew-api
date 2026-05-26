@@ -43,6 +43,7 @@ import { GenerateFaceSwapDto } from './dto/generate-face-swap.dto';
 import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text-to-video.dto';
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
+import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { containsNsfwContent } from './utils/nsfw-blocklist';
@@ -76,6 +77,8 @@ function getModelVariant(model: string | undefined | null): string | null {
     // KIE API (Veo 3.1)
     'veo3_fast': 'VEO_FAST',
     'veo3': 'VEO_MAX',
+    // KIE API (Grok Imagine)
+    'grok-imagine': 'GROK_IMAGINE',
   };
   return MODEL_TO_VARIANT[model] ?? null;
 }
@@ -124,6 +127,7 @@ import {
   TextToVideoKieJobData,
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
+  ImageToVideoGrokJobData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './queue/generation-queue.constants';
@@ -1871,6 +1875,94 @@ CRITICAL REQUIREMENTS:
         seed: dto.seed,
         imageUrls,
       } satisfies ReferenceToVideoKieJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Grok Imagine — Image to Video ──────────────────────────
+
+  async generateImageToVideoGrokImagine(
+    userId: string,
+    dto: GenerateGrokImagineImageToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.IMAGE_TO_VIDEO;
+    const model = 'grok-imagine';
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      undefined,
+      false,
+      1,
+      modelVariant,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio: false,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        parameters: { provider: 'kie', mode: 'normal' },
+      },
+    });
+
+    const firstFrameUrl = await this.uploadBase64ImagePublic(
+      dto.first_frame,
+      dto.first_frame_mime_type ?? 'image/jpeg',
+      generation.id,
+    );
+
+    await this.prisma.generationInputImage.createMany({
+      data: [
+        {
+          generationId: generation.id,
+          role: GenerationImageRole.FIRST_FRAME,
+          mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+          order: 0,
+          url: firstFrameUrl,
+        },
+      ],
+    });
+
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dto.resolution,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.IMAGE_TO_VIDEO_GROK,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        prompt: dto.prompt,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        aspectRatio: dto.aspect_ratio,
+        imageUrls: [firstFrameUrl],
+        mode: 'normal',
+      } satisfies ImageToVideoGrokJobData,
     );
 
     return {

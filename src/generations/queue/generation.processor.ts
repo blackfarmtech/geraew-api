@@ -12,6 +12,7 @@ import {
 import { WanProvider } from '../providers/wan.provider';
 import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
+import { GrokImagineProvider } from '../providers/grok-imagine.provider';
 import { SeedreamProvider } from '../providers/seedream.provider';
 import { GptImageProvider } from '../providers/gpt-image.provider';
 import { WavespeedAudioProvider } from '../providers/wavespeed-audio.provider';
@@ -39,6 +40,7 @@ import {
   TextToVideoKieJobData,
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
+  ImageToVideoGrokJobData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './generation-queue.constants';
@@ -59,6 +61,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly wanProvider: WanProvider,
     private readonly faceSwapProvider: FaceSwapProvider,
     private readonly veoProvider: VeoProvider,
+    private readonly grokImagineProvider: GrokImagineProvider,
     private readonly seedreamProvider: SeedreamProvider,
     private readonly gptImageProvider: GptImageProvider,
     private readonly wavespeedAudioProvider: WavespeedAudioProvider,
@@ -106,6 +109,8 @@ export class GenerationProcessor extends WorkerHost {
         return this.processImageToVideoKie(data as ImageToVideoKieJobData);
       case GenerationJobName.REFERENCE_TO_VIDEO_KIE:
         return this.processReferenceToVideoKie(data as ReferenceToVideoKieJobData);
+      case GenerationJobName.IMAGE_TO_VIDEO_GROK:
+        return this.processImageToVideoGrok(data as ImageToVideoGrokJobData);
       default:
         throw new Error(`Unknown job name: ${jobName}`);
     }
@@ -852,6 +857,50 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     await this.completeGeneration(data.generationId, result, startTime);
+  }
+
+  // ─── Grok Imagine process methods ───────────────────────────
+
+  private async processImageToVideoGrok(
+    data: ImageToVideoGrokJobData,
+  ): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[IMAGE_TO_VIDEO_GROK] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} mode=${data.mode ?? 'normal'} imageUrls=${data.imageUrls.length} prompt="${data.prompt ?? ''}"`,
+    );
+
+    const buildInput = (prompt: string | undefined) => ({
+      id: data.generationId,
+      prompt,
+      imageUrls: data.imageUrls,
+      resolution: data.resolution,
+      durationSeconds: data.durationSeconds,
+      aspectRatio: data.aspectRatio,
+      mode: data.mode ?? 'normal',
+    });
+
+    try {
+      const result = await this.grokImagineProvider.generateImageToVideo(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      // Se foi bloqueado por safety E tem prompt, tenta refinar e gerar de novo.
+      if (this.isSafetyRelatedError(error) && data.prompt) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.grokImagineProvider.generateImageToVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
   }
 
   // ─── Audio process methods ──────────────────────────────────
