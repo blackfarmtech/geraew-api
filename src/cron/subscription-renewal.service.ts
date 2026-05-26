@@ -2,77 +2,88 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditTransactionType, Plan, Subscription, SubscriptionStatus } from '@prisma/client';
+import { CronLoggerService } from './cron-logger.service';
+
+const SCHEDULE = '0 * * * *';
 
 @Injectable()
 export class SubscriptionRenewalService {
   private readonly logger = new Logger(SubscriptionRenewalService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cronLogger: CronLoggerService,
+  ) {}
 
-  @Cron('0 * * * *')
+  @Cron(SCHEDULE)
   async handleSubscriptionRenewal() {
     try {
-      const now = new Date();
+      return await this.cronLogger.wrap(
+        { cronName: 'SubscriptionRenewalService.handleSubscriptionRenewal', schedule: SCHEDULE },
+        async () => {
+          const now = new Date();
 
-      // Apenas subs sem provedor externo (Free/internas). Subs do Stripe são
-      // renovadas pelo webhook invoice.payment_succeeded — renovar aqui daria
-      // créditos antes (ou sem) cobrar e duplicaria a entrada no ledger.
-      const expiredSubscriptions = await this.prisma.subscription.findMany({
-        where: {
-          status: SubscriptionStatus.ACTIVE,
-          currentPeriodEnd: { lte: now },
-          cancelAtPeriodEnd: false,
-          paymentProvider: null,
-        },
-        include: { plan: true },
-      });
-
-      this.logger.log(
-        `Found ${expiredSubscriptions.length} subscriptions to renew`,
-      );
-
-      for (const subscription of expiredSubscriptions) {
-        try {
-          await this.renewSubscription(subscription);
-        } catch (error) {
-          this.logger.error(
-            `Failed to renew subscription ${subscription.id}: ${error.message}`,
-          );
-        }
-      }
-
-      // Handle subscriptions that should be canceled at period end.
-      // Para Stripe, customer.subscription.deleted (webhook) faz isso.
-      const cancelingSubscriptions = await this.prisma.subscription.findMany({
-        where: {
-          status: SubscriptionStatus.ACTIVE,
-          currentPeriodEnd: { lte: now },
-          cancelAtPeriodEnd: true,
-          paymentProvider: null,
-        },
-      });
-
-      for (const subscription of cancelingSubscriptions) {
-        try {
-          await this.prisma.subscription.update({
-            where: { id: subscription.id },
-            data: { status: SubscriptionStatus.CANCELED },
+          const expiredSubscriptions = await this.prisma.subscription.findMany({
+            where: {
+              status: SubscriptionStatus.ACTIVE,
+              currentPeriodEnd: { lte: now },
+              cancelAtPeriodEnd: false,
+              paymentProvider: null,
+            },
+            include: { plan: true },
           });
 
-          this.logger.log(
-            `Canceled subscription ${subscription.id} at period end`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Failed to cancel subscription ${subscription.id}: ${error.message}`,
-          );
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Subscription renewal cron failed: ${error.message}`,
-        error.stack,
+          this.logger.log(`Found ${expiredSubscriptions.length} subscriptions to renew`);
+
+          let renewed = 0;
+          let renewalFailed = 0;
+          for (const subscription of expiredSubscriptions) {
+            try {
+              await this.renewSubscription(subscription);
+              renewed++;
+            } catch (error: any) {
+              renewalFailed++;
+              this.logger.error(
+                `Failed to renew subscription ${subscription.id}: ${error.message}`,
+              );
+            }
+          }
+
+          const cancelingSubscriptions = await this.prisma.subscription.findMany({
+            where: {
+              status: SubscriptionStatus.ACTIVE,
+              currentPeriodEnd: { lte: now },
+              cancelAtPeriodEnd: true,
+              paymentProvider: null,
+            },
+          });
+
+          let canceled = 0;
+          for (const subscription of cancelingSubscriptions) {
+            try {
+              await this.prisma.subscription.update({
+                where: { id: subscription.id },
+                data: { status: SubscriptionStatus.CANCELED },
+              });
+              canceled++;
+              this.logger.log(`Canceled subscription ${subscription.id} at period end`);
+            } catch (error: any) {
+              this.logger.error(
+                `Failed to cancel subscription ${subscription.id}: ${error.message}`,
+              );
+            }
+          }
+
+          return {
+            renewed,
+            renewalFailed,
+            canceled,
+            totalProcessed: expiredSubscriptions.length + cancelingSubscriptions.length,
+          };
+        },
       );
+    } catch (error: any) {
+      this.logger.error(`Subscription renewal cron failed: ${error.message}`, error.stack);
     }
   }
 

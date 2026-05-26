@@ -62,6 +62,7 @@ export class SubscriptionsController {
       userId,
       dto.planSlug,
       dto.currency,
+      dto.recoveryPromoCode,
     );
   }
 

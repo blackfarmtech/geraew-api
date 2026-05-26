@@ -94,6 +94,7 @@ export class SubscriptionsService {
     userId: string,
     planSlug: string,
     currencyOverride?: string,
+    recoveryPromoCode?: string,
   ): Promise<{ checkoutUrl: string }> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
 
@@ -118,7 +119,14 @@ export class SubscriptionsService {
       );
     }
 
-    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, 0, undefined, currencyOverride);
+    const checkoutUrl = await this.buildCheckoutForPlan(
+      userId,
+      planSlug,
+      0,
+      undefined,
+      currencyOverride,
+      recoveryPromoCode,
+    );
     return { checkoutUrl };
   }
 
@@ -599,6 +607,7 @@ export class SubscriptionsService {
     discountAmountCents = 0,
     oldExternalSubscriptionId?: string,
     currencyOverride?: string,
+    recoveryPromoCode?: string,
   ): Promise<string> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -623,6 +632,7 @@ export class SubscriptionsService {
       discountAmountCents > 0 ? discountAmountCents : undefined,
       oldExternalSubscriptionId,
       user.referredByCode ?? undefined,
+      recoveryPromoCode,
     );
   }
 

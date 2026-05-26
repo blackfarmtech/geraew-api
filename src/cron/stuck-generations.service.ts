@@ -6,50 +6,61 @@ import {
   Generation,
   GenerationStatus,
 } from '@prisma/client';
+import { CronLoggerService } from './cron-logger.service';
 
 const STUCK_THRESHOLD_MINUTES = 25;
+const SCHEDULE = '*/15 * * * *';
 
 @Injectable()
 export class StuckGenerationsService {
   private readonly logger = new Logger(StuckGenerationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cronLogger: CronLoggerService,
+  ) {}
 
-  @Cron('*/15 * * * *')
+  @Cron(SCHEDULE)
   async handleStuckGenerations() {
     try {
-      const threshold = new Date();
-      threshold.setMinutes(threshold.getMinutes() - STUCK_THRESHOLD_MINUTES);
+      return await this.cronLogger.wrap(
+        { cronName: 'StuckGenerationsService.handleStuckGenerations', schedule: SCHEDULE },
+        async () => {
+          const threshold = new Date();
+          threshold.setMinutes(threshold.getMinutes() - STUCK_THRESHOLD_MINUTES);
 
-      const stuckGenerations = await this.prisma.generation.findMany({
-        where: {
-          status: GenerationStatus.PROCESSING,
-          createdAt: { lt: threshold },
+          const stuckGenerations = await this.prisma.generation.findMany({
+            where: {
+              status: GenerationStatus.PROCESSING,
+              createdAt: { lt: threshold },
+            },
+          });
+
+          if (stuckGenerations.length === 0) {
+            return { stuckFound: 0, recovered: 0, failed: 0 };
+          }
+
+          this.logger.log(`Found ${stuckGenerations.length} stuck generations to clean up`);
+
+          let recovered = 0;
+          let failed = 0;
+          for (const generation of stuckGenerations) {
+            try {
+              await this.failAndRefund(generation);
+              recovered++;
+            } catch (error: any) {
+              failed++;
+              this.logger.error(
+                `Failed to clean up stuck generation ${generation.id}: ${error.message}`,
+              );
+            }
+          }
+
+          return { stuckFound: stuckGenerations.length, recovered, failed };
         },
-      });
-
-      if (stuckGenerations.length === 0) {
-        return;
-      }
-
-      this.logger.log(
-        `Found ${stuckGenerations.length} stuck generations to clean up`,
       );
-
-      for (const generation of stuckGenerations) {
-        try {
-          await this.failAndRefund(generation);
-        } catch (error) {
-          this.logger.error(
-            `Failed to clean up stuck generation ${generation.id}: ${error.message}`,
-          );
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Stuck generations cron failed: ${error.message}`,
-        error.stack,
-      );
+    } catch (error: any) {
+      this.logger.error(`Stuck generations cron failed: ${error.message}`, error.stack);
     }
   }
 

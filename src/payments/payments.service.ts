@@ -432,6 +432,99 @@ export class PaymentsService {
     this.logger.log(
       `Processed subscription renewal for user ${subscription.userId}${hasScheduledPlan ? ` (downgrade to ${activePlan.slug})` : ''}`,
     );
+
+    // Se essa renovação fechou uma campanha de recuperação de churn,
+    // conceder bônus de retorno (se ainda dentro da janela de elegibilidade).
+    await this.closeRecoveryCampaignIfAny(subscription.id, subscription.userId);
+  }
+
+  /**
+   * Fecha uma campanha de recuperação aberta após pagamento bem-sucedido.
+   * Se a campanha está dentro da janela do bônus (configurável via env,
+   * default 7 dias após o Email 1), credita N créditos bonus (default 2.000)
+   * e marca bonusGrantedAt. Idempotente — não credita 2x.
+   */
+  private async closeRecoveryCampaignIfAny(
+    subscriptionId: string,
+    userId: string,
+  ): Promise<void> {
+    const campaign = await this.prisma.paymentRecoveryCampaign.findUnique({
+      where: { subscriptionId },
+    });
+
+    if (!campaign || campaign.recoveredAt || campaign.abandonedAt) {
+      return; // sem campanha aberta, nada a fazer
+    }
+
+    const bonusCredits = parseInt(process.env.RECOVERY_BONUS_CREDITS ?? '2000', 10);
+    const bonusWindowDays = parseInt(process.env.RECOVERY_BONUS_WINDOW_DAYS ?? '7', 10);
+    const windowMs = bonusWindowDays * 24 * 60 * 60 * 1000;
+
+    const isWithinBonusWindow =
+      campaign.email1SentAt &&
+      Date.now() - campaign.email1SentAt.getTime() <= windowMs &&
+      !campaign.bonusGrantedAt;
+
+    if (isWithinBonusWindow && bonusCredits > 0) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // Idempotência: claim atomico antes de creditar
+          const claimed = await tx.paymentRecoveryCampaign.updateMany({
+            where: { id: campaign.id, bonusGrantedAt: null },
+            data: {
+              bonusGrantedAt: new Date(),
+              bonusCredits,
+              recoveredAt: new Date(),
+            },
+          });
+
+          if (claimed.count === 0) {
+            return; // outro processo já creditou
+          }
+
+          await tx.creditBalance.upsert({
+            where: { userId },
+            create: {
+              userId,
+              bonusCreditsRemaining: bonusCredits,
+              planCreditsRemaining: 0,
+              planCreditsUsed: 0,
+            },
+            update: {
+              bonusCreditsRemaining: { increment: bonusCredits },
+            },
+          });
+
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: 'REFERRAL_BONUS',
+              amount: bonusCredits,
+              source: 'bonus',
+              description: `Bônus de retorno: +${bonusCredits} créditos (campanha de recuperação)`,
+            },
+          });
+        });
+
+        this.logger.log(
+          `Granted +${bonusCredits} recovery bonus credits to user ${userId} (campaign ${campaign.id})`,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to grant recovery bonus for campaign ${campaign.id}: ${err.message}`,
+        );
+        // Não relança — pagamento já foi processado; bonus pode ser concedido manualmente
+      }
+    } else {
+      // Recuperou mas fora da janela do bônus — só marca como recovered
+      await this.prisma.paymentRecoveryCampaign.update({
+        where: { id: campaign.id },
+        data: { recoveredAt: new Date() },
+      });
+      this.logger.log(
+        `Recovery campaign ${campaign.id} closed (recovered, but outside bonus window)`,
+      );
+    }
   }
 
   /**

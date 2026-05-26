@@ -71,6 +71,7 @@ export class StripeService {
     discountAmountCents?: number,
     oldExternalSubscriptionId?: string,
     referredByCode?: string,
+    recoveryPromoCode?: string,
   ): Promise<string> {
     const stripeCurrency = currency.toLowerCase();
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
@@ -93,8 +94,17 @@ export class StripeService {
       discounts = [{ coupon: coupon.id }];
     }
 
-    // Desconto de afiliado: so aplica se nao houver desconto de upgrade.
-    // Prioridade: upgrade > afiliado > cupom manual.
+    // Cupom da campanha de recuperação (vem do link do email D+7).
+    // Prioridade: upgrade > recovery > afiliado.
+    let recoveryPromotionCodeId: string | undefined;
+    if (!discounts && recoveryPromoCode) {
+      recoveryPromotionCodeId = await this.resolveRecoveryPromotionCode(recoveryPromoCode);
+      if (recoveryPromotionCodeId) {
+        discounts = [{ promotion_code: recoveryPromotionCodeId }];
+      }
+    }
+
+    // Desconto de afiliado: so aplica se nao houver desconto de upgrade nem recovery.
     let appliedAffiliatePromoCodeId: string | undefined;
     if (!discounts) {
       appliedAffiliatePromoCodeId = await this.resolveAffiliatePromotionCode(
@@ -117,6 +127,9 @@ export class StripeService {
         planSlug,
         type: 'subscription',
         ...(couponId ? { upgradeCouponId: couponId } : {}),
+        ...(recoveryPromotionCodeId
+          ? { recoveryPromotionCodeId, recoveryPromoCode: recoveryPromoCode! }
+          : {}),
         ...(appliedAffiliatePromoCodeId
           ? { affiliatePromotionCodeId: appliedAffiliatePromoCodeId }
           : {}),
@@ -343,6 +356,41 @@ export class StripeService {
     this.logger.log(
       `Reactivated Stripe subscription ${externalSubscriptionId}`,
     );
+  }
+
+  /**
+   * Lista cobranças recentes de um customer (usado pra detectar motivo de falha).
+   */
+  async listCustomerCharges(customerId: string, limit = 10): Promise<Stripe.Charge[]> {
+    const page = await this.stripe.charges.list({ customer: customerId, limit });
+    return page.data;
+  }
+
+  /**
+   * Retorna o cartão default do customer (brand + last4), se houver.
+   */
+  async getDefaultCard(
+    customerId: string,
+  ): Promise<{ brand: string; last4: string; expMonth: number; expYear: number } | null> {
+    const customer = await this.stripe.customers.retrieve(customerId);
+    if (!customer || customer.deleted) return null;
+
+    const defaultPmId = (customer as Stripe.Customer).invoice_settings?.default_payment_method;
+    if (!defaultPmId) return null;
+    const pmIdStr = typeof defaultPmId === 'string' ? defaultPmId : defaultPmId.id;
+
+    try {
+      const pm = await this.stripe.paymentMethods.retrieve(pmIdStr);
+      if (!pm.card) return null;
+      return {
+        brand: pm.card.brand,
+        last4: pm.card.last4,
+        expMonth: pm.card.exp_month,
+        expYear: pm.card.exp_year,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -586,5 +634,39 @@ export class StripeService {
     }
 
     return affiliate.stripePromotionCodeId;
+  }
+
+  /**
+   * Resolve o `promotion_code` ID do Stripe para o cupom da campanha de recuperação.
+   * Usa env RECOVERY_PROMOTION_CODE_ID se configurado (mais rápido), senão busca
+   * na API do Stripe pelo código textual. Cache em memória dura a vida do processo.
+   */
+  private recoveryPromoCodeCache = new Map<string, string>();
+  private async resolveRecoveryPromotionCode(code: string): Promise<string | undefined> {
+    if (this.recoveryPromoCodeCache.has(code)) {
+      return this.recoveryPromoCodeCache.get(code);
+    }
+
+    // 1) Env atalho — preferido
+    const envId = this.configService.get<string>('RECOVERY_PROMOTION_CODE_ID');
+    if (envId) {
+      this.recoveryPromoCodeCache.set(code, envId);
+      return envId;
+    }
+
+    // 2) Fallback — busca na API
+    try {
+      const list = await this.stripe.promotionCodes.list({ code, limit: 1, active: true });
+      const promo = list.data[0];
+      if (!promo) {
+        this.logger.warn(`Recovery promotion code "${code}" não encontrado no Stripe`);
+        return undefined;
+      }
+      this.recoveryPromoCodeCache.set(code, promo.id);
+      return promo.id;
+    } catch (err: any) {
+      this.logger.error(`Erro ao buscar recovery promo "${code}": ${err.message}`);
+      return undefined;
+    }
   }
 }

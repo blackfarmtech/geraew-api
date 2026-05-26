@@ -18,7 +18,13 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "backfill:prompt-thumbnails": "ts-node -r tsconfig-paths/register src/scripts/backfill-prompt-thumbnails.ts"
+    "backfill:prompt-thumbnails": "ts-node -r tsconfig-paths/register src/scripts/backfill-prompt-thumbnails.ts",
+    "recovery:scan": "ts-node scripts/recover-failed-payments.ts",
+    "recovery:export": "ts-node scripts/recover-failed-payments.ts --export",
+    "recovery:export:portals": "ts-node scripts/recover-failed-payments.ts --export --with-portal-urls",
+    "recovery:preview": "ts-node scripts/preview-recovery-emails.ts",
+    "recovery:coupon": "ts-node scripts/create-recovery-coupon.ts",
+    "recovery:send": "ts-node scripts/send-recovery-campaign.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

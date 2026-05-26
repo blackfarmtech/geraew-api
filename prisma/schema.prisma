@@ -9,49 +9,50 @@ datasource db {
 }
 
 model User {
-  id                      String                   @id @default(cuid())
-  email                   String                   @unique
-  passwordHash            String?                  @map("password_hash")
+  id                      String                    @id @default(cuid())
+  email                   String                    @unique
+  passwordHash            String?                   @map("password_hash")
   name                    String
-  avatarUrl               String?                  @map("avatar_url")
-  role                    UserRole                 @default(USER)
-  oauthProvider           String?                  @map("oauth_provider")
-  oauthProviderId         String?                  @map("oauth_provider_id")
-  stripeCustomerId        String?                  @unique @map("stripe_customer_id")
-  emailVerified           Boolean                  @default(false) @map("email_verified")
-  isActive                Boolean                  @default(true) @map("is_active")
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
-  hasCompletedOnboarding  Boolean                  @default(false) @map("has_completed_onboarding")
+  avatarUrl               String?                   @map("avatar_url")
+  role                    UserRole                  @default(USER)
+  oauthProvider           String?                   @map("oauth_provider")
+  oauthProviderId         String?                   @map("oauth_provider_id")
+  stripeCustomerId        String?                   @unique @map("stripe_customer_id")
+  emailVerified           Boolean                   @default(false) @map("email_verified")
+  isActive                Boolean                   @default(true) @map("is_active")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  hasCompletedOnboarding  Boolean                   @default(false) @map("has_completed_onboarding")
   phone                   String?
-  phoneVerified           Boolean?                 @map("phone_verified")
-  referredByCode          String?                  @map("referred_by_code")
+  phoneVerified           Boolean?                  @map("phone_verified")
+  referredByCode          String?                   @map("referred_by_code")
   country                 String?
-  currency                String                   @default("BRL")
-  locale                  String                   @default("pt-BR")
+  currency                String                    @default("BRL")
+  locale                  String                    @default("pt-BR")
   timezone                String?
-  unlimitedModeImage      Boolean                  @default(false) @map("unlimited_mode_image")
-  unlimitedModeVideo      Boolean                  @default(false) @map("unlimited_mode_video")
+  unlimitedModeImage      Boolean                   @default(false) @map("unlimited_mode_image")
+  unlimitedModeVideo      Boolean                   @default(false) @map("unlimited_mode_video")
   fbclid                  String?
   gclid                   String?
-  landingPage             String?                  @map("landing_page")
+  landingPage             String?                   @map("landing_page")
   referrer                String?
-  utmCampaign             String?                  @map("utm_campaign")
-  utmContent              String?                  @map("utm_content")
-  utmMedium               String?                  @map("utm_medium")
-  utmSource               String?                  @map("utm_source")
-  utmTerm                 String?                  @map("utm_term")
-  affiliateEarnings       AffiliateEarning[]       @relation("referred_user_earnings")
+  utmCampaign             String?                   @map("utm_campaign")
+  utmContent              String?                   @map("utm_content")
+  utmMedium               String?                   @map("utm_medium")
+  utmSource               String?                   @map("utm_source")
+  utmTerm                 String?                   @map("utm_term")
+  affiliateEarnings       AffiliateEarning[]        @relation("referred_user_earnings")
   affiliate               Affiliate?
   creditBalance           CreditBalance?
   creditTransactions      CreditTransaction[]
-  adminEmailBroadcasts    EmailBroadcast[]         @relation("admin_email_broadcasts")
+  adminEmailBroadcasts    EmailBroadcast[]          @relation("admin_email_broadcasts")
   emailVerificationTokens EmailVerificationToken[]
   feedback                Feedback?
   folders                 Folder[]
   generations             Generation[]
   influencers             influencers[]
   passwordResetTokens     PasswordResetToken[]
+  recoveryCampaigns       PaymentRecoveryCampaign[]
   payments                Payment[]
   refreshTokens           RefreshToken[]
   subscriptions           Subscription[]
@@ -162,30 +163,82 @@ model CreditPackagePrice {
 }
 
 model Subscription {
-  id                       String             @id @default(cuid())
-  userId                   String             @map("user_id")
-  planId                   String             @map("plan_id")
-  status                   SubscriptionStatus @default(ACTIVE)
-  currentPeriodStart       DateTime           @map("current_period_start")
-  currentPeriodEnd         DateTime           @map("current_period_end")
-  cancelAtPeriodEnd        Boolean            @default(false) @map("cancel_at_period_end")
-  paymentProvider          String?            @map("payment_provider")
-  externalSubscriptionId   String?            @map("external_subscription_id")
-  paymentRetryCount        Int                @default(0) @map("payment_retry_count")
-  createdAt                DateTime           @default(now()) @map("created_at")
-  updatedAt                DateTime           @updatedAt @map("updated_at")
-  scheduledPlanId          String?            @map("scheduled_plan_id")
-  pausedUntil              DateTime?          @map("paused_until")
-  retentionOfferAcceptedAt DateTime?          @map("retention_offer_accepted_at")
+  id                       String                   @id @default(cuid())
+  userId                   String                   @map("user_id")
+  planId                   String                   @map("plan_id")
+  status                   SubscriptionStatus       @default(ACTIVE)
+  currentPeriodStart       DateTime                 @map("current_period_start")
+  currentPeriodEnd         DateTime                 @map("current_period_end")
+  cancelAtPeriodEnd        Boolean                  @default(false) @map("cancel_at_period_end")
+  paymentProvider          String?                  @map("payment_provider")
+  externalSubscriptionId   String?                  @map("external_subscription_id")
+  paymentRetryCount        Int                      @default(0) @map("payment_retry_count")
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+  scheduledPlanId          String?                  @map("scheduled_plan_id")
+  pausedUntil              DateTime?                @map("paused_until")
+  retentionOfferAcceptedAt DateTime?                @map("retention_offer_accepted_at")
+  recoveryCampaigns        PaymentRecoveryCampaign?
   payments                 Payment[]
-  plan                     Plan               @relation("currentPlan", fields: [planId], references: [id])
-  scheduledPlan            Plan?              @relation("scheduledPlan", fields: [scheduledPlanId], references: [id])
-  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                     Plan                     @relation("currentPlan", fields: [planId], references: [id])
+  scheduledPlan            Plan?                    @relation("scheduledPlan", fields: [scheduledPlanId], references: [id])
+  user                     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([currentPeriodEnd])
   @@map("subscriptions")
+}
+
+/// Registra cada execução de cron job no projeto. Usado pela tela admin
+/// `/admin/crons` para visibilidade de agendamentos, durações e erros.
+model CronExecution {
+  id         String    @id @default(cuid())
+  cronName   String    @map("cron_name")
+  schedule   String
+  status     String // RUNNING | SUCCESS | ERROR
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  durationMs Int?      @map("duration_ms")
+  error      String?   @db.Text
+  metadata   Json?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([cronName, startedAt(sort: Desc)])
+  @@index([status])
+  @@index([startedAt])
+  @@map("cron_executions")
+}
+
+/// Rastreia a campanha de recuperação de churn involuntário (falha de pagamento).
+/// Uma campanha é aberta quando uma subscription entra em PAST_DUE ou é cancelada
+/// por falha de cobrança. O cron envia 3 emails (D+0, D+3, D+7) e marca a campanha
+/// como recuperada se o pagamento for confirmado dentro da janela.
+model PaymentRecoveryCampaign {
+  id             String       @id @default(cuid())
+  userId         String       @map("user_id")
+  subscriptionId String       @unique @map("subscription_id")
+  enrolledAt     DateTime     @default(now()) @map("enrolled_at")
+  email1SentAt   DateTime?    @map("email_1_sent_at")
+  email2SentAt   DateTime?    @map("email_2_sent_at")
+  email3SentAt   DateTime?    @map("email_3_sent_at")
+  recoveredAt    DateTime?    @map("recovered_at")
+  abandonedAt    DateTime?    @map("abandoned_at")
+  bonusGrantedAt DateTime?    @map("bonus_granted_at")
+  bonusCredits   Int          @default(0) @map("bonus_credits")
+  declineCode    String?      @map("decline_code")
+  cardBrand      String?      @map("card_brand")
+  cardLast4      String?      @map("card_last4")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([recoveredAt])
+  @@index([abandonedAt])
+  @@index([enrolledAt])
+  @@map("payment_recovery_campaigns")
 }
 
 model CreditBalance {
@@ -338,7 +391,7 @@ model Generation {
   influencer_id          String?
   userAvatarId           String?                @map("user_avatar_id")
   /// * HeyGen's video_id — set when an avatar video is submitted, used by the
-  ///    *  webhook to correlate completion events back to this Generation.
+  /// *  webhook to correlate completion events back to this Generation.
   heygenVideoId          String?                @unique @map("heygen_video_id")
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
@@ -901,11 +954,11 @@ enum PaymentType {
 enum Resolution {
   RES_1K
   RES_2K
-  RES_3K
   RES_4K
   RES_720P
   RES_1080P
   RES_480P
+  RES_3K
 }
 
 enum GenerationImageRole {
