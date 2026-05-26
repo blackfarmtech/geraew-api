@@ -419,11 +419,12 @@ async function main() {
 
   const videoModels = [
     { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'KIE' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0 },
-    { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 1 },
-    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 2 },
-    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 3 },
-    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 4 },
-    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 5 },
+    { slug: 'bytedance-seedance-2', label: 'Seedance 2', provider: 'KIE' as const, modelVariant: 'SEEDANCE_2', sortOrder: 1 },
+    { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 2 },
+    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 3 },
+    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 4 },
+    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 5 },
+    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 6 },
     {
       slug: 'avatar-video',
       label: 'Vídeo com avatar (HeyGen)',

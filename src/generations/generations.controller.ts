@@ -46,6 +46,7 @@ import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie
 import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
 import { GenerateGrokImagineTextToVideoDto } from './dto/videos/generate-grok-imagine-text-to-video.dto';
 import { GenerateGeminiOmniVideoDto } from './dto/videos/generate-gemini-omni-video.dto';
+import { GenerateSeedanceVideoDto } from './dto/videos/generate-seedance-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { UnlimitedStatusResponseDto } from './dto/unlimited-status.dto';
@@ -276,6 +277,20 @@ export class GenerationsController {
     @Body() dto: GenerateGeminiOmniVideoDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateGeminiOmniVideo(userId, dto);
+  }
+
+  @Post('seedance-video')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary:
+      'Gera vídeo via Bytedance Seedance 2.0 (Kie) — 480p/720p/1080p, duração 4-15s, image-to-video ou multimodal-reference',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async seedanceVideo(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateSeedanceVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateSeedanceVideo(userId, dto);
   }
 
   @Post('text-to-speech')

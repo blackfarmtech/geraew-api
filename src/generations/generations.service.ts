@@ -46,6 +46,7 @@ import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie
 import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
 import { GenerateGrokImagineTextToVideoDto } from './dto/videos/generate-grok-imagine-text-to-video.dto';
 import { GenerateGeminiOmniVideoDto } from './dto/videos/generate-gemini-omni-video.dto';
+import { GenerateSeedanceVideoDto } from './dto/videos/generate-seedance-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { containsNsfwContent } from './utils/nsfw-blocklist';
@@ -83,6 +84,8 @@ function getModelVariant(model: string | undefined | null): string | null {
     'grok-imagine': 'GROK_IMAGINE',
     // KIE API (Gemini Omni Video)
     'gemini-omni-video': 'GEMINI_OMNI',
+    // KIE API (Bytedance Seedance 2.0)
+    'bytedance-seedance-2': 'SEEDANCE_2',
     // KIE API (Seedream Lite) — unificado: T2I se sem images, I2I se com images
     'seedream-5-lite': 'SEEDREAM_LITE',
   };
@@ -137,6 +140,7 @@ import {
   TextToVideoGrokJobData,
   OmniVideoJobData,
   OmniVideoClipData,
+  SeedanceVideoJobData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './queue/generation-queue.constants';
@@ -2158,6 +2162,133 @@ CRITICAL REQUIREMENTS:
         videoList,
         hasVideoInput,
       } satisfies OmniVideoJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Bytedance Seedance 2.0 ────────────────────────────────
+
+  async generateSeedanceVideo(
+    userId: string,
+    dto: GenerateSeedanceVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const model = 'bytedance-seedance-2';
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
+
+    const hasReferenceImages = (dto.reference_images?.length ?? 0) > 0;
+    const hasReferenceVideo = !!dto.reference_video;
+    const hasReferenceAudio = !!dto.reference_audio;
+    // Áudio sozinho NÃO ativa pricing "with video" — só o vídeo de referência ativa.
+    const hasVideoInput = hasReferenceVideo;
+
+    // Tipo derivado: qualquer ref → REFERENCE_VIDEO, else TEXT_TO_VIDEO.
+    const type: GenerationType = (hasReferenceImages || hasReferenceVideo || hasReferenceAudio)
+      ? GenerationType.REFERENCE_VIDEO
+      : GenerationType.TEXT_TO_VIDEO;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
+      false,
+      1,
+      modelVariant,
+      hasVideoInput,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio: dto.generate_audio ?? false,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        parameters: { provider: 'kie', hasVideoInput },
+      },
+    });
+
+    let referenceImageUrls: string[] | undefined;
+    let referenceVideoUrls: string[] | undefined;
+    let referenceAudioUrls: string[] | undefined;
+
+    if (hasReferenceImages && dto.reference_images) {
+      referenceImageUrls = await Promise.all(
+        dto.reference_images.map((img) =>
+          this.uploadBase64ImagePublic(
+            img.base64,
+            img.mime_type ?? 'image/jpeg',
+            generation.id,
+          ),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.reference_images.map((img, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: img.mime_type ?? 'image/jpeg',
+          order: i,
+          url: referenceImageUrls![i],
+        })),
+      });
+    }
+
+    if (hasReferenceVideo && dto.reference_video) {
+      const videoUrl = await this.uploadBase64ImagePublic(
+        dto.reference_video.base64,
+        dto.reference_video.mime_type ?? 'video/mp4',
+        generation.id,
+      );
+      referenceVideoUrls = [videoUrl];
+    }
+
+    if (hasReferenceAudio && dto.reference_audio) {
+      const audioUrl = await this.uploadBase64ImagePublic(
+        dto.reference_audio.base64,
+        dto.reference_audio.mime_type ?? 'audio/mpeg',
+        generation.id,
+      );
+      referenceAudioUrls = [audioUrl];
+    }
+
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dto.resolution,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.SEEDANCE_VIDEO,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        prompt: dto.prompt,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        aspectRatio: dto.aspect_ratio,
+        referenceImageUrls,
+        referenceVideoUrls,
+        referenceAudioUrls,
+        generateAudio: dto.generate_audio ?? false,
+        hasVideoInput,
+      } satisfies SeedanceVideoJobData,
     );
 
     return {

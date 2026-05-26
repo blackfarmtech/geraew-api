@@ -14,6 +14,7 @@ import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
 import { GrokImagineProvider } from '../providers/grok-imagine.provider';
 import { GeminiOmniVideoProvider } from '../providers/gemini-omni-video.provider';
+import { BytedanceSeedanceProvider } from '../providers/bytedance-seedance.provider';
 import { SeedreamLiteProvider } from '../providers/seedream-lite.provider';
 import { SeedreamProvider } from '../providers/seedream.provider';
 import { GptImageProvider } from '../providers/gpt-image.provider';
@@ -45,6 +46,7 @@ import {
   ImageToVideoGrokJobData,
   TextToVideoGrokJobData,
   OmniVideoJobData,
+  SeedanceVideoJobData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './generation-queue.constants';
@@ -67,6 +69,7 @@ export class GenerationProcessor extends WorkerHost {
     private readonly veoProvider: VeoProvider,
     private readonly grokImagineProvider: GrokImagineProvider,
     private readonly geminiOmniVideoProvider: GeminiOmniVideoProvider,
+    private readonly bytedanceSeedanceProvider: BytedanceSeedanceProvider,
     private readonly seedreamLiteProvider: SeedreamLiteProvider,
     private readonly seedreamProvider: SeedreamProvider,
     private readonly gptImageProvider: GptImageProvider,
@@ -121,6 +124,8 @@ export class GenerationProcessor extends WorkerHost {
         return this.processTextToVideoGrok(data as TextToVideoGrokJobData);
       case GenerationJobName.OMNI_VIDEO:
         return this.processOmniVideo(data as OmniVideoJobData);
+      case GenerationJobName.SEEDANCE_VIDEO:
+        return this.processSeedanceVideo(data as SeedanceVideoJobData);
       default:
         throw new Error(`Unknown job name: ${jobName}`);
     }
@@ -1024,6 +1029,47 @@ export class GenerationProcessor extends WorkerHost {
           data.generationId,
           data.prompt,
           (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
+  }
+
+  // ─── Bytedance Seedance 2.0 ────────────────────────────────
+
+  private async processSeedanceVideo(data: SeedanceVideoJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[SEEDANCE_VIDEO] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} refImages=${data.referenceImageUrls?.length ?? 0} refVideos=${data.referenceVideoUrls?.length ?? 0} refAudios=${data.referenceAudioUrls?.length ?? 0} audio=${data.generateAudio} prompt="${data.prompt}"`,
+    );
+
+    const buildInput = (prompt: string) => ({
+      id: data.generationId,
+      prompt,
+      referenceImageUrls: data.referenceImageUrls,
+      referenceVideoUrls: data.referenceVideoUrls,
+      referenceAudioUrls: data.referenceAudioUrls,
+      resolution: data.resolution,
+      durationSeconds: data.durationSeconds,
+      aspectRatio: data.aspectRatio,
+      generateAudio: data.generateAudio,
+    });
+
+    try {
+      const result = await this.bytedanceSeedanceProvider.generateVideo(buildInput(data.prompt));
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.bytedanceSeedanceProvider.generateVideo(buildInput(refined)),
         );
         if (retryResult) {
           await this.completeGeneration(data.generationId, retryResult, startTime);

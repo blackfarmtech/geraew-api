@@ -20,6 +20,7 @@ import { FaceSwapProvider } from './providers/face-swap.provider';
 import { VeoProvider } from './providers/veo.provider';
 import { GrokImagineProvider } from './providers/grok-imagine.provider';
 import { GeminiOmniVideoProvider } from './providers/gemini-omni-video.provider';
+import { BytedanceSeedanceProvider } from './providers/bytedance-seedance.provider';
 import { SeedreamLiteProvider } from './providers/seedream-lite.provider';
 import { SeedreamProvider } from './providers/seedream.provider';
 import { GptImageProvider } from './providers/gpt-image.provider';
@@ -69,6 +70,7 @@ import { VoicesModule } from '../voices/voices.module';
     VeoProvider,
     GrokImagineProvider,
     GeminiOmniVideoProvider,
+    BytedanceSeedanceProvider,
     SeedreamLiteProvider,
     SeedreamProvider,
     GptImageProvider,

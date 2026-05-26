@@ -196,11 +196,11 @@ model CronExecution {
   id         String    @id @default(cuid())
   cronName   String    @map("cron_name")
   schedule   String
-  status     String // RUNNING | SUCCESS | ERROR
+  status     String
   startedAt  DateTime  @default(now()) @map("started_at")
   finishedAt DateTime? @map("finished_at")
   durationMs Int?      @map("duration_ms")
-  error      String?   @db.Text
+  error      String?
   metadata   Json?
   createdAt  DateTime  @default(now()) @map("created_at")
 
