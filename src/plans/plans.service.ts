@@ -131,7 +131,14 @@ export class PlansService {
     hasAudio: boolean = false,
     sampleCount: number = 1,
     modelVariant?: string | null,
+    hasVideoInput: boolean = false,
   ): Promise<number> {
+    // Gemini Omni Video tem pricing variável por (resolution, duration, hasVideoInput)
+    // que não cabe na tabela credit_costs — hardcoded aqui.
+    if (modelVariant === 'GEMINI_OMNI') {
+      return PlansService.calculateOmniCost(resolution, durationSeconds, hasVideoInput);
+    }
+
     const cost = await this.getCreditCost(generationType, resolution, hasAudio, modelVariant);
 
     let total = cost.creditsPerUnit;
@@ -149,6 +156,44 @@ export class PlansService {
         ? 1
         : sampleCount;
     return total * Math.max(effectiveSamples, 1);
+  }
+
+  // Pricing Gemini Omni Video — ancorado em VEO_MAX (~1408 cr/USD de custo KIE).
+  // Sem vídeo: varia por (resolution, duration). Com vídeo: flat por resolution.
+  private static readonly OMNI_PRICING_NO_VIDEO: Record<string, Record<number, number>> = {
+    RES_720P:  { 4: 630,  6: 840,  8: 1060, 10: 1270 },
+    RES_1080P: { 4: 630,  6: 840,  8: 1060, 10: 1270 },
+    RES_4K:    { 4: 1480, 6: 1690, 8: 1900, 10: 2110 },
+  };
+  private static readonly OMNI_PRICING_WITH_VIDEO: Record<string, number> = {
+    RES_720P:  1690,
+    RES_1080P: 1690,
+    RES_4K:    2530,
+  };
+
+  private static calculateOmniCost(
+    resolution: Resolution,
+    durationSeconds: number | undefined,
+    hasVideoInput: boolean,
+  ): number {
+    if (hasVideoInput) {
+      const price = PlansService.OMNI_PRICING_WITH_VIDEO[resolution];
+      if (!price) {
+        throw new NotFoundException(
+          `Pricing Gemini Omni (com vídeo) não encontrado para resolution=${resolution}`,
+        );
+      }
+      return price;
+    }
+
+    const byDuration = PlansService.OMNI_PRICING_NO_VIDEO[resolution];
+    const price = byDuration?.[durationSeconds ?? 0];
+    if (!price) {
+      throw new NotFoundException(
+        `Pricing Gemini Omni (sem vídeo) não encontrado para resolution=${resolution} duration=${durationSeconds}s`,
+      );
+    }
+    return price;
   }
 
   async findAllPackages() {

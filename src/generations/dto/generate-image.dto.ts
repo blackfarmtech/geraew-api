@@ -41,6 +41,7 @@ export class GenerateImageDto {
       'gemini-3.1-flash-image-preview',
       'sem-censura',
       'gpt-image-2',
+      'seedream-5-lite',
     ],
   })
   @IsString()
@@ -49,6 +50,7 @@ export class GenerateImageDto {
     'gemini-3.1-flash-image-preview',
     'sem-censura',
     'gpt-image-2',
+    'seedream-5-lite',
   ])
   model: string;
 

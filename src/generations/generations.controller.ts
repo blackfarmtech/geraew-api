@@ -44,6 +44,8 @@ import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
 import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
+import { GenerateGrokImagineTextToVideoDto } from './dto/videos/generate-grok-imagine-text-to-video.dto';
+import { GenerateGeminiOmniVideoDto } from './dto/videos/generate-gemini-omni-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { UnlimitedStatusResponseDto } from './dto/unlimited-status.dto';
@@ -249,6 +251,31 @@ export class GenerationsController {
     @Body() dto: GenerateGrokImagineImageToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
     return this.generationsService.generateImageToVideoGrokImagine(userId, dto);
+  }
+
+  @Post('text-to-video-grok')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Gera vídeo a partir de texto via Grok Imagine (Kie) — 480p/720p, duração 6-30s' })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async textToVideoGrok(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateGrokImagineTextToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateTextToVideoGrokImagine(userId, dto);
+  }
+
+  @Post('omni-video')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary:
+      'Gera vídeo multimodal via Gemini Omni (Kie) — texto + imagens (até 7) + vídeo opcional. 720p/1080p/4K, duração 4/6/8/10s',
+  })
+  @ApiResponse({ status: 201, type: CreateGenerationResponseDto })
+  async omniVideo(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: GenerateGeminiOmniVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    return this.generationsService.generateGeminiOmniVideo(userId, dto);
   }
 
   @Post('text-to-speech')

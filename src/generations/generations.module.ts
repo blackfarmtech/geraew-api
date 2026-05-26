@@ -19,6 +19,8 @@ import { WanProvider } from './providers/wan.provider';
 import { FaceSwapProvider } from './providers/face-swap.provider';
 import { VeoProvider } from './providers/veo.provider';
 import { GrokImagineProvider } from './providers/grok-imagine.provider';
+import { GeminiOmniVideoProvider } from './providers/gemini-omni-video.provider';
+import { SeedreamLiteProvider } from './providers/seedream-lite.provider';
 import { SeedreamProvider } from './providers/seedream.provider';
 import { GptImageProvider } from './providers/gpt-image.provider';
 import { WavespeedAudioProvider } from './providers/wavespeed-audio.provider';
@@ -66,6 +68,8 @@ import { VoicesModule } from '../voices/voices.module';
     FaceSwapProvider,
     VeoProvider,
     GrokImagineProvider,
+    GeminiOmniVideoProvider,
+    SeedreamLiteProvider,
     SeedreamProvider,
     GptImageProvider,
     WavespeedAudioProvider,

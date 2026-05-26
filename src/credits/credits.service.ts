@@ -135,6 +135,7 @@ export class CreditsService {
     sampleCount: number = 1,
     modelVariant?: string,
     freeGenerationTypeOverride?: FreeGenerationType,
+    hasVideoInput: boolean = false,
   ): Promise<EstimateCostResponseDto> {
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -143,6 +144,7 @@ export class CreditsService {
       hasAudio,
       sampleCount,
       modelVariant,
+      hasVideoInput,
     );
 
     const balance = await this.getBalance(userId);

@@ -15,6 +15,8 @@ export enum GenerationJobName {
   IMAGE_TO_VIDEO_KIE = 'image-to-video-kie',
   REFERENCE_TO_VIDEO_KIE = 'reference-to-video-kie',
   IMAGE_TO_VIDEO_GROK = 'image-to-video-grok',
+  TEXT_TO_VIDEO_GROK = 'text-to-video-grok',
+  OMNI_VIDEO = 'omni-video',
 }
 
 interface BaseJobData {
@@ -108,6 +110,31 @@ export interface ImageToVideoGrokJobData extends BaseJobData {
   mode?: 'fun' | 'normal' | 'spicy';
 }
 
+export interface TextToVideoGrokJobData extends BaseJobData {
+  prompt: string;
+  resolution: string;
+  durationSeconds: number;
+  aspectRatio?: string;
+  mode?: 'fun' | 'normal' | 'spicy';
+}
+
+export interface OmniVideoClipData {
+  url: string;
+  start: number;
+  ends: number;
+}
+
+export interface OmniVideoJobData extends BaseJobData {
+  prompt: string;
+  resolution: string;
+  durationSeconds: number;
+  aspectRatio?: string;
+  imageUrls?: string[];
+  videoList?: OmniVideoClipData[];
+  hasVideoInput: boolean;
+}
+
+
 // Audio job shapes — no longer queued via BullMQ. Kept here as parameter
 // types for the GenerationProcessor's runTextToSpeechDirectly /
 // runVoiceCloneDirectly methods, which are invoked synchronously
@@ -137,7 +164,9 @@ export type GenerationJobData =
   | TextToVideoKieJobData
   | ImageToVideoKieJobData
   | ReferenceToVideoKieJobData
-  | ImageToVideoGrokJobData;
+  | ImageToVideoGrokJobData
+  | TextToVideoGrokJobData
+  | OmniVideoJobData;
 
 export const IMAGE_JOB_TIMEOUT = 5 * 60 * 1000; // 5 min
 export const VIDEO_JOB_TIMEOUT = 12 * 60 * 1000; // 12 min

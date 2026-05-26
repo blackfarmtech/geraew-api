@@ -13,6 +13,8 @@ import { WanProvider } from '../providers/wan.provider';
 import { FaceSwapProvider } from '../providers/face-swap.provider';
 import { VeoProvider } from '../providers/veo.provider';
 import { GrokImagineProvider } from '../providers/grok-imagine.provider';
+import { GeminiOmniVideoProvider } from '../providers/gemini-omni-video.provider';
+import { SeedreamLiteProvider } from '../providers/seedream-lite.provider';
 import { SeedreamProvider } from '../providers/seedream.provider';
 import { GptImageProvider } from '../providers/gpt-image.provider';
 import { WavespeedAudioProvider } from '../providers/wavespeed-audio.provider';
@@ -41,6 +43,8 @@ import {
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
   ImageToVideoGrokJobData,
+  TextToVideoGrokJobData,
+  OmniVideoJobData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './generation-queue.constants';
@@ -62,6 +66,8 @@ export class GenerationProcessor extends WorkerHost {
     private readonly faceSwapProvider: FaceSwapProvider,
     private readonly veoProvider: VeoProvider,
     private readonly grokImagineProvider: GrokImagineProvider,
+    private readonly geminiOmniVideoProvider: GeminiOmniVideoProvider,
+    private readonly seedreamLiteProvider: SeedreamLiteProvider,
     private readonly seedreamProvider: SeedreamProvider,
     private readonly gptImageProvider: GptImageProvider,
     private readonly wavespeedAudioProvider: WavespeedAudioProvider,
@@ -111,6 +117,10 @@ export class GenerationProcessor extends WorkerHost {
         return this.processReferenceToVideoKie(data as ReferenceToVideoKieJobData);
       case GenerationJobName.IMAGE_TO_VIDEO_GROK:
         return this.processImageToVideoGrok(data as ImageToVideoGrokJobData);
+      case GenerationJobName.TEXT_TO_VIDEO_GROK:
+        return this.processTextToVideoGrok(data as TextToVideoGrokJobData);
+      case GenerationJobName.OMNI_VIDEO:
+        return this.processOmniVideo(data as OmniVideoJobData);
       default:
         throw new Error(`Unknown job name: ${jobName}`);
     }
@@ -228,6 +238,46 @@ export class GenerationProcessor extends WorkerHost {
           );
           await this.completeGeneration(data.generationId, result, startTime);
           return;
+        }
+        throw error;
+      }
+      return;
+    }
+
+    if (data.model === 'seedream-5-lite') {
+      let imageUrls: string[] | undefined;
+      if (data.hasInputImages) {
+        const inputImages = await this.prisma.generationInputImage.findMany({
+          where: { generationId: data.generationId },
+          orderBy: { order: 'asc' },
+        });
+        imageUrls = inputImages
+          .map((img) => img.url)
+          .filter((url): url is string => !!url);
+      }
+
+      const buildInput = (prompt: string) => ({
+        id: data.generationId,
+        prompt,
+        resolution: data.resolution,
+        aspectRatio: data.aspectRatio,
+        imageUrls,
+      });
+
+      try {
+        const result = await this.seedreamLiteProvider.generateImage(buildInput(data.prompt));
+        await this.completeGeneration(data.generationId, result, startTime);
+      } catch (error) {
+        if (this.isSafetyRelatedError(error)) {
+          const retryResult = await this.retryWithRefinedPrompt(
+            data.generationId,
+            data.prompt,
+            (refined) => this.seedreamLiteProvider.generateImage(buildInput(refined)),
+          );
+          if (retryResult) {
+            await this.completeGeneration(data.generationId, retryResult, startTime);
+            return;
+          }
         }
         throw error;
       }
@@ -893,6 +943,87 @@ export class GenerationProcessor extends WorkerHost {
           data.generationId,
           data.prompt,
           (refined) => this.grokImagineProvider.generateImageToVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async processTextToVideoGrok(
+    data: TextToVideoGrokJobData,
+  ): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[TEXT_TO_VIDEO_GROK] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} mode=${data.mode ?? 'normal'} prompt="${data.prompt}"`,
+    );
+
+    const buildInput = (prompt: string) => ({
+      id: data.generationId,
+      prompt,
+      resolution: data.resolution,
+      durationSeconds: data.durationSeconds,
+      aspectRatio: data.aspectRatio,
+      mode: data.mode ?? 'normal',
+    });
+
+    try {
+      const result = await this.grokImagineProvider.generateTextToVideo(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.grokImagineProvider.generateTextToVideo(buildInput(refined)),
+        );
+        if (retryResult) {
+          await this.completeGeneration(data.generationId, retryResult, startTime);
+          return;
+        }
+      }
+      throw error;
+    }
+  }
+
+  // ─── Gemini Omni Video ─────────────────────────────────────
+
+  private async processOmniVideo(data: OmniVideoJobData): Promise<void> {
+    const startTime = Date.now();
+    await this.markProcessingStarted(data.generationId);
+
+    this.logger.log(
+      `[OMNI_VIDEO] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} images=${data.imageUrls?.length ?? 0} videos=${data.videoList?.length ?? 0} hasVideo=${data.hasVideoInput} prompt="${data.prompt}"`,
+    );
+
+    const buildInput = (prompt: string) => ({
+      id: data.generationId,
+      prompt,
+      imageUrls: data.imageUrls,
+      videoList: data.videoList,
+      resolution: data.resolution,
+      durationSeconds: data.durationSeconds,
+      aspectRatio: data.aspectRatio,
+    });
+
+    try {
+      const result = await this.geminiOmniVideoProvider.generateOmniVideo(
+        buildInput(data.prompt),
+      );
+      await this.completeGeneration(data.generationId, result, startTime);
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
+        const retryResult = await this.retryWithRefinedPrompt(
+          data.generationId,
+          data.prompt,
+          (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildInput(refined)),
         );
         if (retryResult) {
           await this.completeGeneration(data.generationId, retryResult, startTime);

@@ -37,6 +37,14 @@ export class EstimateCostDto {
   modelVariant?: string;
 
   @ApiPropertyOptional({
+    description: 'Indica se a geração inclui um vídeo de input (afeta pricing do Gemini Omni)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  hasVideoInput?: boolean;
+
+  @ApiPropertyOptional({
     enum: FreeGenerationType,
     description: 'Override do tipo de geração grátis (opcional, normalmente derivado de type + modelVariant)',
   })

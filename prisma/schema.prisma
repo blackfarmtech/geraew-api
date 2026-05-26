@@ -901,6 +901,7 @@ enum PaymentType {
 enum Resolution {
   RES_1K
   RES_2K
+  RES_3K
   RES_4K
   RES_720P
   RES_1080P

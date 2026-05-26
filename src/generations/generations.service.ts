@@ -44,6 +44,8 @@ import { GenerateVeoKieTextToVideoDto } from './dto/videos/generate-veo-kie-text
 import { GenerateVeoKieImageToVideoDto } from './dto/videos/generate-veo-kie-image-to-video.dto';
 import { GenerateVeoKieReferenceToVideoDto } from './dto/videos/generate-veo-kie-reference-to-video.dto';
 import { GenerateGrokImagineImageToVideoDto } from './dto/videos/generate-grok-imagine-image-to-video.dto';
+import { GenerateGrokImagineTextToVideoDto } from './dto/videos/generate-grok-imagine-text-to-video.dto';
+import { GenerateGeminiOmniVideoDto } from './dto/videos/generate-gemini-omni-video.dto';
 import { GenerateTextToSpeechDto } from './dto/generate-text-to-speech.dto';
 import { GenerateVoiceCloneDto } from './dto/generate-voice-clone.dto';
 import { containsNsfwContent } from './utils/nsfw-blocklist';
@@ -79,6 +81,10 @@ function getModelVariant(model: string | undefined | null): string | null {
     'veo3': 'VEO_MAX',
     // KIE API (Grok Imagine)
     'grok-imagine': 'GROK_IMAGINE',
+    // KIE API (Gemini Omni Video)
+    'gemini-omni-video': 'GEMINI_OMNI',
+    // KIE API (Seedream Lite) — unificado: T2I se sem images, I2I se com images
+    'seedream-5-lite': 'SEEDREAM_LITE',
   };
   return MODEL_TO_VARIANT[model] ?? null;
 }
@@ -128,6 +134,9 @@ import {
   ImageToVideoKieJobData,
   ReferenceToVideoKieJobData,
   ImageToVideoGrokJobData,
+  TextToVideoGrokJobData,
+  OmniVideoJobData,
+  OmniVideoClipData,
   TextToSpeechJobData,
   VoiceCloneJobData,
 } from './queue/generation-queue.constants';
@@ -1899,7 +1908,7 @@ CRITICAL REQUIREMENTS:
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
       dto.resolution,
-      undefined,
+      dto.duration_seconds,
       false,
       1,
       modelVariant,
@@ -1963,6 +1972,192 @@ CRITICAL REQUIREMENTS:
         imageUrls: [firstFrameUrl],
         mode: 'normal',
       } satisfies ImageToVideoGrokJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Grok Imagine — Text to Video ──────────────────────────
+
+  async generateTextToVideoGrokImagine(
+    userId: string,
+    dto: GenerateGrokImagineTextToVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const type = GenerationType.TEXT_TO_VIDEO;
+    const model = 'grok-imagine';
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
+      false,
+      1,
+      modelVariant,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio: false,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        parameters: { provider: 'kie', mode: 'normal' },
+      },
+    });
+
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dto.resolution,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.TEXT_TO_VIDEO_GROK,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        prompt: dto.prompt,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        aspectRatio: dto.aspect_ratio,
+        mode: 'normal',
+      } satisfies TextToVideoGrokJobData,
+    );
+
+    return {
+      id: generation.id,
+      status: GenerationStatus.PROCESSING,
+      creditsConsumed: creditsRequired,
+    };
+  }
+
+  // ─── Gemini Omni Video ─────────────────────────────────────
+
+  async generateGeminiOmniVideo(
+    userId: string,
+    dto: GenerateGeminiOmniVideoDto,
+  ): Promise<CreateGenerationResponseDto> {
+    const model = 'gemini-omni-video';
+    const modelVariant = dto.model_variant ?? getModelVariant(model);
+
+    await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
+
+    const hasVideoInput = !!dto.video;
+    const hasImageInput = (dto.images?.length ?? 0) > 0;
+
+    // Tipo derivado dos inputs (vídeo > imagem > texto).
+    const type: GenerationType = hasVideoInput
+      ? GenerationType.REFERENCE_VIDEO
+      : hasImageInput
+        ? GenerationType.IMAGE_TO_VIDEO
+        : GenerationType.TEXT_TO_VIDEO;
+
+    const creditsRequired = await this.plansService.calculateGenerationCost(
+      type,
+      dto.resolution,
+      dto.duration_seconds,
+      false,
+      1,
+      modelVariant,
+      hasVideoInput,
+    );
+
+    await this.checkConcurrentLimit(userId);
+    await this.ensureSufficientBalance(userId, creditsRequired);
+
+    const generation = await this.prisma.generation.create({
+      data: {
+        userId,
+        type,
+        status: GenerationStatus.PROCESSING,
+        prompt: dto.prompt,
+        modelUsed: model,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        hasAudio: false,
+        aspectRatio: dto.aspect_ratio,
+        creditsConsumed: creditsRequired,
+        parameters: { provider: 'kie', hasVideoInput },
+      },
+    });
+
+    // Upload das imagens (se houver) e do vídeo (se houver) pra S3 público.
+    let imageUrls: string[] | undefined;
+    if (hasImageInput && dto.images) {
+      imageUrls = await Promise.all(
+        dto.images.map((img) =>
+          this.uploadBase64ImagePublic(
+            img.base64,
+            img.mime_type ?? 'image/jpeg',
+            generation.id,
+          ),
+        ),
+      );
+      await this.prisma.generationInputImage.createMany({
+        data: dto.images.map((img, i) => ({
+          generationId: generation.id,
+          role: GenerationImageRole.REFERENCE,
+          mimeType: img.mime_type ?? 'image/jpeg',
+          order: i,
+          url: imageUrls![i],
+        })),
+      });
+    }
+
+    let videoList: OmniVideoClipData[] | undefined;
+    if (hasVideoInput && dto.video) {
+      const videoUrl = await this.uploadBase64ImagePublic(
+        dto.video.base64,
+        dto.video.mime_type ?? 'video/mp4',
+        generation.id,
+      );
+      // Range automático: start=0, ends=min(duration, 10). Sem UI de trim no v1.
+      const sourceDuration = dto.video.duration_seconds ?? 10;
+      const ends = Math.min(Math.max(sourceDuration, 1), 10);
+      videoList = [{ url: videoUrl, start: 0, ends }];
+    }
+
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dto.resolution,
+    );
+
+    await this.generationQueue.add(
+      GenerationJobName.OMNI_VIDEO,
+      {
+        generationId: generation.id,
+        userId,
+        creditsConsumed: creditsRequired,
+        prompt: dto.prompt,
+        resolution: dto.resolution,
+        durationSeconds: dto.duration_seconds,
+        aspectRatio: dto.aspect_ratio,
+        imageUrls,
+        videoList,
+        hasVideoInput,
+      } satisfies OmniVideoJobData,
     );
 
     return {

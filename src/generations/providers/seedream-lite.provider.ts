@@ -5,32 +5,21 @@ import { GenerationResult } from './geraew.provider';
 import { ContentSafetyError } from '../errors/content-safety.error';
 
 // Códigos de fail retornados pela KIE que indicam moderação de conteúdo.
-const GROK_SAFETY_FAIL_CODES = new Set(['430']);
+const SEEDREAM_SAFETY_FAIL_CODES = new Set(['430']);
 
-const RESOLUTION_MAP: Record<string, string> = {
-  RES_480P: '480p',
-  RES_720P: '720p',
+// Nosso RES_2K → "basic" no KIE / RES_3K → "high" no KIE.
+// (KIE doc fala em 4K para "high", mas o modelo Lite sai até 3K.)
+const QUALITY_MAP: Record<string, 'basic' | 'high'> = {
+  RES_2K: 'basic',
+  RES_3K: 'high',
 };
 
-export interface GrokImagineImageToVideoInput {
-  id: string;
-  prompt?: string;
-  imageUrls: string[];
-  resolution: string;
-  durationSeconds: number;
-  aspectRatio?: string;
-  mode?: 'fun' | 'normal' | 'spicy';
-  nsfwChecker?: boolean;
-}
-
-export interface GrokImagineTextToVideoInput {
+export interface SeedreamLiteImageInput {
   id: string;
   prompt: string;
-  resolution: string;
-  durationSeconds: number;
+  resolution: string; // RES_2K | RES_3K
   aspectRatio?: string;
-  mode?: 'fun' | 'normal' | 'spicy';
-  nsfwChecker?: boolean;
+  imageUrls?: string[]; // se presente → image-to-image
 }
 
 interface CreateTaskResponse {
@@ -62,8 +51,8 @@ interface ResultJsonPayload {
 }
 
 @Injectable()
-export class GrokImagineProvider {
-  private readonly logger = new Logger(GrokImagineProvider.name);
+export class SeedreamLiteProvider {
+  private readonly logger = new Logger(SeedreamLiteProvider.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
@@ -78,84 +67,54 @@ export class GrokImagineProvider {
     this.apiKey = this.configService.get<string>('NANO_BANANA_API_KEY', '');
   }
 
-  async generateImageToVideo(
-    input: GrokImagineImageToVideoInput,
+  async generateImage(
+    input: SeedreamLiteImageInput,
   ): Promise<GenerationResult> {
-    const resolution = RESOLUTION_MAP[input.resolution] ?? '720p';
+    const quality = QUALITY_MAP[input.resolution] ?? 'basic';
+    const hasImages = (input.imageUrls?.length ?? 0) > 0;
+    const modelName = hasImages
+      ? 'seedream/5-lite-image-to-image'
+      : 'seedream/5-lite-text-to-image';
 
     this.logger.log(
-      `[GROK_IMAGINE] Image-to-video — resolution=${resolution} duration=${input.durationSeconds}s images=${input.imageUrls.length} mode=${input.mode ?? 'normal'}`,
+      `[SEEDREAM_LITE] mode=${hasImages ? 'image-to-image' : 'text-to-image'} quality=${quality} aspectRatio=${input.aspectRatio ?? '1:1'} images=${input.imageUrls?.length ?? 0}`,
     );
 
     const body = {
-      model: 'grok-imagine/image-to-video',
+      model: modelName,
       input: {
-        image_urls: input.imageUrls,
         prompt: input.prompt,
-        mode: input.mode ?? 'normal',
-        duration: String(input.durationSeconds),
-        resolution,
-        aspect_ratio: input.aspectRatio ?? '16:9',
-        nsfw_checker: input.nsfwChecker ?? false,
+        aspect_ratio: input.aspectRatio ?? '1:1',
+        quality,
+        nsfw_checker: false,
+        ...(hasImages ? { image_urls: input.imageUrls } : {}),
       },
     };
 
-    return this.runTask(body, input.id, 'grok-imagine/image-to-video');
-  }
-
-  async generateTextToVideo(
-    input: GrokImagineTextToVideoInput,
-  ): Promise<GenerationResult> {
-    const resolution = RESOLUTION_MAP[input.resolution] ?? '480p';
-
-    this.logger.log(
-      `[GROK_IMAGINE] Text-to-video — resolution=${resolution} duration=${input.durationSeconds}s mode=${input.mode ?? 'normal'}`,
-    );
-
-    const body = {
-      model: 'grok-imagine/text-to-video',
-      input: {
-        prompt: input.prompt,
-        mode: input.mode ?? 'normal',
-        duration: String(input.durationSeconds),
-        resolution,
-        aspect_ratio: input.aspectRatio ?? '2:3',
-        nsfw_checker: input.nsfwChecker ?? false,
-      },
-    };
-
-    return this.runTask(body, input.id, 'grok-imagine/text-to-video');
-  }
-
-  private async runTask(
-    body: Record<string, unknown>,
-    generationId: string,
-    modelUsed: string,
-  ): Promise<GenerationResult> {
     const taskId = await this.submitTask(body);
-    this.logger.log(`[GROK_IMAGINE] Task submitted: ${taskId}`);
+    this.logger.log(`[SEEDREAM_LITE] Task submitted: ${taskId}`);
 
     const resultUrls = await this.pollTaskStatus(taskId);
     this.logger.log(
-      `[GROK_IMAGINE] Task ${taskId} completed — resultUrls=${resultUrls.length}`,
+      `[SEEDREAM_LITE] Task ${taskId} completed — resultUrls=${resultUrls.length}`,
     );
 
     const outputUrls: string[] = [];
     for (let i = 0; i < resultUrls.length; i++) {
-      const url = await this.downloadAndUpload(resultUrls[i], generationId, i);
+      const url = await this.downloadAndUpload(resultUrls[i], input.id, i);
       outputUrls.push(url);
     }
 
     if (!outputUrls.length) {
-      throw new Error('Grok Imagine returned no video results.');
+      throw new Error('Seedream Lite returned no image results.');
     }
 
-    return { outputUrls, modelUsed };
+    return { outputUrls, modelUsed: modelName };
   }
 
   private async submitTask(body: Record<string, unknown>): Promise<string> {
     const url = `${this.baseUrl}/api/v1/jobs/createTask`;
-    this.logger.log(`[GROK_IMAGINE] POST ${url}`);
+    this.logger.log(`[SEEDREAM_LITE] POST ${url}`);
 
     const response = await this.fetchWithTimeout(
       url,
@@ -170,10 +129,10 @@ export class GrokImagineProvider {
     if (!response.ok) {
       const errorText = await response.text();
       this.logger.error(
-        `[GROK_IMAGINE] createTask error (${response.status}): ${errorText}`,
+        `[SEEDREAM_LITE] createTask error (${response.status}): ${errorText}`,
       );
       throw new Error(
-        `Grok Imagine createTask error (${response.status}): ${errorText}`,
+        `Seedream Lite createTask error (${response.status}): ${errorText}`,
       );
     }
 
@@ -181,7 +140,7 @@ export class GrokImagineProvider {
 
     if (data.code !== 200 || !data.data?.taskId) {
       throw new Error(
-        `Grok Imagine createTask failed: ${data.msg} (code ${data.code})`,
+        `Seedream Lite createTask failed: ${data.msg} (code ${data.code})`,
       );
     }
 
@@ -190,8 +149,8 @@ export class GrokImagineProvider {
 
   private async pollTaskStatus(
     taskId: string,
-    maxAttempts = 180,
-    intervalMs = 5_000,
+    maxAttempts = 120,
+    intervalMs = 4_000,
   ): Promise<string[]> {
     const maxNetworkRetries = 5;
     let networkFailures = 0;
@@ -213,7 +172,7 @@ export class GrokImagineProvider {
       } catch (error) {
         networkFailures++;
         this.logger.warn(
-          `[GROK_IMAGINE POLL] Fetch failed (${networkFailures}/${maxNetworkRetries}): ${(error as Error).message}`,
+          `[SEEDREAM_LITE POLL] Fetch failed (${networkFailures}/${maxNetworkRetries}): ${(error as Error).message}`,
         );
         if (networkFailures >= maxNetworkRetries) {
           throw error;
@@ -225,11 +184,11 @@ export class GrokImagineProvider {
         networkFailures++;
         const errorText = await response.text();
         this.logger.warn(
-          `[GROK_IMAGINE POLL] HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
+          `[SEEDREAM_LITE POLL] HTTP error ${response.status} (${networkFailures}/${maxNetworkRetries}): ${errorText}`,
         );
         if (networkFailures >= maxNetworkRetries) {
           throw new Error(
-            `Grok Imagine recordInfo error (${response.status}): ${errorText}`,
+            `Seedream Lite recordInfo error (${response.status}): ${errorText}`,
           );
         }
         continue;
@@ -240,7 +199,7 @@ export class GrokImagineProvider {
 
       if (!data.data) {
         this.logger.debug(
-          `[GROK_IMAGINE POLL] No data in response (attempt ${attempt + 1}/${maxAttempts})`,
+          `[SEEDREAM_LITE POLL] No data in response (attempt ${attempt + 1}/${maxAttempts})`,
         );
         continue;
       }
@@ -249,33 +208,30 @@ export class GrokImagineProvider {
 
       if (state === 'waiting' || state === 'queuing' || state === 'generating') {
         this.logger.debug(
-          `[GROK_IMAGINE POLL] state=${state} (attempt ${attempt + 1}/${maxAttempts})`,
+          `[SEEDREAM_LITE POLL] state=${state} (attempt ${attempt + 1}/${maxAttempts})`,
         );
         continue;
       }
 
       if (state === 'fail') {
-        const failMsg =
-          data.data.failMsg ?? data.msg ?? 'unknown error';
+        const failMsg = data.data.failMsg ?? data.msg ?? 'unknown error';
         const failCode = data.data.failCode ?? '';
         const fullMessage = `${failMsg}${failCode ? ` (${failCode})` : ''}`;
 
-        // Erros de moderação de conteúdo: jogar ContentSafetyError pra
-        // que o processor exiba mensagem amigável e estorne créditos.
         if (
-          GROK_SAFETY_FAIL_CODES.has(failCode) ||
+          SEEDREAM_SAFETY_FAIL_CODES.has(failCode) ||
           ContentSafetyError.fromErrorMessage(failMsg)
         ) {
           throw new ContentSafetyError(fullMessage, failCode || undefined);
         }
 
-        throw new Error(`Grok Imagine generation failed: ${fullMessage}`);
+        throw new Error(`Seedream Lite generation failed: ${fullMessage}`);
       }
 
       if (state === 'success') {
         if (!data.data.resultJson) {
           throw new Error(
-            'Grok Imagine succeeded but resultJson is empty.',
+            'Seedream Lite succeeded but resultJson is empty.',
           );
         }
 
@@ -284,19 +240,19 @@ export class GrokImagineProvider {
           payload = JSON.parse(data.data.resultJson) as ResultJsonPayload;
         } catch (err) {
           throw new Error(
-            `Failed to parse Grok Imagine resultJson: ${(err as Error).message}`,
+            `Failed to parse Seedream Lite resultJson: ${(err as Error).message}`,
           );
         }
 
         const urls = payload.resultUrls ?? [];
         if (!urls.length) {
-          throw new Error('Grok Imagine returned empty resultUrls.');
+          throw new Error('Seedream Lite returned empty resultUrls.');
         }
         return urls;
       }
     }
 
-    throw new Error('Grok Imagine generation timed out.');
+    throw new Error('Seedream Lite generation timed out.');
   }
 
   private async downloadAndUpload(
@@ -312,23 +268,25 @@ export class GrokImagineProvider {
         if (attempt > 0) {
           await new Promise((resolve) => setTimeout(resolve, 2_000));
           this.logger.warn(
-            `[GROK_IMAGINE] Retrying download (${attempt + 1}/${maxRetries}) for ${generationId}`,
+            `[SEEDREAM_LITE] Retrying download (${attempt + 1}/${maxRetries}) for ${generationId}`,
           );
         }
 
-        const response = await this.fetchWithTimeout(sourceUrl, {}, 120_000);
+        const response = await this.fetchWithTimeout(sourceUrl, {}, 60_000);
         if (!response.ok) {
           throw new Error(
-            `Failed to download video from Grok Imagine (${response.status}): ${sourceUrl}`,
+            `Failed to download image from Seedream Lite (${response.status}): ${sourceUrl}`,
           );
         }
         const buffer = Buffer.from(await response.arrayBuffer());
+        const contentType = response.headers.get('content-type') ?? 'image/png';
+        const ext = contentType.split('/')[1]?.split(';')[0] ?? 'png';
 
         return await this.uploadsService.uploadBuffer(
           buffer,
           `generations/${generationId}`,
-          `output_${index}.mp4`,
-          'video/mp4',
+          `output_${index}.${ext}`,
+          contentType,
         );
       } catch (error) {
         lastError = error as Error;

@@ -164,6 +164,7 @@ export class CreditsController {
       dto.sampleCount,
       dto.modelVariant,
       dto.freeGenerationType,
+      dto.hasVideoInput,
     );
   }
 }

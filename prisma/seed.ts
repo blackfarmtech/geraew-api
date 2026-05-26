@@ -210,76 +210,84 @@ async function main() {
     // GeraEW Fast (GERAEW_FAST) — geraew-provider — Text to Video
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1600, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1120, isPerSecond: false },
 
     // GeraEW Fast (GERAEW_FAST) — geraew-provider — Image to Video
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1600, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1120, isPerSecond: false },
 
     // GeraEW Fast (GERAEW_FAST) — geraew-provider — Reference Video
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 600, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 900, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 560, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1600, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_FAST', creditsPerUnit: 1120, isPerSecond: false },
 
     // GeraEW Quality (GERAEW_QUALITY) — geraew-provider — Text to Video
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
     { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2800, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1740, isPerSecond: false },
 
     // GeraEW Quality (GERAEW_QUALITY) — geraew-provider — Image to Video
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
     { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2800, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1740, isPerSecond: false },
 
     // GeraEW Quality (GERAEW_QUALITY) — geraew-provider — Reference Video
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1000, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1240, isPerSecond: false },
     { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: false, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2000, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 2800, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'GERAEW_QUALITY', creditsPerUnit: 1740, isPerSecond: false },
 
     // Veo 3.1 Fast (VEO_FAST) — KIE API — always hasAudio=true — more expensive than GeraEW
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 2600, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 2600, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1300, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 2600, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1610, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1610, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 810, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_FAST', creditsPerUnit: 1610, isPerSecond: false },
 
     // Veo 3.1 Quality (VEO_MAX) — KIE API — always hasAudio=true — more expensive than GeraEW
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 4100, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 4100, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2900, isPerSecond: false },
-    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 4100, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2540, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2540, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_720P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_1080P', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 1800, isPerSecond: false },
+    { generationType: 'REFERENCE_VIDEO', resolution: 'RES_4K', hasAudio: true, modelVariant: 'VEO_MAX', creditsPerUnit: 2540, isPerSecond: false },
 
-    // Grok Imagine (GROK_IMAGINE) — KIE API — Fast mode (normal), no audio, duration 6-30s charged flat
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_480P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 1000, isPerSecond: false },
-    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 2000, isPerSecond: false },
+    // Grok Imagine (GROK_IMAGINE) — KIE API — Fast mode (normal), no audio, duration 6-30s charged per second
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_480P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 40, isPerSecond: true },
+    { generationType: 'IMAGE_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 80, isPerSecond: true },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_480P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 40, isPerSecond: true },
+    { generationType: 'TEXT_TO_VIDEO', resolution: 'RES_720P', hasAudio: false, modelVariant: 'GROK_IMAGINE', creditsPerUnit: 80, isPerSecond: true },
+
+    // Seedream Lite (SEEDREAM_LITE) — KIE API — 60cr basic (2K) / 80cr high (3K), T2I e I2I
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'SEEDREAM_LITE', creditsPerUnit: 60, isPerSecond: false },
+    { generationType: 'TEXT_TO_IMAGE', resolution: 'RES_3K', hasAudio: false, modelVariant: 'SEEDREAM_LITE', creditsPerUnit: 80, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_2K', hasAudio: false, modelVariant: 'SEEDREAM_LITE', creditsPerUnit: 60, isPerSecond: false },
+    { generationType: 'IMAGE_TO_IMAGE', resolution: 'RES_3K', hasAudio: false, modelVariant: 'SEEDREAM_LITE', creditsPerUnit: 80, isPerSecond: false },
 
     // Virtual Try-On — NB2 (mirrors IMAGE_TO_IMAGE NB2 pricing)
     { generationType: 'VIRTUAL_TRY_ON', resolution: 'RES_1K', hasAudio: false, modelVariant: 'NB2', creditsPerUnit: 90, isPerSecond: false },
@@ -410,11 +418,12 @@ async function main() {
   console.log('🎬 Creating AI video models...');
 
   const videoModels = [
-    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 0 },
-    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 1 },
-    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 2 },
-    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 3 },
-    { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 4 },
+    { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'KIE' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0 },
+    { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 1 },
+    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 2 },
+    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 3 },
+    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 4 },
+    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 5 },
     {
       slug: 'avatar-video',
       label: 'Vídeo com avatar (HeyGen)',
@@ -455,7 +464,8 @@ async function main() {
   console.log('🖼️  Creating AI image models...');
 
   const imageModels = [
-    { slug: 'sem-censura', label: 'Geraew Unlocked', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 0 },
+    { slug: 'seedream-5-lite', label: 'Seedream Lite', provider: 'KIE' as const, modelVariant: 'SEEDREAM_LITE', sortOrder: 0 },
+    { slug: 'sem-censura', label: 'Geraew Unlocked', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 1 },
   ];
 
   for (const model of imageModels) {
