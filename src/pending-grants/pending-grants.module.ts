@@ -9,6 +9,8 @@ import { GreennWebhookController } from './greenn-webhook.controller';
 import { GreennWebhookService } from './greenn-webhook.service';
 import { CartpandaWebhookController } from './cartpanda-webhook.controller';
 import { CartpandaWebhookService } from './cartpanda-webhook.service';
+import { PerfectpayWebhookController } from './perfectpay-webhook.controller';
+import { PerfectpayWebhookService } from './perfectpay-webhook.service';
 import { WebhookLogsModule } from '../webhook-logs/webhook-logs.module';
 import { EmailModule } from '../email/email.module';
 
@@ -19,6 +21,7 @@ import { EmailModule } from '../email/email.module';
     HotmartWebhookController,
     GreennWebhookController,
     CartpandaWebhookController,
+    PerfectpayWebhookController,
   ],
   providers: [
     PendingGrantsService,
@@ -26,6 +29,7 @@ import { EmailModule } from '../email/email.module';
     HotmartWebhookService,
     GreennWebhookService,
     CartpandaWebhookService,
+    PerfectpayWebhookService,
   ],
   exports: [PendingGrantsService],
 })
