@@ -8,6 +8,8 @@ import { AdminUnlimitedController } from './admin-unlimited.controller';
 import { AdminUnlimitedService } from './admin-unlimited.service';
 import { AdminCronsController } from './admin-crons.controller';
 import { AdminCronsService } from './admin-crons.service';
+import { AdminVertexController } from './admin-vertex.controller';
+import { AdminVertexService } from './admin-vertex.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { ModelsModule } from '../models/models.module';
@@ -20,7 +22,7 @@ import { GENERATION_UNLIMITED_QUEUE } from '../generations/queue/generation-queu
     ModelsModule,
     BullModule.registerQueue({ name: GENERATION_UNLIMITED_QUEUE }),
   ],
-  controllers: [AdminController, AdminStripeController, AdminUnlimitedController, AdminCronsController],
-  providers: [AdminService, AdminStripeService, AdminUnlimitedService, AdminCronsService],
+  controllers: [AdminController, AdminStripeController, AdminUnlimitedController, AdminCronsController, AdminVertexController],
+  providers: [AdminService, AdminStripeService, AdminUnlimitedService, AdminCronsService, AdminVertexService],
 })
 export class AdminModule {}

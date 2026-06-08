@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PixResponseDto {
-  @ApiProperty({ description: 'ID do PIX na AbacatePay (pix_char_*)' })
-  abacatepayId: string;
+  @ApiProperty({ description: 'ID da cobrança no provedor (ASAAS payment.id)' })
+  paymentId: string;
 
   @ApiProperty({ description: 'Valor cobrado em centavos' })
   amountCents: number;

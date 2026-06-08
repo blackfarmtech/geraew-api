@@ -18,6 +18,8 @@ model User {
   oauthProvider           String?                   @map("oauth_provider")
   oauthProviderId         String?                   @map("oauth_provider_id")
   stripeCustomerId        String?                   @unique @map("stripe_customer_id")
+  asaasCustomerId         String?                   @unique @map("asaas_customer_id")
+  taxId                   String?                   @map("tax_id")
   emailVerified           Boolean                   @default(false) @map("email_verified")
   isActive                Boolean                   @default(true) @map("is_active")
   createdAt               DateTime                  @default(now()) @map("created_at")

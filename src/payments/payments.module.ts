@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { StripeService } from './stripe.service';
-import { AbacatepayService } from './abacatepay.service';
-import { AbacatepayController } from './abacatepay.controller';
+import { AsaasService } from './asaas.service';
+import { AsaasController } from './asaas.controller';
 import { StripeWebhookService } from './webhooks/stripe-webhook.service';
 import { MercadoPagoWebhookService } from './webhooks/mercadopago-webhook.service';
-import { AbacatepayWebhookService } from './webhooks/abacatepay-webhook.service';
+import { AsaasWebhookService } from './webhooks/asaas-webhook.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WebhookLogsModule } from '../webhook-logs/webhook-logs.module';
 import { EmailModule } from '../email/email.module';
@@ -14,15 +14,15 @@ import { PlansModule } from '../plans/plans.module';
 
 @Module({
   imports: [PrismaModule, WebhookLogsModule, EmailModule, PlansModule],
-  controllers: [PaymentsController, AbacatepayController],
+  controllers: [PaymentsController, AsaasController],
   providers: [
     PaymentsService,
     StripeService,
-    AbacatepayService,
+    AsaasService,
     StripeWebhookService,
     MercadoPagoWebhookService,
-    AbacatepayWebhookService,
+    AsaasWebhookService,
   ],
-  exports: [PaymentsService, StripeService, AbacatepayService],
+  exports: [PaymentsService, StripeService, AsaasService],
 })
 export class PaymentsModule {}

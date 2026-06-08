@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 (async () => {
   const logs = await prisma.webhookLog.findMany({
-    where: { provider: 'abacatepay' },
+    where: { provider: 'asaas' },
     orderBy: { createdAt: 'desc' },
     take: 5,
   });

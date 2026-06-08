@@ -3,7 +3,7 @@ import {
   Post,
   Get,
   Body,
-  Query,
+  Headers,
   Param,
   HttpCode,
   HttpStatus,
@@ -14,17 +14,17 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { CurrentUser, Public } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
-import { AbacatepayService } from './abacatepay.service';
-import { AbacatepayWebhookService } from './webhooks/abacatepay-webhook.service';
-import { CreateBoostPixDto } from './dto/create-boost-pix.dto';
+import { AsaasService } from './asaas.service';
+import { AsaasWebhookService } from './webhooks/asaas-webhook.service';
+import { CreatePixBoostDto } from './dto/create-pix-boost.dto';
 import { PixResponseDto } from './dto/pix-response.dto';
 
-@ApiTags('abacatepay')
+@ApiTags('asaas')
 @Controller('api/v1')
-export class AbacatepayController {
+export class AsaasController {
   constructor(
-    private readonly abacatepayService: AbacatepayService,
-    private readonly abacatepayWebhookService: AbacatepayWebhookService,
+    private readonly asaasService: AsaasService,
+    private readonly asaasWebhookService: AsaasWebhookService,
     private readonly plansService: PlansService,
     private readonly prisma: PrismaService,
   ) {}
@@ -33,11 +33,11 @@ export class AbacatepayController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Cria um PIX QR Code para compra de pacote de créditos' })
+  @ApiOperation({ summary: 'Cria um PIX QR Code para compra de pacote de créditos (via ASAAS)' })
   @ApiResponse({ status: 201, type: PixResponseDto })
   async createBoostPix(
     @CurrentUser('sub') userId: string,
-    @Body() dto: CreateBoostPixDto,
+    @Body() dto: CreatePixBoostDto,
   ): Promise<PixResponseDto> {
     const pkg = await this.plansService.findPackageById(dto.packageId);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -47,33 +47,32 @@ export class AbacatepayController {
 
     const price = await this.plansService.resolvePackagePrice(pkg.id, 'BRL');
 
-    // AbacatePay v1 exige customer.cellphone quando o objeto customer é enviado.
-    // Como não temos celular do usuário, omitimos customer; metadata basta para
-    // reconciliar no webhook (userId/packageId).
-    const pix = await this.abacatepayService.createPixCharge({
+    const customerId = await this.asaasService.getOrCreateCustomer(
+      userId,
+      user.name,
+      user.email,
+      dto.taxId,
+    );
+
+    const pix = await this.asaasService.createPixCharge({
+      customerId,
       amountCents: price.priceCents,
-      description: `Boost — ${pkg.name}`.slice(0, 37),
-      expiresInSeconds: 3600,
-      metadata: {
+      description: `Boost — ${pkg.name}`,
+      externalReference: JSON.stringify({
         userId,
         packageId: pkg.id,
-        packageName: pkg.name,
-        credits: pkg.credits,
-        userEmail: user.email,
-        userName: user.name,
-        ...(dto.taxId ? { taxId: dto.taxId } : {}),
         ...(user.referredByCode ? { referredByCode: user.referredByCode } : {}),
-      },
+      }),
     });
 
     return {
-      abacatepayId: pix.id,
-      amountCents: pix.amount,
+      paymentId: pix.id,
+      amountCents: pix.amountCents,
       status: pix.status,
       brCode: pix.brCode,
       brCodeBase64: pix.brCodeBase64,
       expiresAt: pix.expiresAt,
-      devMode: pix.devMode,
+      devMode: this.asaasService.isSandbox(),
     };
   }
 
@@ -81,22 +80,24 @@ export class AbacatepayController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Consulta status de um PIX (para polling no frontend)' })
   @ApiResponse({ status: 200, description: 'Status do PIX' })
-  async getPixStatus(@Param('id') id: string): Promise<{ status: string; paid: boolean }> {
-    const pix = await this.abacatepayService.checkPixStatus(id);
-    return { status: pix.status, paid: pix.status === 'PAID' };
+  async getPixStatus(
+    @Param('id') id: string,
+  ): Promise<{ status: string; paid: boolean }> {
+    const result = await this.asaasService.checkPaymentStatus(id);
+    return { status: result.status, paid: result.status === 'PAID' };
   }
 
   @Public()
-  @Post('webhooks/abacatepay')
+  @Post('webhooks/asaas')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Webhook da AbacatePay (configurar com ?webhookSecret=...)' })
+  @ApiOperation({ summary: 'Webhook do ASAAS (autenticado via header asaas-access-token)' })
   @ApiResponse({ status: 200, description: 'Webhook processado' })
-  @ApiResponse({ status: 401, description: 'webhookSecret inválido' })
+  @ApiResponse({ status: 401, description: 'asaas-access-token inválido' })
   async webhook(
-    @Query('webhookSecret') webhookSecret: string | undefined,
+    @Headers('asaas-access-token') accessToken: string | undefined,
     @Body() payload: Record<string, unknown>,
   ): Promise<{ received: true }> {
-    await this.abacatepayWebhookService.handleWebhook(webhookSecret, payload);
+    await this.asaasWebhookService.handleWebhook(accessToken, payload);
     return { received: true };
   }
 }
