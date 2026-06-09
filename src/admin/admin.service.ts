@@ -4,11 +4,14 @@ import {
   CreditTransactionType,
   FreeGenerationType,
   GenerationStatus,
+  Prisma,
   SubscriptionStatus,
 } from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { ListGenerationsQueryDto } from './dto/list-generations-query.dto';
+import { ListPromptTemplatesQueryDto } from './dto/list-prompt-templates-query.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
 import { UpdatePromptSectionDto } from './dto/update-prompt-section.dto';
@@ -446,18 +449,33 @@ export class AdminService {
     });
   }
 
-  async getGenerations(pagination: PaginationDto) {
+  async getGenerations(query: ListGenerationsQueryDto) {
+    const where: Prisma.GenerationWhereInput = {};
+    if (query.type) where.type = query.type;
+    if (query.status) where.status = query.status;
+    if (query.model) where.modelUsed = query.model;
+    const search = query.search?.trim();
+    if (search) {
+      where.user = {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      };
+    }
+
     const [generations, total] = await Promise.all([
       this.prisma.generation.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
-        skip: pagination.skip,
-        take: pagination.limit,
+        skip: query.skip,
+        take: query.limit,
         include: {
           user: { select: { id: true, email: true, name: true } },
           outputs: { orderBy: { order: 'asc' as const } },
         },
       }),
-      this.prisma.generation.count(),
+      this.prisma.generation.count({ where }),
     ]);
 
     const data = generations.map((gen) => ({
@@ -478,7 +496,19 @@ export class AdminService {
       completedAt: gen.completedAt,
     }));
 
-    return new PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+    return new PaginatedResponseDto(data, total, query.page, query.limit);
+  }
+
+  /** Lista os modelos distintos já usados em gerações (para filtros do admin). */
+  async getGenerationModels(): Promise<string[]> {
+    const rows = await this.prisma.generation.findMany({
+      distinct: ['modelUsed'],
+      select: { modelUsed: true },
+      orderBy: { modelUsed: 'asc' },
+    });
+    return rows
+      .map((r) => r.modelUsed)
+      .filter((m): m is string => !!m && m.trim().length > 0);
   }
 
   async toggleUserStatus(userId: string, isActive: boolean): Promise<void> {
@@ -1342,6 +1372,92 @@ export class AdminService {
         },
       },
     });
+  }
+
+  /** Seções + categorias com contagem de prompts (sem carregar os prompts).
+   * Leve, para popular a árvore de gerenciamento e os filtros. */
+  async getPromptSectionsLight() {
+    const sections = await this.prisma.promptSection.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+          include: { _count: { select: { prompts: true } } },
+        },
+      },
+    });
+    return sections.map((s) => ({
+      id: s.id,
+      slug: s.slug,
+      title: s.title,
+      description: s.description,
+      icon: s.icon,
+      sortOrder: s.sortOrder,
+      isActive: s.isActive,
+      categories: s.categories.map((c) => ({
+        id: c.id,
+        sectionId: c.sectionId,
+        title: c.title,
+        sortOrder: c.sortOrder,
+        promptCount: c._count.prompts,
+      })),
+    }));
+  }
+
+  /** Lista paginada de prompt templates com filtros (tipo, seção, categoria, busca). */
+  async getPromptTemplates(query: ListPromptTemplatesQueryDto) {
+    const where: Prisma.PromptTemplateWhereInput = {};
+    if (query.type) where.type = query.type;
+    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.sectionId) where.category = { sectionId: query.sectionId };
+    const search = query.search?.trim();
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { prompt: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.promptTemplate.findMany({
+        where,
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        skip: query.skip,
+        take: query.limit,
+        include: {
+          category: {
+            select: {
+              id: true,
+              title: true,
+              section: { select: { id: true, title: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.promptTemplate.count({ where }),
+    ]);
+
+    const data = items.map((t) => ({
+      id: t.id,
+      categoryId: t.categoryId,
+      title: t.title,
+      type: t.type,
+      prompt: t.prompt,
+      imageUrl: t.imageUrl,
+      thumbnailUrl: t.thumbnailUrl,
+      aiModel: t.aiModel,
+      sortOrder: t.sortOrder,
+      isActive: t.isActive,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      category: {
+        id: t.category.id,
+        title: t.category.title,
+        section: { id: t.category.section.id, title: t.category.section.title },
+      },
+    }));
+
+    return new PaginatedResponseDto(data, total, query.page, query.limit);
   }
 
   async createPromptSection(dto: CreatePromptSectionDto) {

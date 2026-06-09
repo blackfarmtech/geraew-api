@@ -23,6 +23,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { ListGenerationsQueryDto } from './dto/list-generations-query.dto';
+import { ListPromptTemplatesQueryDto } from './dto/list-prompt-templates-query.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { AdjustFreeGenerationsDto } from './dto/adjust-free-generations.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
@@ -171,11 +173,17 @@ export class AdminController {
     return this.adminService.getProviderStats();
   }
 
+  @Get('generations/models')
+  @ApiOperation({ summary: 'Lista os modelos distintos usados em gerações (filtros)' })
+  async getGenerationModels() {
+    return this.adminService.getGenerationModels();
+  }
+
   @Get('generations')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Lista todas as gerações (monitoramento)' })
-  async getGenerations(@Query() pagination: PaginationDto) {
-    return this.adminService.getGenerations(pagination);
+  async getGenerations(@Query() query: ListGenerationsQueryDto) {
+    return this.adminService.getGenerations(query);
   }
 
   @Post('upload')
@@ -198,6 +206,19 @@ export class AdminController {
   @ApiOperation({ summary: 'Lista todas as seções de prompts (admin)' })
   async getPromptSections() {
     return this.adminService.getPromptSections();
+  }
+
+  @Get('prompts/sections-light')
+  @ApiOperation({ summary: 'Seções + categorias com contagem de prompts (leve)' })
+  async getPromptSectionsLight() {
+    return this.adminService.getPromptSectionsLight();
+  }
+
+  @Get('prompts/templates')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Lista paginada de prompt templates com filtros' })
+  async getPromptTemplates(@Query() query: ListPromptTemplatesQueryDto) {
+    return this.adminService.getPromptTemplates(query);
   }
 
   @Post('prompts/sections')
