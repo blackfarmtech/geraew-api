@@ -79,6 +79,36 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  /**
+   * Enviado quando alguém pede reset de senha para uma conta que foi criada
+   * via Google OAuth (sem senha local). Em vez de silêncio, orienta o usuário
+   * a entrar pelo login com Google.
+   */
+  async sendOAuthLoginInfoEmail(to: string, name: string): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Email service not configured — skipping OAuth login info email');
+      return;
+    }
+
+    try {
+      const { error } = await this.client.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject: 'Sua conta usa login com Google — Geraew',
+        html: this.getOAuthLoginInfoTemplate(name),
+      });
+
+      if (error) {
+        this.logger.error(`Failed to send OAuth login info email to ${to}: ${JSON.stringify(error)}`);
+        return;
+      }
+
+      this.logger.log(`OAuth login info email sent to ${to}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send OAuth login info email: ${error.message}`);
+    }
+  }
+
   async sendWelcomeEmail(to: string, name: string): Promise<void> {
     if (!this.client) {
       this.logger.warn('Email service not configured — skipping welcome email');
@@ -403,6 +433,52 @@ export class EmailService implements OnModuleInit {
               <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
               <p style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1a1a1a;">Não solicitou esta alteração?</p>
               <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Ignore este email. Sua senha permanecerá a mesma.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private getOAuthLoginInfoTemplate(name: string): string {
+    const loginUrl = `${this.frontendUrl}/login`;
+    const logoHtml = this.logoUrl
+      ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
+      : '';
+    const greeting = name ? `Olá, ${name}!` : 'Olá!';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9f9f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 48px 40px;">
+              ${logoHtml ? `<div style="margin-bottom: 32px;">${logoHtml}</div>` : ''}
+              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1a1a1a; line-height: 1.3;">Sua conta usa login com Google</h1>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #666; line-height: 1.6;">${greeting} Recebemos uma solicitação para redefinir sua senha, mas sua conta no Geraew foi criada com <strong>login do Google</strong> e não tem uma senha para redefinir.</p>
+              <p style="margin: 0 0 28px; font-size: 15px; color: #666; line-height: 1.6;">Para acessar, é só entrar novamente usando o botão "Continuar com Google":</p>
+              <div style="margin: 0 0 28px;">
+                <a href="${loginUrl}"
+                   style="display: inline-block; background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                  Entrar com Google
+                </a>
+              </div>
+              <p style="margin: 0; font-size: 15px; color: #666; line-height: 1.6;">Assim você não precisa lembrar de nenhuma senha.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <hr style="border: none; border-top: 1px solid #eee; margin: 0 0 24px;">
+              <p style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1a1a1a;">Não solicitou isto?</p>
+              <p style="margin: 0; font-size: 13px; color: #999; line-height: 1.5;">Pode ignorar este email com segurança. Nada na sua conta foi alterado.</p>
             </td>
           </tr>
         </table>

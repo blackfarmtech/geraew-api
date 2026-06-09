@@ -638,14 +638,35 @@ export class AuthService {
    * Solicita reset de senha — gera token e retorna (dev) ou envia email (prod)
    */
   async forgotPassword(email: string): Promise<{ message: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase(), isActive: true },
+      where: { email: normalizedEmail },
     });
 
     const successMessage = 'Se o email existir, instruções de reset serão enviadas';
 
-    // Não revela se o email existe ou se é conta OAuth-only
-    if (!user || !user.passwordHash) {
+    // A resposta ao cliente é sempre a mesma (não revela se o email existe,
+    // é conta OAuth ou está inativa), mas cada caso é logado internamente
+    // para diagnosticar "envios fantasma" — emails que nunca chegam.
+    if (!user) {
+      this.logger.warn(`forgotPassword: nenhum usuário ativo com email ${normalizedEmail}`);
+      return { message: successMessage };
+    }
+
+    if (!user.isActive) {
+      this.logger.warn(`forgotPassword: conta inativa para ${normalizedEmail} (id=${user.id})`);
+      return { message: successMessage };
+    }
+
+    if (!user.passwordHash) {
+      // Conta criada via OAuth (Google) — não há senha para resetar.
+      // Em vez de silêncio, envia email informativo para o usuário entender.
+      this.logger.warn(
+        `forgotPassword: conta OAuth-only para ${normalizedEmail} (id=${user.id}) — enviando email de login Google`,
+      );
+      this.emailService.sendOAuthLoginInfoEmail(user.email, user.name).catch((err) => {
+        this.logger.error(`Failed to send OAuth login info email: ${err.message}`);
+      });
       return { message: successMessage };
     }
 
