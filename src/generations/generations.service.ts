@@ -10,7 +10,10 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreditsService, resolveFreeGenerationType } from '../credits/credits.service';
+import {
+  CreditsService,
+  resolveFreeGenerationType,
+} from '../credits/credits.service';
 import { PlansService } from '../plans/plans.service';
 import { ModelsService } from '../models/models.service';
 import { VoicesService } from '../voices/voices.service';
@@ -75,11 +78,11 @@ function getModelVariant(model: string | undefined | null): string | null {
     // GeraEW provider (video)
     'geraew-fast': 'GERAEW_FAST',
     'geraew-quality': 'GERAEW_QUALITY',
-    'veo-3.1-fast-generate-001': 'GERAEW_FAST',  // backward compat
-    'veo-3.1-generate-001': 'GERAEW_QUALITY',     // backward compat
+    'veo-3.1-fast-generate-001': 'GERAEW_FAST', // backward compat
+    'veo-3.1-generate-001': 'GERAEW_QUALITY', // backward compat
     // KIE API (Veo 3.1)
-    'veo3_fast': 'VEO_FAST',
-    'veo3': 'VEO_MAX',
+    veo3_fast: 'VEO_FAST',
+    veo3: 'VEO_MAX',
     // KIE API (Grok Imagine)
     'grok-imagine': 'GROK_IMAGINE',
     // KIE API (Gemini Omni Video)
@@ -166,7 +169,13 @@ type GenerationWithRelations = {
   isFavorited: boolean;
   createdAt: Date;
   completedAt: Date | null;
-  outputs: Array<{ id: string; url: string; thumbnailUrl: string | null; mimeType: string | null; order: number }>;
+  outputs: Array<{
+    id: string;
+    url: string;
+    thumbnailUrl: string | null;
+    mimeType: string | null;
+    order: number;
+  }>;
 };
 
 @Injectable()
@@ -181,10 +190,11 @@ export class GenerationsService {
     private readonly modelsService: ModelsService,
     private readonly voicesService: VoicesService,
     @InjectQueue(GENERATION_QUEUE) private readonly generationQueue: Queue,
-    @InjectQueue(GENERATION_UNLIMITED_QUEUE) private readonly unlimitedQueue: Queue,
+    @InjectQueue(GENERATION_UNLIMITED_QUEUE)
+    private readonly unlimitedQueue: Queue,
     private readonly generationProcessor: GenerationProcessor,
     private readonly unlimitedService: UnlimitedService,
-  ) { }
+  ) {}
 
   private isSeedream(model: string | undefined | null): boolean {
     return model === 'sem-censura';
@@ -367,7 +377,9 @@ export class GenerationsService {
         delay: eligibility.delayMs,
       });
     } catch (err) {
-      await this.unlimitedService.releaseLock(args.userId).catch(() => undefined);
+      await this.unlimitedService
+        .releaseLock(args.userId)
+        .catch(() => undefined);
       throw err;
     }
   }
@@ -406,10 +418,9 @@ export class GenerationsService {
       }
     }
 
-    const type =
-      dto.images?.length
-        ? GenerationType.IMAGE_TO_IMAGE
-        : GenerationType.TEXT_TO_IMAGE;
+    const type = dto.images?.length
+      ? GenerationType.IMAGE_TO_IMAGE
+      : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
     const isUnlimited = dto.unlimited === true;
@@ -428,7 +439,11 @@ export class GenerationsService {
         dto.resolution,
       );
     } else {
-      freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+      freeGenType = await this.resolveFreeGenForRequest(
+        userId,
+        type,
+        modelVariant,
+      );
       isFreeGeneration = freeGenType !== null;
       creditsRequired = isFreeGeneration
         ? 0
@@ -467,7 +482,11 @@ export class GenerationsService {
     if (dto.images?.length) {
       const uploadedUrls = await Promise.all(
         dto.images.map((img) =>
-          this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id),
+          this.uploadBase64Image(
+            img.base64,
+            img.mime_type ?? 'image/png',
+            generation.id,
+          ),
         ),
       );
       await this.prisma.generationInputImage.createMany({
@@ -483,9 +502,19 @@ export class GenerationsService {
 
     if (!isUnlimited) {
       if (isFreeGeneration && freeGenType) {
-        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          freeGenType,
+        );
       } else {
-        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
       }
     }
 
@@ -559,10 +588,9 @@ export class GenerationsService {
     dto: GenerateImageDto,
     freeGenerationTypeOverride?: FreeGenerationType,
   ): Promise<CreateGenerationResponseDto> {
-    const type =
-      dto.images?.length
-        ? GenerationType.IMAGE_TO_IMAGE
-        : GenerationType.TEXT_TO_IMAGE;
+    const type = dto.images?.length
+      ? GenerationType.IMAGE_TO_IMAGE
+      : GenerationType.TEXT_TO_IMAGE;
 
     const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
     const isUnlimited = dto.unlimited === true;
@@ -626,7 +654,11 @@ export class GenerationsService {
     if (dto.images?.length) {
       const uploadedUrls = await Promise.all(
         dto.images.map((img) =>
-          this.uploadBase64Image(img.base64, img.mime_type ?? 'image/png', generation.id),
+          this.uploadBase64Image(
+            img.base64,
+            img.mime_type ?? 'image/png',
+            generation.id,
+          ),
         ),
       );
       await this.prisma.generationInputImage.createMany({
@@ -642,9 +674,19 @@ export class GenerationsService {
 
     if (!isUnlimited) {
       if (isFreeGeneration && freeGenType) {
-        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          freeGenType,
+        );
       } else {
-        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
       }
     }
 
@@ -692,12 +734,12 @@ export class GenerationsService {
     userId: string,
     dto: GenerateImageNanoBananaDto,
   ): Promise<CreateGenerationResponseDto> {
-    const type =
-      dto.images?.length
-        ? GenerationType.IMAGE_TO_IMAGE
-        : GenerationType.TEXT_TO_IMAGE;
+    const type = dto.images?.length
+      ? GenerationType.IMAGE_TO_IMAGE
+      : GenerationType.TEXT_TO_IMAGE;
 
-    const modelVariant = dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
+    const modelVariant =
+      dto.model_variant ?? getModelVariant(dto.model ?? 'nano-banana-2');
     const isUnlimited = dto.unlimited === true;
 
     await this.checkConcurrentLimit(userId);
@@ -714,7 +756,11 @@ export class GenerationsService {
         dto.resolution,
       );
     } else {
-      freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+      freeGenType = await this.resolveFreeGenForRequest(
+        userId,
+        type,
+        modelVariant,
+      );
       isFreeGeneration = freeGenType !== null;
       creditsRequired = isFreeGeneration
         ? 0
@@ -776,7 +822,11 @@ export class GenerationsService {
 
     if (!isUnlimited) {
       if (isFreeGeneration && freeGenType) {
-        await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+        await this.creditsService.consumeFreeGeneration(
+          userId,
+          generation.id,
+          freeGenType,
+        );
       } else {
         await this.debitCredits(
           userId,
@@ -812,7 +862,10 @@ export class GenerationsService {
         jobData,
       });
     } else {
-      await this.generationQueue.add(GenerationJobName.IMAGE_NANO_BANANA, jobData);
+      await this.generationQueue.add(
+        GenerationJobName.IMAGE_NANO_BANANA,
+        jobData,
+      );
     }
 
     return {
@@ -842,7 +895,10 @@ export class GenerationsService {
     );
 
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
+    const providerResolution = effectiveVideoResolution(
+      dto.resolution,
+      modelVariant,
+    );
 
     await this.checkConcurrentLimit(userId);
 
@@ -901,7 +957,13 @@ export class GenerationsService {
           FreeGenerationType.GERAEW_FAST,
         );
       } else {
-        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
       }
     }
 
@@ -961,7 +1023,10 @@ export class GenerationsService {
     );
 
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
+    const providerResolution = effectiveVideoResolution(
+      dto.resolution,
+      modelVariant,
+    );
 
     await this.checkConcurrentLimit(userId);
 
@@ -1024,14 +1089,14 @@ export class GenerationsService {
       order: number;
       url: string;
     }> = [
-        {
-          generationId: generation.id,
-          role: GenerationImageRole.FIRST_FRAME,
-          mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
-          order: 0,
-          url: firstFrameUrl,
-        },
-      ];
+      {
+        generationId: generation.id,
+        role: GenerationImageRole.FIRST_FRAME,
+        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+        order: 0,
+        url: firstFrameUrl,
+      },
+    ];
     if (dto.last_frame) {
       const lastFrameUrl = await this.uploadBase64Image(
         dto.last_frame,
@@ -1056,7 +1121,13 @@ export class GenerationsService {
           FreeGenerationType.GERAEW_FAST,
         );
       } else {
-        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
       }
     }
 
@@ -1117,7 +1188,10 @@ export class GenerationsService {
     );
 
     // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(dto.resolution, modelVariant);
+    const providerResolution = effectiveVideoResolution(
+      dto.resolution,
+      modelVariant,
+    );
 
     await this.checkConcurrentLimit(userId);
 
@@ -1171,7 +1245,11 @@ export class GenerationsService {
     if (dto.reference_images?.length) {
       const uploadedUrls = await Promise.all(
         dto.reference_images.map((ref) =>
-          this.uploadBase64Image(ref.base64, ref.mime_type ?? 'image/jpeg', generation.id),
+          this.uploadBase64Image(
+            ref.base64,
+            ref.mime_type ?? 'image/jpeg',
+            generation.id,
+          ),
         ),
       );
       await this.prisma.generationInputImage.createMany({
@@ -1194,7 +1272,13 @@ export class GenerationsService {
           FreeGenerationType.GERAEW_FAST,
         );
       } else {
-        await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+        await this.debitCredits(
+          userId,
+          creditsRequired,
+          generation.id,
+          type,
+          dto.resolution,
+        );
       }
     }
 
@@ -1224,7 +1308,10 @@ export class GenerationsService {
         jobData,
       });
     } else {
-      await this.generationQueue.add(GenerationJobName.REFERENCE_VIDEO, jobData);
+      await this.generationQueue.add(
+        GenerationJobName.REFERENCE_VIDEO,
+        jobData,
+      );
     }
 
     return {
@@ -1241,11 +1328,15 @@ export class GenerationsService {
     dto: GenerateMotionControlDto,
   ): Promise<CreateGenerationResponseDto> {
     // Feature gate — admin can disable motion control via /admin/modelos.
-    await this.modelsService.assertActiveBySlug('motion-control', AiModelType.VIDEO);
+    await this.modelsService.assertActiveBySlug(
+      'motion-control',
+      AiModelType.VIDEO,
+    );
 
     const type = GenerationType.MOTION_CONTROL;
     const resolution = dto.resolution ?? '720p';
-    const dbResolution = resolution === '1080p' ? Resolution.RES_1080P : Resolution.RES_720P;
+    const dbResolution =
+      resolution === '1080p' ? Resolution.RES_1080P : Resolution.RES_720P;
 
     const videoBuffer = Buffer.from(dto.video, 'base64');
     const durationSeconds = getVideoDurationSeconds(videoBuffer);
@@ -1276,7 +1367,12 @@ export class GenerationsService {
 
     // Upload video to S3 — public URL for Wan API, signed URL for internal display
     const videoMime = dto.video_mime_type ?? 'video/mp4';
-    const videoExt = videoMime === 'video/quicktime' ? 'mov' : videoMime === 'video/x-matroska' ? 'mkv' : 'mp4';
+    const videoExt =
+      videoMime === 'video/quicktime'
+        ? 'mov'
+        : videoMime === 'video/x-matroska'
+          ? 'mkv'
+          : 'mp4';
     const { publicUrl: videoPublicUrl, signedUrl: videoSignedUrl } =
       await this.uploadsService.uploadBufferPublic(
         videoBuffer,
@@ -1287,7 +1383,12 @@ export class GenerationsService {
 
     // Upload image to S3 — public URL for Wan API, signed URL for internal display
     const imageMime = dto.image_mime_type ?? 'image/jpeg';
-    const imageExt = imageMime === 'image/png' ? 'png' : imageMime === 'image/webp' ? 'webp' : 'jpg';
+    const imageExt =
+      imageMime === 'image/png'
+        ? 'png'
+        : imageMime === 'image/webp'
+          ? 'webp'
+          : 'jpg';
     const imageBuffer = Buffer.from(dto.image, 'base64');
     const { publicUrl: imagePublicUrl, signedUrl: imageSignedUrl } =
       await this.uploadsService.uploadBufferPublic(
@@ -1317,19 +1418,22 @@ export class GenerationsService {
       ],
     });
 
-    await this.debitCredits(userId, creditsRequired, generation.id, type, dbResolution);
-
-    await this.generationQueue.add(
-      GenerationJobName.MOTION_CONTROL,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        videoUrl: videoPublicUrl,
-        imageUrl: imagePublicUrl,
-        resolution,
-      } satisfies MotionControlJobData,
+    await this.debitCredits(
+      userId,
+      creditsRequired,
+      generation.id,
+      type,
+      dbResolution,
     );
+
+    await this.generationQueue.add(GenerationJobName.MOTION_CONTROL, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      videoUrl: videoPublicUrl,
+      imageUrl: imagePublicUrl,
+      resolution,
+    } satisfies MotionControlJobData);
 
     return {
       id: generation.id,
@@ -1350,7 +1454,11 @@ export class GenerationsService {
 
     const modelVariant = dto.model_variant ?? getModelVariant(model);
 
-    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const freeGenType = await this.resolveFreeGenForRequest(
+      userId,
+      type,
+      modelVariant,
+    );
     const isFreeGeneration = freeGenType !== null;
 
     const creditsRequired = isFreeGeneration
@@ -1424,25 +1532,32 @@ export class GenerationsService {
     });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        freeGenType,
+      );
     } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        resolution,
+      );
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.VIRTUAL_TRY_ON,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt,
-        model,
-        resolution,
-        aspectRatio: dto.aspect_ratio ?? '3:4',
-        mimeType: dto.output_mime_type ?? 'image/png',
-      } satisfies VirtualTryOnJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.VIRTUAL_TRY_ON, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt,
+      model,
+      resolution,
+      aspectRatio: dto.aspect_ratio ?? '3:4',
+      mimeType: dto.output_mime_type ?? 'image/png',
+    } satisfies VirtualTryOnJobData);
 
     return {
       id: generation.id,
@@ -1482,11 +1597,16 @@ CRITICAL REQUIREMENTS:
       '2K': Resolution.RES_2K,
       '4K': Resolution.RES_4K,
     };
-    const resolution = resolutionMap[dto.resolution ?? '2K'] ?? Resolution.RES_2K;
+    const resolution =
+      resolutionMap[dto.resolution ?? '2K'] ?? Resolution.RES_2K;
 
     const modelVariant = getModelVariant('nano-banana-2');
 
-    const freeGenType = await this.resolveFreeGenForRequest(userId, type, modelVariant);
+    const freeGenType = await this.resolveFreeGenForRequest(
+      userId,
+      type,
+      modelVariant,
+    );
     const isFreeGeneration = freeGenType !== null;
 
     const creditsRequired = isFreeGeneration
@@ -1554,23 +1674,30 @@ CRITICAL REQUIREMENTS:
     });
 
     if (isFreeGeneration) {
-      await this.creditsService.consumeFreeGeneration(userId, generation.id, freeGenType);
+      await this.creditsService.consumeFreeGeneration(
+        userId,
+        generation.id,
+        freeGenType,
+      );
     } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, resolution);
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        resolution,
+      );
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.FACE_SWAP,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        sourceImageUrl: sourceUrl,
-        targetImageUrl: targetUrl,
-        resolution: dto.resolution ?? '2K',
-      } satisfies FaceSwapJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.FACE_SWAP, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      sourceImageUrl: sourceUrl,
+      targetImageUrl: targetUrl,
+      resolution: dto.resolution ?? '2K',
+    } satisfies FaceSwapJobData);
 
     return {
       id: generation.id,
@@ -1636,24 +1763,27 @@ CRITICAL REQUIREMENTS:
         FreeGenerationType.GERAEW_FAST,
       );
     } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        dto.resolution,
+      );
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.TEXT_TO_VIDEO_KIE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model,
-        resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        seed: dto.seed,
-      } satisfies TextToVideoKieJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.TEXT_TO_VIDEO_KIE, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      seed: dto.seed,
+    } satisfies TextToVideoKieJobData);
 
     return {
       id: generation.id,
@@ -1762,25 +1892,28 @@ CRITICAL REQUIREMENTS:
         FreeGenerationType.GERAEW_FAST,
       );
     } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        dto.resolution,
+      );
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE_TO_VIDEO_KIE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model,
-        resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        seed: dto.seed,
-        imageUrls,
-      } satisfies ImageToVideoKieJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.IMAGE_TO_VIDEO_KIE, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      seed: dto.seed,
+      imageUrls,
+    } satisfies ImageToVideoKieJobData);
 
     return {
       id: generation.id,
@@ -1835,7 +1968,11 @@ CRITICAL REQUIREMENTS:
         aspectRatio: dto.aspect_ratio,
         creditsConsumed: creditsRequired,
         usedFreeGeneration: isFreeGeneration,
-        parameters: { provider: 'kie', seed: dto.seed, generationType: 'REFERENCE_2_VIDEO' },
+        parameters: {
+          provider: 'kie',
+          seed: dto.seed,
+          generationType: 'REFERENCE_2_VIDEO',
+        },
       },
     });
 
@@ -1870,25 +2007,28 @@ CRITICAL REQUIREMENTS:
         FreeGenerationType.GERAEW_FAST,
       );
     } else {
-      await this.debitCredits(userId, creditsRequired, generation.id, type, dto.resolution);
+      await this.debitCredits(
+        userId,
+        creditsRequired,
+        generation.id,
+        type,
+        dto.resolution,
+      );
     }
 
-    await this.generationQueue.add(
-      GenerationJobName.REFERENCE_TO_VIDEO_KIE,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        prompt: dto.prompt,
-        model,
-        resolution: dto.resolution,
-        aspectRatio: dto.aspect_ratio,
-        generateAudio: hasAudio,
-        seed: dto.seed,
-        imageUrls,
-      } satisfies ReferenceToVideoKieJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.REFERENCE_TO_VIDEO_KIE, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      usedFreeGeneration: isFreeGeneration,
+      prompt: dto.prompt,
+      model,
+      resolution: dto.resolution,
+      aspectRatio: dto.aspect_ratio,
+      generateAudio: hasAudio,
+      seed: dto.seed,
+      imageUrls,
+    } satisfies ReferenceToVideoKieJobData);
 
     return {
       id: generation.id,
@@ -1943,17 +2083,41 @@ CRITICAL REQUIREMENTS:
       generation.id,
     );
 
-    await this.prisma.generationInputImage.createMany({
-      data: [
-        {
-          generationId: generation.id,
-          role: GenerationImageRole.FIRST_FRAME,
-          mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
-          order: 0,
-          url: firstFrameUrl,
-        },
-      ],
-    });
+    const inputImageData: Array<{
+      generationId: string;
+      role: GenerationImageRole;
+      mimeType: string;
+      order: number;
+      url: string;
+    }> = [
+      {
+        generationId: generation.id,
+        role: GenerationImageRole.FIRST_FRAME,
+        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
+        order: 0,
+        url: firstFrameUrl,
+      },
+    ];
+
+    const imageUrls: string[] = [firstFrameUrl];
+
+    if (dto.last_frame) {
+      const lastFrameUrl = await this.uploadBase64ImagePublic(
+        dto.last_frame,
+        dto.last_frame_mime_type ?? 'image/jpeg',
+        generation.id,
+      );
+      inputImageData.push({
+        generationId: generation.id,
+        role: GenerationImageRole.LAST_FRAME,
+        mimeType: dto.last_frame_mime_type ?? 'image/jpeg',
+        order: 1,
+        url: lastFrameUrl,
+      });
+      imageUrls.push(lastFrameUrl);
+    }
+
+    await this.prisma.generationInputImage.createMany({ data: inputImageData });
 
     await this.debitCredits(
       userId,
@@ -1963,20 +2127,17 @@ CRITICAL REQUIREMENTS:
       dto.resolution,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.IMAGE_TO_VIDEO_GROK,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        prompt: dto.prompt,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        imageUrls: [firstFrameUrl],
-        mode: 'normal',
-      } satisfies ImageToVideoGrokJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.IMAGE_TO_VIDEO_GROK, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      prompt: dto.prompt,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      imageUrls,
+      mode: 'normal',
+    } satisfies ImageToVideoGrokJobData);
 
     return {
       id: generation.id,
@@ -2033,19 +2194,16 @@ CRITICAL REQUIREMENTS:
       dto.resolution,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.TEXT_TO_VIDEO_GROK,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        prompt: dto.prompt,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        mode: 'normal',
-      } satisfies TextToVideoGrokJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.TEXT_TO_VIDEO_GROK, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      prompt: dto.prompt,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      mode: 'normal',
+    } satisfies TextToVideoGrokJobData);
 
     return {
       id: generation.id,
@@ -2148,21 +2306,18 @@ CRITICAL REQUIREMENTS:
       dto.resolution,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.OMNI_VIDEO,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        prompt: dto.prompt,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        imageUrls,
-        videoList,
-        hasVideoInput,
-      } satisfies OmniVideoJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.OMNI_VIDEO, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      prompt: dto.prompt,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      imageUrls,
+      videoList,
+      hasVideoInput,
+    } satisfies OmniVideoJobData);
 
     return {
       id: generation.id,
@@ -2189,9 +2344,10 @@ CRITICAL REQUIREMENTS:
     const hasVideoInput = hasReferenceVideo;
 
     // Tipo derivado: qualquer ref → REFERENCE_VIDEO, else TEXT_TO_VIDEO.
-    const type: GenerationType = (hasReferenceImages || hasReferenceVideo || hasReferenceAudio)
-      ? GenerationType.REFERENCE_VIDEO
-      : GenerationType.TEXT_TO_VIDEO;
+    const type: GenerationType =
+      hasReferenceImages || hasReferenceVideo || hasReferenceAudio
+        ? GenerationType.REFERENCE_VIDEO
+        : GenerationType.TEXT_TO_VIDEO;
 
     const creditsRequired = await this.plansService.calculateGenerationCost(
       type,
@@ -2273,23 +2429,20 @@ CRITICAL REQUIREMENTS:
       dto.resolution,
     );
 
-    await this.generationQueue.add(
-      GenerationJobName.SEEDANCE_VIDEO,
-      {
-        generationId: generation.id,
-        userId,
-        creditsConsumed: creditsRequired,
-        prompt: dto.prompt,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        aspectRatio: dto.aspect_ratio,
-        referenceImageUrls,
-        referenceVideoUrls,
-        referenceAudioUrls,
-        generateAudio: dto.generate_audio ?? false,
-        hasVideoInput,
-      } satisfies SeedanceVideoJobData,
-    );
+    await this.generationQueue.add(GenerationJobName.SEEDANCE_VIDEO, {
+      generationId: generation.id,
+      userId,
+      creditsConsumed: creditsRequired,
+      prompt: dto.prompt,
+      resolution: dto.resolution,
+      durationSeconds: dto.duration_seconds,
+      aspectRatio: dto.aspect_ratio,
+      referenceImageUrls,
+      referenceVideoUrls,
+      referenceAudioUrls,
+      generateAudio: dto.generate_audio ?? false,
+      hasVideoInput,
+    } satisfies SeedanceVideoJobData);
 
     return {
       id: generation.id,
@@ -2339,7 +2492,10 @@ CRITICAL REQUIREMENTS:
     const ttsCreditCost = this.ttsCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
 
-    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
+    await this.modelsService.assertActiveBySlug(
+      'audio-generation',
+      AiModelType.AUDIO,
+    );
     await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, ttsCreditCost);
 
@@ -2398,7 +2554,10 @@ CRITICAL REQUIREMENTS:
     const ttsCreditCost = this.ttsCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
 
-    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
+    await this.modelsService.assertActiveBySlug(
+      'audio-generation',
+      AiModelType.AUDIO,
+    );
 
     const voice = await this.voicesService.getForUse(userId, voiceProfileId);
     if (!voice) {
@@ -2461,7 +2620,10 @@ CRITICAL REQUIREMENTS:
     const cloneCreditCost = this.cloneCreditCost(dto.text.length);
     const type = GenerationType.VOICE_CLONE;
 
-    await this.modelsService.assertActiveBySlug('audio-generation', AiModelType.AUDIO);
+    await this.modelsService.assertActiveBySlug(
+      'audio-generation',
+      AiModelType.AUDIO,
+    );
     await this.checkConcurrentLimit(userId);
     await this.ensureSufficientBalance(userId, cloneCreditCost);
 
@@ -2484,11 +2646,8 @@ CRITICAL REQUIREMENTS:
     });
 
     const inputMime = dto.audio_mime_type ?? 'audio/mpeg';
-    const { url: audioUrl, mimeType: storedMime } = await this.uploadBase64Audio(
-      dto.audio,
-      inputMime,
-      generation.id,
-    );
+    const { url: audioUrl, mimeType: storedMime } =
+      await this.uploadBase64Audio(dto.audio, inputMime, generation.id);
 
     // Persist the sample URL so the user can later promote this clone
     // into a saved VoiceProfile via POST /voices.
@@ -2535,7 +2694,8 @@ CRITICAL REQUIREMENTS:
     modelVariant: string | null,
     provider: 'geraew' | 'kie' = 'geraew',
   ): Promise<'paid' | 'free_generation'> {
-    const isGeraew = modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
+    const isGeraew =
+      modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
     const isVeo = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
 
     if (!isGeraew && !isVeo) {
@@ -2568,7 +2728,10 @@ CRITICAL REQUIREMENTS:
   ): Promise<FreeGenerationType | null> {
     const freeType = override ?? resolveFreeGenerationType(type, modelVariant);
     if (!freeType) return null;
-    const hasFree = await this.creditsService.hasFreeGeneration(userId, freeType);
+    const hasFree = await this.creditsService.hasFreeGeneration(
+      userId,
+      freeType,
+    );
     return hasFree ? freeType : null;
   }
 
@@ -2794,7 +2957,9 @@ CRITICAL REQUIREMENTS:
 
   // ─── Response mapping ─────────────────────────────────────
 
-  private toResponseDto(generation: GenerationWithRelations): GenerationResponseDto {
+  private toResponseDto(
+    generation: GenerationWithRelations,
+  ): GenerationResponseDto {
     return {
       id: generation.id,
       type: generation.type,
@@ -2867,7 +3032,7 @@ CRITICAL REQUIREMENTS:
     const isMp3 = subtype.includes('mpeg') || subtype === 'mp3';
 
     let finalMime = mimeType;
-    let ext = 'mp3';
+    const ext = 'mp3';
 
     // WaveSpeed OmniVoice voice-clone only accepts mp3/wav. Browser recordings
     // come in as webm (Chrome/Firefox) or m4a (Safari) — we transcode them to

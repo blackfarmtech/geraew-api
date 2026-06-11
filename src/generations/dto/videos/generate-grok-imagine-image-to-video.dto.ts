@@ -13,7 +13,8 @@ import { Resolution } from '@prisma/client';
 
 export class GenerateGrokImagineImageToVideoDto {
   @ApiPropertyOptional({
-    description: 'Prompt de texto descrevendo o movimento do vídeo (máx 5000 chars)',
+    description:
+      'Prompt de texto descrevendo o movimento do vídeo (máx 5000 chars)',
     example: 'POV hand handing the girl a cup of coffee',
   })
   @IsOptional()
@@ -64,6 +65,22 @@ export class GenerateGrokImagineImageToVideoDto {
   @IsOptional()
   @IsString()
   first_frame_mime_type?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Último frame em base64 (opcional — vira a segunda imagem do multi-imagem)',
+  })
+  @IsOptional()
+  @IsString()
+  last_frame?: string;
+
+  @ApiPropertyOptional({
+    description: 'MIME type do último frame',
+    default: 'image/jpeg',
+  })
+  @IsOptional()
+  @IsString()
+  last_frame_mime_type?: string;
 
   @ApiPropertyOptional({
     description: 'Variante do modelo para cálculo de créditos (GROK_IMAGINE)',

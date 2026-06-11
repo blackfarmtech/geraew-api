@@ -1,9 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  PromptSectionDto,
-  PromptTemplateDto,
-} from './dto/prompt-response.dto';
+import { PromptSectionDto, PromptTemplateDto } from './dto/prompt-response.dto';
+
+/**
+ * Os títulos de categoria estão salvos "sujos" no banco (ex.: "25 Prompts
+ * Influencer de Biquini", "3 prompts para Academia"). Normaliza na saída da
+ * API pública: remove a contagem, a palavra "Prompts" e o conector inicial.
+ * O admin continua vendo o título original para gerenciamento.
+ */
+function cleanCategoryTitle(title: string): string {
+  const cleaned = title
+    .replace(/^\s*\d+\s*/, '')
+    .replace(/^prompts?\s*/i, '')
+    .replace(/^(de|do|da|dos|das|para|em)\s+/i, '')
+    .trim();
+  if (!cleaned) return title.trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
 
 @Injectable()
 export class PromptsService {
@@ -50,7 +63,7 @@ export class PromptsService {
       icon: section.icon ?? undefined,
       categories: section.categories.map((category) => ({
         id: category.id,
-        title: category.title,
+        title: cleanCategoryTitle(category.title),
         prompts: category.prompts.map((prompt) => ({
           id: prompt.id,
           title: prompt.title,
@@ -108,7 +121,7 @@ export class PromptsService {
       icon: section.icon ?? undefined,
       categories: section.categories.map((category) => ({
         id: category.id,
-        title: category.title,
+        title: cleanCategoryTitle(category.title),
         prompts: category.prompts.map((prompt) => ({
           id: prompt.id,
           title: prompt.title,
