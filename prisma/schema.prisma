@@ -64,6 +64,10 @@ model User {
   videoProjects           VideoProject[]
   voiceProfiles           VoiceProfile[]
   weeklyClaims            WeeklyClaim[]
+  workspaces              Workspace[]
+  communityPosts          CommunityPost[]
+  communityLikes          CommunityPostLike[]
+  notifications           Notification[]
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
@@ -651,6 +655,81 @@ model VideoProjectClip {
 
   @@index([projectId])
   @@map("video_project_clips")
+}
+
+model Workspace {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  name         String   @default("Sem título")
+  nodes        Json     @default("[]")
+  edges        Json     @default("[]")
+  viewport     Json?
+  thumbnailUrl String?  @map("thumbnail_url")
+  favorite     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("workspaces")
+}
+
+enum CommunityPostStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CommunityPost {
+  id              String              @id @default(cuid())
+  userId          String              @map("user_id")
+  generationId    String?             @map("generation_id")
+  kind            String // 'image' | 'video'
+  mediaUrl        String              @map("media_url")
+  thumbnailUrl    String?             @map("thumbnail_url")
+  prompt          String
+  /** tags exibidas no lightbox (aspecto, modelo, ferramenta) */
+  settings        Json?
+  status          CommunityPostStatus @default(PENDING)
+  likesCount      Int                 @default(0) @map("likes_count")
+  rejectionReason String?             @map("rejection_reason")
+  approvedAt      DateTime?           @map("approved_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes           CommunityPostLike[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("community_posts")
+}
+
+model CommunityPostLike {
+  id        String        @id @default(cuid())
+  postId    String        @map("post_id")
+  userId    String        @map("user_id")
+  createdAt DateTime      @default(now()) @map("created_at")
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_post_likes")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  /** ex.: community-submitted | community-approved | community-rejected */
+  type      String
+  /** payload livre (postId, motivo, etc.) — o front monta o texto pelo type */
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }
 
 model PromptSection {
