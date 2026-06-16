@@ -41,4 +41,11 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional() credits: CreditInfoDto | null;
   @ApiPropertyOptional() subscription: SubscriptionInfoDto | null;
   @ApiProperty() feedbackSubmitted: boolean;
+  @ApiProperty({ description: 'true se o usuário já cadastrou CPF/CNPJ em alguma compra PIX anterior' })
+  hasTaxIdOnFile: boolean;
+  @ApiPropertyOptional({
+    description:
+      'CPF/CNPJ salvo do usuário com mascara aplicada (ex: •••.•••.•••-12). Null se não tiver.',
+  })
+  taxIdMasked: string | null;
 }

@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
 import { GenerationResult } from './geraew.provider';
+import {
+  normalizeInworldMarkup,
+  stripExpressiveMarkup,
+} from './inworld-markup.util';
 
 export interface WavespeedTextToSpeechInput {
   id: string;
@@ -81,8 +85,11 @@ export class WavespeedAudioProvider {
     }
 
     const model = 'wavespeed-ai/omnivoice/text-to-speech';
+    // OmniVoice não suporta tags de reação/pausa — removemos para não serem
+    // lidas em voz alta. (Emoções só funcionam no caminho Inworld.)
+    const text = stripExpressiveMarkup(input.text);
     const body: Record<string, unknown> = {
-      text: input.text,
+      text,
       voice_id: input.voiceId,
     };
     if (input.language) body.language = input.language;
@@ -103,8 +110,11 @@ export class WavespeedAudioProvider {
     input: WavespeedTextToSpeechInput,
   ): Promise<GenerationResult> {
     const model = 'inworld/inworld-1.5-max/text-to-speech';
+    // Inworld suporta markup de emoção/efeito — traduzimos tags em pt-BR/ES
+    // para a sintaxe oficial e aplicamos as regras de posição.
+    const text = normalizeInworldMarkup(input.text);
     const body: Record<string, unknown> = {
-      text: input.text,
+      text,
       voice_id: input.voiceId,
     };
     if (typeof input.speed === 'number') body.speaking_rate = input.speed;
@@ -125,8 +135,10 @@ export class WavespeedAudioProvider {
   ): Promise<GenerationResult> {
     this.ensureConfigured();
     const model = 'wavespeed-ai/omnivoice/voice-clone';
+    // OmniVoice (voice clone) não suporta tags de reação/pausa — removemos.
+    const text = stripExpressiveMarkup(input.text);
     const body: Record<string, unknown> = {
-      text: input.text,
+      text,
       audio: input.audioUrl,
     };
     if (input.language) body.language = input.language;

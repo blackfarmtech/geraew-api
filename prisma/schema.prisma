@@ -186,6 +186,10 @@ model Subscription {
   scheduledPlanId          String?                  @map("scheduled_plan_id")
   pausedUntil              DateTime?                @map("paused_until")
   retentionOfferAcceptedAt DateTime?                @map("retention_offer_accepted_at")
+  paymentMethod            String?                  @map("payment_method")
+  asaasSubscriptionId      String?                  @map("asaas_subscription_id")
+  asaasAuthorizationId     String?                  @map("asaas_authorization_id")
+  asaasAuthorizationStatus String?                  @map("asaas_authorization_status")
   recoveryCampaigns        PaymentRecoveryCampaign?
   payments                 Payment[]
   plan                     Plan                     @relation("currentPlan", fields: [planId], references: [id])
@@ -195,6 +199,7 @@ model Subscription {
   @@index([userId])
   @@index([status])
   @@index([currentPeriodEnd])
+  @@index([asaasAuthorizationId], map: "idx_subscriptions_asaas_auth")
   @@map("subscriptions")
 }
 

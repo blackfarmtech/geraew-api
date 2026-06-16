@@ -1,4 +1,12 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  BadRequestException,
+  ServiceUnavailableException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -108,10 +116,13 @@ export class AsaasService {
   ): Promise<string> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { asaasCustomerId: true },
+      select: { asaasCustomerId: true, taxId: true },
     });
 
-    if (user.asaasCustomerId) {
+    // Reusa o customer só se já existe E é o mesmo CPF/CNPJ.
+    // Quando o user troca de documento (PF → PJ por exemplo), criamos um
+    // novo customer no ASAAS — o anterior fica orfão na conta deles, sem efeito.
+    if (user.asaasCustomerId && user.taxId === cpfCnpj) {
       return user.asaasCustomerId;
     }
 
@@ -243,11 +254,61 @@ export class AsaasService {
     }
 
     if (!res.ok) {
-      const message = parsed.errors?.[0]?.description ?? `HTTP ${res.status}`;
-      this.logger.error(`ASAAS ${method} ${pathname} failed: ${message}`);
-      throw new InternalServerErrorException(`ASAAS: ${message}`);
+      const rawMessage = parsed.errors?.[0]?.description ?? `HTTP ${res.status}`;
+      const errorCode = parsed.errors?.[0]?.code ?? '';
+      this.logger.error(`ASAAS ${method} ${pathname} failed: ${rawMessage}`);
+      throw this.translateError(rawMessage, errorCode, res.status);
     }
 
     return parsed as T;
+  }
+
+  /**
+   * Mapeia erros do ASAAS para mensagens em português voltadas ao usuário final.
+   * Nunca expõe o nome do provedor (ASAAS) na resposta visível.
+   */
+  private translateError(
+    rawMessage: string,
+    errorCode: string,
+    httpStatus: number,
+  ): HttpException {
+    const msg = rawMessage.toLowerCase();
+
+    // CPF/CNPJ inválido — erro do usuário, 400
+    if (msg.includes('cpf') || msg.includes('cnpj')) {
+      return new BadRequestException(
+        'CPF ou CNPJ inválido. Confira os dígitos e tente novamente.',
+      );
+    }
+
+    // PIX temporariamente indisponível (conta em aprovação, sem chave, etc) — 503
+    if (
+      (msg.includes('pix') && (msg.includes('disponível') || msg.includes('aprovada'))) ||
+      msg.includes('chave pix')
+    ) {
+      return new ServiceUnavailableException(
+        'Pagamento via PIX temporariamente indisponível. Tente novamente em alguns minutos ou use o cartão.',
+      );
+    }
+
+    // Rate limit / excesso de consultas — 429
+    if (msg.includes('excesso') || msg.includes('tente novamente mais tarde')) {
+      return new HttpException(
+        'Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Customer não encontrado / dados inválidos no payload — 400
+    if (msg.includes('customer') || msg.includes('inválido') || errorCode === 'invalid_object') {
+      return new BadRequestException(
+        'Não foi possível processar os dados informados. Verifique e tente novamente.',
+      );
+    }
+
+    // Fallback genérico — 500
+    return new InternalServerErrorException(
+      'Não foi possível gerar o PIX no momento. Tente novamente em instantes.',
+    );
   }
 }

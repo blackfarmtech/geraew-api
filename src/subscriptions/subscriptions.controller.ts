@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Param,
   Body,
   HttpCode,
   HttpStatus,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CreatePixAutoSubscriptionDto } from './dto/create-pix-auto-subscription.dto';
 import { AcceptOfferDto } from './dto/accept-offer.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { CurrentUser } from '../common/decorators';
@@ -63,6 +65,45 @@ export class SubscriptionsController {
       dto.planSlug,
       dto.currency,
       dto.recoveryPromoCode,
+    );
+  }
+
+  @Post('pix-auto')
+  @HttpCode(HttpStatus.CREATED)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Criar assinatura via PIX Automático (ASAAS) — retorna QR Code de autorização',
+  })
+  @ApiResponse({ status: 201, description: 'Autorização criada — escaneie o QR' })
+  @ApiResponse({ status: 400, description: 'CPF/CNPJ inválido ou ausente' })
+  @ApiResponse({ status: 409, description: 'Já possui assinatura ativa' })
+  async createPixAuto(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CreatePixAutoSubscriptionDto,
+  ): Promise<{
+    authorizationId: string;
+    qrCodePayload: string;
+    qrCodeEncodedImage: string;
+    expiresAt: string | null;
+    status: string;
+  }> {
+    return this.subscriptionsService.createPixAutoSubscription(
+      userId,
+      dto.planSlug,
+      dto.taxId,
+    );
+  }
+
+  @Get('pix-auto/:authorizationId/status')
+  @ApiOperation({ summary: 'Consulta status de autorização PIX Auto (polling)' })
+  @ApiResponse({ status: 200, description: 'Status retornado' })
+  async getPixAutoStatus(
+    @CurrentUser('sub') userId: string,
+    @Param('authorizationId') authorizationId: string,
+  ): Promise<{ status: string; subscriptionActive: boolean }> {
+    return this.subscriptionsService.getPixAutoAuthorizationStatus(
+      userId,
+      authorizationId,
     );
   }
 

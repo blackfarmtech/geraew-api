@@ -43,6 +43,8 @@ const mockProfile: UserProfileResponseDto = {
     cancelAtPeriodEnd: false,
   },
   feedbackSubmitted: false,
+  hasTaxIdOnFile: false,
+  taxIdMasked: null,
 };
 
 const mockUsersService = {

@@ -9,6 +9,12 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
 import { StripeService } from '../payments/stripe.service';
+import { AsaasService } from '../payments/asaas.service';
+import {
+  AsaasSubscriptionsService,
+  AsaasPixAutoAuthorization,
+} from '../payments/asaas-subscriptions.service';
+import { PaymentsService } from '../payments/payments.service';
 import { CreditsService } from '../credits/credits.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { t } from '../common/i18n/t';
@@ -23,6 +29,9 @@ export class SubscriptionsService {
     private readonly prisma: PrismaService,
     private readonly plansService: PlansService,
     private readonly stripeService: StripeService,
+    private readonly asaasService: AsaasService,
+    private readonly asaasSubscriptionsService: AsaasSubscriptionsService,
+    private readonly paymentsService: PaymentsService,
     private readonly creditsService: CreditsService,
     private readonly configService: ConfigService,
   ) {}
@@ -599,6 +608,219 @@ export class SubscriptionsService {
       select: { currency: true },
     });
     return user.currency;
+  }
+
+  /**
+   * Cria assinatura via PIX Automático (ASAAS). Diferente do Stripe Checkout
+   * que redireciona, aqui retornamos o QR Code direto pro front mostrar no modal.
+   *
+   * Fluxo:
+   * 1. Garante CPF e customer ASAAS
+   * 2. Cria autorização PIX Auto (POST /pix/automatic/authorizations)
+   * 3. Cria Subscription local em TRIALING aguardando webhook
+   *    PIX_AUTOMATIC_AUTHORIZATION_ACTIVE que vai ativar a sub e liberar créditos
+   */
+  async createPixAutoSubscription(
+    userId: string,
+    planSlug: string,
+    taxId?: string,
+  ): Promise<{
+    authorizationId: string;
+    qrCodePayload: string;
+    qrCodeEncodedImage: string;
+    expiresAt: string | null;
+    status: string;
+    isUpgrade: boolean;
+    immediateValueCents: number;
+    recurringValueCents: number;
+  }> {
+    const plan = await this.plansService.findPlanBySlug(planSlug);
+
+    if (plan.slug === 'free') {
+      throw new BadRequestException(
+        'Não é possível criar assinatura para o plano Free',
+      );
+    }
+
+    const existing = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['ACTIVE', 'TRIALING'] },
+        plan: { slug: { not: 'free' } },
+      },
+      include: { plan: true },
+    });
+
+    let isUpgrade = false;
+    let immediateValueCents: number | undefined;
+
+    if (existing) {
+      // Caso 1: TRIALING PIX Auto abandonada → limpa e segue criando nova
+      const isStalePixAuto =
+        existing.status === 'TRIALING' &&
+        existing.paymentMethod === 'pix_auto_asaas' &&
+        existing.asaasAuthorizationStatus !== 'ACTIVE';
+
+      // Caso 2: ACTIVE PIX Auto pra plano superior → upgrade pro-rateado
+      const currentIdx = PLAN_ORDER.indexOf(existing.plan.slug);
+      const newIdx = PLAN_ORDER.indexOf(plan.slug);
+      const isPixAutoUpgrade =
+        existing.status === 'ACTIVE' &&
+        existing.paymentMethod === 'pix_auto_asaas' &&
+        currentIdx !== -1 &&
+        newIdx !== -1 &&
+        newIdx > currentIdx;
+
+      if (isStalePixAuto) {
+        if (existing.asaasAuthorizationId) {
+          await this.asaasSubscriptionsService
+            .cancelAuthorization(existing.asaasAuthorizationId)
+            .catch((err) => {
+              this.logger.warn(
+                `Falha ao cancelar autorização antiga ${existing.asaasAuthorizationId}: ${err instanceof Error ? err.message : err}`,
+              );
+            });
+        }
+        await this.prisma.subscription.update({
+          where: { id: existing.id },
+          data: {
+            status: 'CANCELED',
+            asaasAuthorizationStatus: 'CANCELED',
+          },
+        });
+        this.logger.log(
+          `Limpou subscription TRIALING abandonada ${existing.id} pra criar nova PIX Auto`,
+        );
+      } else if (isPixAutoUpgrade) {
+        // Diferença CHEIA: paga (novo - atual) agora. Modelo simples, sem pro-rata.
+        // IMPORTANTE: NÃO cancelamos a assinatura antiga aqui. Ela continua ATIVA
+        // até o webhook ACTIVATED chegar pra nova. Assim, se o user abandonar o QR,
+        // a assinatura antiga preserva o acesso. O cancelamento da antiga acontece
+        // dentro de activatePixAutoSubscription quando a nova é ativada de verdade.
+        const newPrice = await this.plansService.resolvePlanPrice(plan.id, 'BRL');
+        const diffCents = newPrice.priceCents - existing.plan.priceCents;
+        immediateValueCents = Math.max(diffCents, 100);
+        isUpgrade = true;
+        this.logger.log(
+          `Upgrade PIX Auto iniciado ${existing.plan.slug} → ${plan.slug}: diff=R$ ${(immediateValueCents / 100).toFixed(2)}, recorrente=R$ ${(newPrice.priceCents / 100).toFixed(2)}. Antiga (${existing.id}) preservada até autorização da nova.`,
+        );
+      } else {
+        throw new ConflictException(
+          'Usuário já possui uma assinatura ativa. Cancele a atual antes de criar uma nova via PIX.',
+        );
+      }
+    }
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        email: true,
+        name: true,
+        taxId: true,
+        asaasCustomerId: true,
+      },
+    });
+
+    const cpfCnpj = taxId ?? user.taxId;
+    if (!cpfCnpj) {
+      throw new BadRequestException(
+        'CPF ou CNPJ é obrigatório na primeira compra via PIX.',
+      );
+    }
+
+    const resolved = await this.plansService.resolvePlanPrice(plan.id, 'BRL');
+
+    const customerId = await this.asaasService.getOrCreateCustomer(
+      userId,
+      user.name,
+      user.email,
+      cpfCnpj,
+    );
+
+    // contractId: identificador único do contrato (max 35 chars).
+    // Geraew + 8 chars do userId + slug do plano (ex: geraew-cmcvabcd-ultra-basic).
+    const contractId = `geraew-${userId.slice(-8)}-${plan.slug}`.slice(0, 35);
+
+    const authorization: AsaasPixAutoAuthorization =
+      await this.asaasSubscriptionsService.createAuthorization({
+        customerId,
+        valueCents: resolved.priceCents,
+        ...(immediateValueCents ? { immediateValueCents } : {}),
+        description: `Geraew ${plan.name}`,
+        externalReference: JSON.stringify({ userId, planSlug, isUpgrade }),
+        contractId,
+      });
+
+    // Cria subscription local em TRIALING aguardando autorização ser ACTIVE.
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+    await this.prisma.subscription.create({
+      data: {
+        userId,
+        planId: plan.id,
+        status: 'TRIALING',
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        paymentProvider: 'asaas',
+        paymentMethod: 'pix_auto_asaas',
+        asaasAuthorizationId: authorization.id,
+        asaasAuthorizationStatus: authorization.status,
+      },
+    });
+
+    this.logger.log(
+      `Created PIX Auto authorization ${authorization.id} for user ${userId}, plan ${planSlug}`,
+    );
+
+    return {
+      authorizationId: authorization.id,
+      qrCodePayload: authorization.qrCodePayload,
+      qrCodeEncodedImage: authorization.qrCodeEncodedImage,
+      expiresAt: authorization.expiresAt,
+      status: authorization.status,
+      isUpgrade,
+      immediateValueCents: immediateValueCents ?? resolved.priceCents,
+      recurringValueCents: resolved.priceCents,
+    };
+  }
+
+  /**
+   * Consulta status atual da autorização PIX Auto (polling no frontend).
+   */
+  async getPixAutoAuthorizationStatus(
+    userId: string,
+    authorizationId: string,
+  ): Promise<{ status: string; subscriptionActive: boolean }> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId, asaasAuthorizationId: authorizationId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Autorização não encontrada');
+    }
+
+    if (subscription.status === 'ACTIVE') {
+      return { status: 'ACTIVE', subscriptionActive: true };
+    }
+
+    const auth = await this.asaasSubscriptionsService.getAuthorization(
+      authorizationId,
+    );
+
+    // Fallback: se ASAAS já confirmou ACTIVE mas o webhook ainda não chegou
+    // (ngrok caído, retry atrasado, prod sem internet), ativamos aqui mesmo.
+    // Idempotente — webhook tardio vai dedup via webhook_logs.
+    if (auth.status === 'ACTIVE' && subscription.status === 'TRIALING') {
+      await this.paymentsService.activatePixAutoSubscription(subscription.id);
+      return { status: 'ACTIVE', subscriptionActive: true };
+    }
+
+    return {
+      status: auth.status,
+      subscriptionActive: false,
+    };
   }
 
   private async buildCheckoutForPlan(

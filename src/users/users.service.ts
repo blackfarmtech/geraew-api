@@ -3,6 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 
+function maskTaxId(taxId: string | null): string | null {
+  if (!taxId) return null;
+  const digits = taxId.replace(/\D/g, '');
+  if (digits.length === 11) return `•••.•••.•••-${digits.slice(-2)}`;
+  if (digits.length === 14) return `••.•••.•••/••••-${digits.slice(-2)}`;
+  return null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) { }
@@ -72,6 +80,8 @@ export class UsersService {
         }
         : null,
       feedbackSubmitted: !!user.feedback,
+      hasTaxIdOnFile: !!user.taxId,
+      taxIdMasked: maskTaxId(user.taxId),
     };
   }
 

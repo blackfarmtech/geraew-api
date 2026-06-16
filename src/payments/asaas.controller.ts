@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Body,
+  BadRequestException,
   Headers,
   Param,
   HttpCode,
@@ -42,16 +43,29 @@ export class AsaasController {
     const pkg = await this.plansService.findPackageById(dto.packageId);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { email: true, name: true, referredByCode: true },
+      select: {
+        email: true,
+        name: true,
+        referredByCode: true,
+        asaasCustomerId: true,
+        taxId: true,
+      },
     });
 
     const price = await this.plansService.resolvePackagePrice(pkg.id, 'BRL');
+
+    // Prefere CPF/CNPJ do body (user pode estar trocando) e cai pro salvo.
+    // Sem nenhum dos dois → primeira compra → exige.
+    const cpfCnpj = dto.taxId ?? user.taxId;
+    if (!cpfCnpj) {
+      throw new BadRequestException('CPF ou CNPJ é obrigatório na primeira compra via PIX.');
+    }
 
     const customerId = await this.asaasService.getOrCreateCustomer(
       userId,
       user.name,
       user.email,
-      dto.taxId,
+      cpfCnpj!,
     );
 
     const pix = await this.asaasService.createPixCharge({

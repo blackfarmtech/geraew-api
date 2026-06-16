@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
 import { EmailService } from '../email/email.service';
+import { AsaasSubscriptionsService } from './asaas-subscriptions.service';
 
 const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
@@ -12,6 +13,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly asaasSubscriptionsService: AsaasSubscriptionsService,
   ) {}
 
   async createPayment(
@@ -298,6 +300,119 @@ export class PaymentsService {
         creditPackage.name,
       );
     }
+  }
+
+  /**
+   * Ativa assinatura PIX Auto que estava em TRIALING (chamado por webhook
+   * AUTHORIZATION_ACTIVATED + fallback do polling). Reseta créditos pro plano
+   * vigente, define novo período mensal e cria ledger. Idempotente: se já
+   * está ACTIVE, não faz nada.
+   */
+  async activatePixAutoSubscription(subscriptionId: string): Promise<void> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: { plan: true },
+    });
+
+    if (!subscription) {
+      this.logger.warn(`activatePixAutoSubscription: ${subscriptionId} não encontrada`);
+      return;
+    }
+
+    if (subscription.status === 'ACTIVE') {
+      this.logger.log(
+        `activatePixAutoSubscription: ${subscriptionId} já está ACTIVE — skip`,
+      );
+      return;
+    }
+
+    // Se já existe uma assinatura ACTIVE PIX Auto pro mesmo user com OUTRO id,
+    // significa que é cenário de upgrade — essa antiga foi preservada até agora
+    // pra não perder acesso caso o user abandonasse o QR. Como o user autorizou
+    // a nova, agora cancelamos a antiga (ASAAS + DB) na mesma transação.
+    const oldActiveSub = await this.prisma.subscription.findFirst({
+      where: {
+        userId: subscription.userId,
+        status: 'ACTIVE',
+        paymentMethod: 'pix_auto_asaas',
+        id: { not: subscriptionId },
+      },
+    });
+
+    if (oldActiveSub?.asaasAuthorizationId) {
+      await this.asaasSubscriptionsService
+        .cancelAuthorization(oldActiveSub.asaasAuthorizationId)
+        .catch((err) => {
+          this.logger.warn(
+            `Falha ao cancelar autorização antiga ${oldActiveSub.asaasAuthorizationId} em upgrade: ${err instanceof Error ? err.message : err}`,
+          );
+        });
+    }
+
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Cancela a antiga (se for upgrade)
+      if (oldActiveSub) {
+        await tx.subscription.update({
+          where: { id: oldActiveSub.id },
+          data: {
+            status: 'CANCELED',
+            asaasAuthorizationStatus: 'CANCELED',
+          },
+        });
+      }
+
+      // Ativa a nova
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          asaasAuthorizationStatus: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          paymentRetryCount: 0,
+        },
+      });
+
+      await tx.creditBalance.upsert({
+        where: { userId: subscription.userId },
+        create: {
+          userId: subscription.userId,
+          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          bonusCreditsRemaining: 0,
+          planCreditsUsed: 0,
+          periodStart: now,
+          periodEnd,
+        },
+        update: {
+          planCreditsRemaining: subscription.plan.creditsPerMonth,
+          planCreditsUsed: 0,
+          periodStart: now,
+          periodEnd,
+        },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          userId: subscription.userId,
+          type: 'SUBSCRIPTION_RENEWAL',
+          amount: subscription.plan.creditsPerMonth,
+          source: 'plan',
+          description: oldActiveSub
+            ? `Upgrade para ${subscription.plan.name} (PIX Automático)`
+            : `Ativação ${subscription.plan.name} (PIX Automático)`,
+        },
+      });
+    });
+
+    this.logger.log(
+      oldActiveSub
+        ? `Subscription ${subscription.id} ATIVADA (upgrade) — antiga ${oldActiveSub.id} cancelada. Plano ${subscription.plan.slug}, ${subscription.plan.creditsPerMonth} créditos.`
+        : `Subscription ${subscription.id} ATIVADA — plano ${subscription.plan.slug}, ${subscription.plan.creditsPerMonth} créditos.`,
+    );
   }
 
   /**

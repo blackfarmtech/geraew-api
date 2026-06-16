@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { StripeService } from './stripe.service';
 import { AsaasService } from './asaas.service';
+import { AsaasSubscriptionsService } from './asaas-subscriptions.service';
 import { AsaasController } from './asaas.controller';
 import { StripeWebhookService } from './webhooks/stripe-webhook.service';
 import { MercadoPagoWebhookService } from './webhooks/mercadopago-webhook.service';
@@ -19,10 +20,16 @@ import { PlansModule } from '../plans/plans.module';
     PaymentsService,
     StripeService,
     AsaasService,
+    AsaasSubscriptionsService,
     StripeWebhookService,
     MercadoPagoWebhookService,
     AsaasWebhookService,
   ],
-  exports: [PaymentsService, StripeService, AsaasService],
+  exports: [
+    PaymentsService,
+    StripeService,
+    AsaasService,
+    AsaasSubscriptionsService,
+  ],
 })
 export class PaymentsModule {}
