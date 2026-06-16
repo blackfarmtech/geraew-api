@@ -14,10 +14,14 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CommunityPostStatus } from '@prisma/client';
+import { CurrentUser } from '../common/decorators';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CommunityService } from './community.service';
-import { RejectCommunityPostDto } from './dto/community.dto';
+import {
+  CreateAdminCommunityPostDto,
+  RejectCommunityPostDto,
+} from './dto/community.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -42,6 +46,16 @@ export class CommunityAdminController {
       Math.max(1, parseInt(page ?? '1', 10) || 1),
       Math.min(60, Math.max(1, parseInt(limit ?? '30', 10) || 30)),
     );
+  }
+
+  @Post('posts')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Criar post direto na comunidade (auto-aprovado)' })
+  async create(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CreateAdminCommunityPostDto,
+  ) {
+    return this.communityService.adminCreate(userId, dto);
   }
 
   @Post('posts/:id/approve')

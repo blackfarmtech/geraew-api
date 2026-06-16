@@ -47,6 +47,15 @@ export class CommunityController {
     return this.communityService.mine(userId);
   }
 
+  @Get('posts/:id')
+  @ApiOperation({ summary: 'Obter uma publicacao aprovada (link compartilhado)' })
+  async getPost(
+    @CurrentUser('sub') userId: string,
+    @Param('id') postId: string,
+  ) {
+    return this.communityService.getPost(userId, postId);
+  }
+
   @Post('posts')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Enviar uma geracao para aprovacao na comunidade' })
@@ -63,6 +72,69 @@ export class CommunityController {
   @ApiResponse({ status: 201, description: 'Post curtido' })
   async like(@CurrentUser('sub') userId: string, @Param('id') postId: string) {
     return this.communityService.like(userId, postId);
+  }
+
+  @Get('me/follow-stats')
+  @ApiOperation({ summary: 'Seguidores e seguindo do usuario atual' })
+  async followStats(@CurrentUser('sub') userId: string) {
+    return this.communityService.followStats(userId);
+  }
+
+  @Get('me/followers')
+  @ApiOperation({ summary: 'Lista de quem segue o usuario' })
+  async followers(@CurrentUser('sub') userId: string) {
+    return this.communityService.listFollowers(userId);
+  }
+
+  @Get('me/following')
+  @ApiOperation({ summary: 'Lista de quem o usuario segue' })
+  async following(@CurrentUser('sub') userId: string) {
+    return this.communityService.listFollowing(userId);
+  }
+
+  @Get('users/:id')
+  @ApiOperation({ summary: 'Perfil publico de um usuario' })
+  async publicProfile(
+    @CurrentUser('sub') userId: string,
+    @Param('id') targetId: string,
+  ) {
+    return this.communityService.publicProfile(userId, targetId);
+  }
+
+  @Get('users/:id/posts')
+  @ApiOperation({ summary: 'Publicacoes aprovadas de um usuario' })
+  async userPosts(
+    @CurrentUser('sub') userId: string,
+    @Param('id') targetId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.communityService.userPosts(
+      userId,
+      targetId,
+      Math.max(1, parseInt(page ?? '1', 10) || 1),
+      Math.min(60, Math.max(1, parseInt(limit ?? '30', 10) || 30)),
+    );
+  }
+
+  @Post('users/:id/follow')
+  @ApiOperation({ summary: 'Seguir um usuario' })
+  @ApiResponse({ status: 201, description: 'Usuario seguido' })
+  async follow(
+    @CurrentUser('sub') userId: string,
+    @Param('id') targetId: string,
+  ) {
+    return this.communityService.follow(userId, targetId);
+  }
+
+  @Delete('users/:id/follow')
+  @ApiOperation({ summary: 'Deixar de seguir um usuario' })
+  @ApiResponse({ status: 200, description: 'Deixou de seguir' })
+  async unfollow(
+    @CurrentUser('sub') userId: string,
+    @Param('id') targetId: string,
+  ) {
+    return this.communityService.unfollow(userId, targetId);
   }
 
   @Delete('posts/:id/like')

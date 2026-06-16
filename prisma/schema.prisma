@@ -68,6 +68,8 @@ model User {
   communityPosts          CommunityPost[]
   communityLikes          CommunityPostLike[]
   notifications           Notification[]
+  following               UserFollow[]              @relation("follower")
+  followers               UserFollow[]              @relation("following")
 
   @@index([email])
   @@index([oauthProvider, oauthProviderId])
@@ -715,6 +717,19 @@ model CommunityPostLike {
   @@unique([postId, userId])
   @@index([userId])
   @@map("community_post_likes")
+}
+
+model UserFollow {
+  id          String   @id @default(cuid())
+  followerId  String   @map("follower_id")
+  followingId String   @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+  @@map("user_follows")
 }
 
 model Notification {
