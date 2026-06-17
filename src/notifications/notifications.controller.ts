@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -27,5 +27,13 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notificacoes marcadas como lidas' })
   async readAll(@CurrentUser('sub') userId: string) {
     return this.notificationsService.readAll(userId);
+  }
+
+  @Delete()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover todas as notificacoes do usuario' })
+  @ApiResponse({ status: 200, description: 'Notificacoes removidas' })
+  async clearAll(@CurrentUser('sub') userId: string) {
+    return this.notificationsService.clearAll(userId);
   }
 }

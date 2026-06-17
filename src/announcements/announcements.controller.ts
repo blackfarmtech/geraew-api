@@ -1,5 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
 
 @ApiTags('announcements')
@@ -10,7 +10,8 @@ export class AnnouncementsController {
 
   @Get('active')
   @ApiOperation({ summary: 'Lista avisos ativos para exibir aos usuários' })
-  async listActive() {
-    return this.announcementsService.listActive();
+  @ApiQuery({ name: 'locale', required: false, enum: ['pt-BR', 'en', 'es'] })
+  async listActive(@Query('locale') locale?: string) {
+    return this.announcementsService.listActive(locale);
   }
 }

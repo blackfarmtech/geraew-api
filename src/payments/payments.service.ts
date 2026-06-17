@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
 import { EmailService } from '../email/email.service';
 import { AsaasSubscriptionsService } from './asaas-subscriptions.service';
+import { StripeService } from './stripe.service';
 
 const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
@@ -14,6 +15,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly asaasSubscriptionsService: AsaasSubscriptionsService,
+    private readonly stripeService: StripeService,
   ) {}
 
   async createPayment(
@@ -326,27 +328,37 @@ export class PaymentsService {
       return;
     }
 
-    // Se já existe uma assinatura ACTIVE PIX Auto pro mesmo user com OUTRO id,
-    // significa que é cenário de upgrade — essa antiga foi preservada até agora
-    // pra não perder acesso caso o user abandonasse o QR. Como o user autorizou
-    // a nova, agora cancelamos a antiga (ASAAS + DB) na mesma transação.
+    // Se já existe uma assinatura ACTIVE pro mesmo user com OUTRO id, significa
+    // cenário de upgrade — essa antiga foi preservada pra não perder acesso caso
+    // o user abandonasse o QR. Como autorizou a nova, agora cancelamos a antiga.
+    // Pode ser PIX Auto (cancelamos via ASAAS) ou Stripe (cancelamos via Stripe).
     const oldActiveSub = await this.prisma.subscription.findFirst({
       where: {
         userId: subscription.userId,
         status: 'ACTIVE',
-        paymentMethod: 'pix_auto_asaas',
         id: { not: subscriptionId },
       },
     });
 
-    if (oldActiveSub?.asaasAuthorizationId) {
-      await this.asaasSubscriptionsService
-        .cancelAuthorization(oldActiveSub.asaasAuthorizationId)
-        .catch((err) => {
-          this.logger.warn(
-            `Falha ao cancelar autorização antiga ${oldActiveSub.asaasAuthorizationId} em upgrade: ${err instanceof Error ? err.message : err}`,
-          );
-        });
+    if (oldActiveSub) {
+      if (oldActiveSub.paymentMethod === 'pix_auto_asaas' && oldActiveSub.asaasAuthorizationId) {
+        await this.asaasSubscriptionsService
+          .cancelAuthorization(oldActiveSub.asaasAuthorizationId)
+          .catch((err) => {
+            this.logger.warn(
+              `Falha ao cancelar autorização PIX antiga ${oldActiveSub.asaasAuthorizationId} em upgrade: ${err instanceof Error ? err.message : err}`,
+            );
+          });
+      } else if (oldActiveSub.externalSubscriptionId) {
+        // Stripe — cancela imediatamente pra acabar com a cobrança no cartão.
+        await this.stripeService
+          .cancelSubscriptionImmediately(oldActiveSub.externalSubscriptionId)
+          .catch((err) => {
+            this.logger.warn(
+              `Falha ao cancelar Stripe sub ${oldActiveSub.externalSubscriptionId} em migração card→PIX: ${err instanceof Error ? err.message : err}`,
+            );
+          });
+      }
     }
 
     const now = new Date();

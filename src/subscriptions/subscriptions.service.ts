@@ -655,18 +655,29 @@ export class SubscriptionsService {
     let immediateValueCents: number | undefined;
 
     if (existing) {
+      const currentIdx = PLAN_ORDER.indexOf(existing.plan.slug);
+      const newIdx = PLAN_ORDER.indexOf(plan.slug);
+
       // Caso 1: TRIALING PIX Auto abandonada → limpa e segue criando nova
       const isStalePixAuto =
         existing.status === 'TRIALING' &&
         existing.paymentMethod === 'pix_auto_asaas' &&
         existing.asaasAuthorizationStatus !== 'ACTIVE';
 
-      // Caso 2: ACTIVE PIX Auto pra plano superior → upgrade pro-rateado
-      const currentIdx = PLAN_ORDER.indexOf(existing.plan.slug);
-      const newIdx = PLAN_ORDER.indexOf(plan.slug);
+      // Caso 2: ACTIVE PIX Auto pra plano superior → upgrade na mesma trilha PIX
       const isPixAutoUpgrade =
         existing.status === 'ACTIVE' &&
         existing.paymentMethod === 'pix_auto_asaas' &&
+        currentIdx !== -1 &&
+        newIdx !== -1 &&
+        newIdx > currentIdx;
+
+      // Caso 3: ACTIVE Stripe (cartão) pra plano superior → migração card→PIX
+      // O Stripe continua ativo até a nova autorização PIX virar ACTIVE.
+      // No momento da ativação, activatePixAutoSubscription cancela o Stripe.
+      const isStripeToPixUpgrade =
+        existing.status === 'ACTIVE' &&
+        existing.paymentMethod !== 'pix_auto_asaas' &&
         currentIdx !== -1 &&
         newIdx !== -1 &&
         newIdx > currentIdx;
@@ -691,22 +702,27 @@ export class SubscriptionsService {
         this.logger.log(
           `Limpou subscription TRIALING abandonada ${existing.id} pra criar nova PIX Auto`,
         );
-      } else if (isPixAutoUpgrade) {
-        // Diferença CHEIA: paga (novo - atual) agora. Modelo simples, sem pro-rata.
-        // IMPORTANTE: NÃO cancelamos a assinatura antiga aqui. Ela continua ATIVA
-        // até o webhook ACTIVATED chegar pra nova. Assim, se o user abandonar o QR,
-        // a assinatura antiga preserva o acesso. O cancelamento da antiga acontece
-        // dentro de activatePixAutoSubscription quando a nova é ativada de verdade.
+      } else if (isPixAutoUpgrade || isStripeToPixUpgrade) {
+        // Diferença CHEIA: paga (novo - atual) agora. NÃO cancela a antiga aqui —
+        // só na hora que a nova autorização for ativada (em activatePixAutoSubscription).
+        // Isso preserva o acesso do user se ele abandonar o QR Code.
         const newPrice = await this.plansService.resolvePlanPrice(plan.id, 'BRL');
         const diffCents = newPrice.priceCents - existing.plan.priceCents;
         immediateValueCents = Math.max(diffCents, 100);
         isUpgrade = true;
+        const kind = isStripeToPixUpgrade ? 'card→PIX' : 'PIX→PIX';
         this.logger.log(
-          `Upgrade PIX Auto iniciado ${existing.plan.slug} → ${plan.slug}: diff=R$ ${(immediateValueCents / 100).toFixed(2)}, recorrente=R$ ${(newPrice.priceCents / 100).toFixed(2)}. Antiga (${existing.id}) preservada até autorização da nova.`,
+          `Upgrade ${kind} iniciado ${existing.plan.slug} → ${plan.slug}: diff=R$ ${(immediateValueCents / 100).toFixed(2)}, recorrente=R$ ${(newPrice.priceCents / 100).toFixed(2)}. Antiga (${existing.id}) preservada até autorização da nova.`,
+        );
+      } else if (existing.paymentMethod !== 'pix_auto_asaas') {
+        // Bloqueia: mesmo plano via cartão OU downgrade card→PIX
+        throw new ConflictException(
+          'Você já tem uma assinatura ativa no cartão. Cancele em "Minha conta" antes de assinar via PIX.',
         );
       } else {
+        // PIX → PIX em mesmo plano ou downgrade
         throw new ConflictException(
-          'Usuário já possui uma assinatura ativa. Cancele a atual antes de criar uma nova via PIX.',
+          'Você já tem essa assinatura ativa via PIX. Pra trocar de plano, use a opção de upgrade ou downgrade.',
         );
       }
     }
@@ -789,6 +805,39 @@ export class SubscriptionsService {
   /**
    * Consulta status atual da autorização PIX Auto (polling no frontend).
    */
+  /**
+   * [DEV/SANDBOX] Simula ativação de uma autorização PIX Auto sem precisar pagar
+   * o QR Code de verdade. Útil pra testar fluxos (incluindo upgrade card→PIX e
+   * PIX→PIX) sem depender da simulação de pagamento do ASAAS sandbox (que exige
+   * "critical action authorization" no painel).
+   *
+   * Bloqueado fora de sandbox/dev — em prod o webhook real fica responsável.
+   */
+  async simulatePixAutoActivation(
+    userId: string,
+    authorizationId: string,
+  ): Promise<{ activated: boolean; subscriptionId: string }> {
+    const baseUrl = this.configService.get<string>('ASAAS_BASE_URL', '');
+    const isProdEnv = this.configService.get<string>('NODE_ENV') === 'production';
+    const isSandboxAsaas = baseUrl.includes('sandbox');
+    if (isProdEnv && !isSandboxAsaas) {
+      throw new BadRequestException(
+        'Endpoint disponível somente em sandbox/dev.',
+      );
+    }
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId, asaasAuthorizationId: authorizationId },
+    });
+    if (!subscription) {
+      throw new NotFoundException('Autorização não encontrada pra esse user');
+    }
+
+    await this.paymentsService.activatePixAutoSubscription(subscription.id);
+
+    return { activated: true, subscriptionId: subscription.id };
+  }
+
   async getPixAutoAuthorizationStatus(
     userId: string,
     authorizationId: string,

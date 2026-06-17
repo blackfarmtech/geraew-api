@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -9,6 +10,7 @@ import {
   MinLength,
   Matches,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
 const VARIANTS = ['feature', 'maintenance', 'promo', 'openai', 'gift', 'mic', 'unlimited'] as const;
@@ -21,6 +23,42 @@ export class CtaActionDto {
   @ValidateIf((o: CtaActionDto) => o.type === 'href')
   @IsUrl({ require_protocol: true })
   url?: string;
+}
+
+/** Campos traduzíveis de um aviso (todos opcionais — vazio cai no pt-BR base). */
+export class AnnouncementLocaleDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  badge?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  ctaLabel?: string;
+}
+
+/** Traduções por locale (pt-BR é a base nos campos principais). */
+export class AnnouncementTranslationsDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnnouncementLocaleDto)
+  en?: AnnouncementLocaleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnnouncementLocaleDto)
+  es?: AnnouncementLocaleDto;
 }
 
 export class CreateAnnouncementDto {
@@ -62,6 +100,11 @@ export class CreateAnnouncementDto {
 
   @IsOptional()
   ctaAction?: CtaActionDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnnouncementTranslationsDto)
+  translations?: AnnouncementTranslationsDto;
 
   @IsOptional()
   @IsBoolean()
@@ -107,6 +150,11 @@ export class UpdateAnnouncementDto {
 
   @IsOptional()
   ctaAction?: CtaActionDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnnouncementTranslationsDto)
+  translations?: AnnouncementTranslationsDto;
 
   @IsOptional()
   @IsBoolean()

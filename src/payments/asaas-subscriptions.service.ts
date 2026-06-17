@@ -135,7 +135,7 @@ export class AsaasSubscriptionsService {
           value: immediateValueReais,
           originalValue: immediateValueReais,
           description,
-          expirationSeconds: 1800,
+          expirationSeconds: 600, // 10 minutos pro user escanear e autorizar
           allowsMultiplePayments: false,
         },
       },

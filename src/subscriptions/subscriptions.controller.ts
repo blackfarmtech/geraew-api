@@ -107,6 +107,24 @@ export class SubscriptionsController {
     );
   }
 
+  @Post('pix-auto/:authorizationId/dev-simulate-activation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[DEV/SANDBOX] Simula ativação da autorização sem precisar pagar o QR (só funciona em sandbox/dev)',
+  })
+  @ApiResponse({ status: 200, description: 'Subscription ativada' })
+  @ApiResponse({ status: 400, description: 'Endpoint não disponível em prod' })
+  async devSimulateActivation(
+    @CurrentUser('sub') userId: string,
+    @Param('authorizationId') authorizationId: string,
+  ): Promise<{ activated: boolean; subscriptionId: string }> {
+    return this.subscriptionsService.simulatePixAutoActivation(
+      userId,
+      authorizationId,
+    );
+  }
+
   @Patch('upgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Upgrade de plano — sempre redireciona para Stripe Checkout' })

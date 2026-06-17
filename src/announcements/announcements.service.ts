@@ -10,14 +10,40 @@ import {
   UpdateAnnouncementDto,
 } from './dto/announcement.dto';
 
+type LocaleText = {
+  badge?: string;
+  title?: string;
+  description?: string;
+  ctaLabel?: string;
+};
+
 @Injectable()
 export class AnnouncementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listActive() {
-    return this.prisma.announcement.findMany({
+  /**
+   * Avisos ativos já no idioma pedido. pt-BR é a base; en/es sobrescrevem os
+   * campos que tiverem tradução (vazios caem no pt-BR). O campo `translations`
+   * é removido da resposta pública.
+   */
+  async listActive(locale?: string) {
+    const rows = await this.prisma.announcement.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const lang = locale === 'en' || locale === 'es' ? locale : null;
+    return rows.map(({ translations, ...a }) => {
+      if (!lang) return a;
+      const tr = (translations as Record<string, LocaleText> | null)?.[lang];
+      if (!tr) return a;
+      return {
+        ...a,
+        badge: tr.badge?.trim() || a.badge,
+        title: tr.title?.trim() || a.title,
+        description: tr.description?.trim() || a.description,
+        ctaLabel: tr.ctaLabel?.trim() || a.ctaLabel,
+      };
     });
   }
 
@@ -45,6 +71,7 @@ export class AnnouncementsService {
           imageUrl: dto.imageUrl ?? null,
           ctaLabel: dto.ctaLabel ?? null,
           ctaAction: (dto.ctaAction as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+          translations: (dto.translations as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
           isActive: dto.isActive ?? true,
           sortOrder: dto.sortOrder ?? 0,
         },
@@ -70,6 +97,9 @@ export class AnnouncementsService {
     if (dto.ctaLabel !== undefined) data.ctaLabel = dto.ctaLabel;
     if (dto.ctaAction !== undefined) {
       data.ctaAction = (dto.ctaAction as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
+    }
+    if (dto.translations !== undefined) {
+      data.translations = (dto.translations as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
     }
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;

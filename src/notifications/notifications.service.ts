@@ -41,4 +41,10 @@ export class NotificationsService {
     });
     return { success: true };
   }
+
+  /** Remove todas as notificações do usuário. */
+  async clearAll(userId: string) {
+    await this.prisma.notification.deleteMany({ where: { userId } });
+    return { success: true };
+  }
 }

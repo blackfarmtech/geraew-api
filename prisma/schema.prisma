@@ -309,6 +309,9 @@ model Announcement {
   imageUrl    String?  @map("image_url")
   ctaLabel    String?  @map("cta_label")
   ctaAction   Json?    @map("cta_action")
+  // traduções por locale: { en?: {badge,title,description,ctaLabel}, es?: {...} }.
+  // Os campos base acima são o pt-BR (fallback quando não há tradução).
+  translations Json?   @map("translations")
   isActive    Boolean  @default(true) @map("is_active")
   sortOrder   Int      @default(0) @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at")
