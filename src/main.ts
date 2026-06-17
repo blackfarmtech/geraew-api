@@ -23,6 +23,7 @@ async function bootstrap() {
   // Enable CORS with restricted origins
   const allowedOrigins = [
     ...(process.env.FRONTEND_URL?.split(',').map(u => u.trim()) ?? []),
+    'https://geraew.ai',
     'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
   ].filter(Boolean);
 
