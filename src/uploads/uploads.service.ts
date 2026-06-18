@@ -269,6 +269,7 @@ export class UploadsService {
     filename: string,
     width = 256,
     height?: number,
+    preserveAspect = false,
   ): Promise<string> {
     const fileKey = `${folder}/${randomUUID()}/${filename}`;
 
@@ -281,8 +282,13 @@ export class UploadsService {
       if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
       const buffer = Buffer.from(await response.arrayBuffer());
+      // preserveAspect: encaixa dentro da caixa width×height mantendo a proporção
+      // original (sem recorte) — usado na galeria para respeitar 9:16, 16:9 etc.
       const thumbnail = await sharp(buffer)
-        .resize(width, height ?? width, { fit: 'cover' })
+        .resize(width, height ?? width, {
+          fit: preserveAspect ? 'inside' : 'cover',
+          withoutEnlargement: preserveAspect,
+        })
         .webp({ quality: 70 })
         .toBuffer();
 
@@ -312,6 +318,7 @@ export class UploadsService {
     filename: string,
     width = 256,
     height?: number,
+    preserveAspect = false,
   ): Promise<string> {
     const fileKey = `${folder}/${randomUUID()}/${filename}`;
 
@@ -324,7 +331,10 @@ export class UploadsService {
 
     const buffer = Buffer.from(await response.arrayBuffer());
     const thumbnail = await sharp(buffer)
-      .resize(width, height ?? width, { fit: 'cover' })
+      .resize(width, height ?? width, {
+        fit: preserveAspect ? 'inside' : 'cover',
+        withoutEnlargement: preserveAspect,
+      })
       .webp({ quality: 70 })
       .toBuffer();
 

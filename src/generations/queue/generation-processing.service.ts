@@ -627,6 +627,9 @@ export class GenerationProcessingService {
               url,
               `thumbnails/${generationId}`,
               `thumb_${i}.jpg`,
+              512,
+              undefined,
+              true,
             )
             .catch(() => null),
         ),

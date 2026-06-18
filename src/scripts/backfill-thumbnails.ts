@@ -13,6 +13,10 @@ class BackfillModule {}
 
 const BATCH_SIZE = 20;
 const CONCURRENCY = 5;
+// REGEN_ALL=1 reprocessa TODOS os thumbnails de imagem (não só os ausentes) —
+// usado para corrigir thumbnails antigos que foram gerados quadrados (cover).
+const REGEN_ALL = process.env.REGEN_ALL === '1';
+const thumbWhere = REGEN_ALL ? {} : { thumbnailUrl: null };
 
 async function main() {
   const app = await NestFactory.createApplicationContext(BackfillModule);
@@ -31,7 +35,7 @@ async function main() {
   // Only image generation outputs without thumbnails
   const total = await prisma.generationOutput.count({
     where: {
-      thumbnailUrl: null,
+      ...thumbWhere,
       generation: {
         type: { in: ['TEXT_TO_IMAGE', 'IMAGE_TO_IMAGE'] },
         status: 'COMPLETED',
@@ -47,11 +51,15 @@ async function main() {
 
   let processed = 0;
   let failed = 0;
+  // No modo REGEN_ALL os itens reprocessados continuam casando com o filtro,
+  // então paginamos por cursor de id; no modo padrão o próprio update (thumb != null)
+  // já remove o item do filtro, então não precisa de cursor.
+  let cursorId: string | undefined;
 
   while (true) {
     const batch = await prisma.generationOutput.findMany({
       where: {
-        thumbnailUrl: null,
+        ...thumbWhere,
         generation: {
           type: { in: ['TEXT_TO_IMAGE', 'IMAGE_TO_IMAGE'] },
           status: 'COMPLETED',
@@ -59,9 +67,16 @@ async function main() {
       },
       select: { id: true, url: true, generationId: true },
       take: BATCH_SIZE,
+      ...(REGEN_ALL
+        ? {
+            orderBy: { id: 'asc' as const },
+            ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+          }
+        : {}),
     });
 
     if (batch.length === 0) break;
+    if (REGEN_ALL) cursorId = batch[batch.length - 1].id;
 
     for (let i = 0; i < batch.length; i += CONCURRENCY) {
       const chunk = batch.slice(i, i + CONCURRENCY);
@@ -72,6 +87,9 @@ async function main() {
               output.url,
               `thumbnails/${output.generationId}`,
               `thumb_${output.id}.webp`,
+              512,
+              undefined,
+              true,
             );
 
             // Generate LQIP blur placeholder

@@ -1381,6 +1381,9 @@ export class GenerationProcessor extends WorkerHost {
                 url,
                 `thumbnails/${generationId}`,
                 `thumb_${i}.webp`,
+                512,
+                undefined,
+                true,
               )
               .catch(() => null),
           ),
