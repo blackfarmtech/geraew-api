@@ -18,8 +18,18 @@ const SAFETY_INSTRUCTION =
   'fashion-forward outfits are allowed when the prompt asks for them, as long as the chest, nipples, ' +
   'groin, and buttocks remain fully covered by opaque fabric.';
 
+// Replicate (bytedance/seedream-4.5) rejeita input.prompt > 4000 chars (422).
+const MAX_PROMPT_LENGTH = 4000;
+
 function applySafetyWrapper(prompt: string): string {
-  return `${prompt.trim()}\n\n${SAFETY_INSTRUCTION}`;
+  const separator = '\n\n';
+  // Orçamento disponível para o prompt do usuário, descontando o wrapper de segurança
+  // (que é fixo e não pode ser cortado, sob pena de perder a instrução de segurança).
+  const reserved = separator.length + SAFETY_INSTRUCTION.length;
+  const maxUserPrompt = MAX_PROMPT_LENGTH - reserved;
+
+  const trimmed = prompt.trim().slice(0, Math.max(0, maxUserPrompt));
+  return `${trimmed}${separator}${SAFETY_INSTRUCTION}`;
 }
 
 // User-facing error messages (never expose provider name or technical detail)
@@ -79,6 +89,11 @@ export class SeedreamProvider {
       : (input.aspectRatio ?? '1:1');
 
     const wrappedPrompt = applySafetyWrapper(input.prompt);
+    if (wrappedPrompt.length < input.prompt.trim().length + 2 + SAFETY_INSTRUCTION.length) {
+      this.logger.warn(
+        `Prompt truncado para caber no limite de ${MAX_PROMPT_LENGTH} chars da API (original: ${input.prompt.trim().length} chars).`,
+      );
+    }
 
     const body = {
       input: {
