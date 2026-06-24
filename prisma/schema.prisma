@@ -45,8 +45,10 @@ model User {
   taxId                   String?                   @map("tax_id")
   affiliateEarnings       AffiliateEarning[]        @relation("referred_user_earnings")
   affiliate               Affiliate?
+  brands                  Brand[]
   communityLikes          CommunityPostLike[]
   communityPosts          CommunityPost[]
+  creative_sessions       creative_sessions[]
   creditBalance           CreditBalance?
   creditTransactions      CreditTransaction[]
   adminEmailBroadcasts    EmailBroadcast[]          @relation("admin_email_broadcasts")
@@ -407,10 +409,12 @@ model Generation {
   /// * HeyGen's video_id — set when an avatar video is submitted, used by the
   /// *  webhook to correlate completion events back to this Generation.
   heygenVideoId          String?                @unique @map("heygen_video_id")
+  creative_session_id    String?
   creditTransactions     CreditTransaction[]
   generationFolders      GenerationFolder[]
   inputImages            GenerationInputImage[]
   outputs                GenerationOutput[]
+  creative_sessions      creative_sessions?     @relation(fields: [creative_session_id], references: [id])
   influencers            influencers?           @relation(fields: [influencer_id], references: [id])
   userAvatar             UserAvatar?            @relation("avatar_generations", fields: [userAvatarId], references: [id])
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -426,6 +430,7 @@ model Generation {
   @@index([influencer_id])
   @@index([voiceProfileId])
   @@index([userAvatarId])
+  @@index([creative_session_id])
   @@map("generations")
 }
 
@@ -979,6 +984,56 @@ model EmailBroadcastRecipient {
   @@map("email_broadcast_recipients")
 }
 
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Brand {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  name            String
+  identityProfile Json?    @map("identity_profile")
+  referenceAssets Json     @default("[]") @map("reference_assets")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("brands")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model creative_session_messages {
+  id                String              @id
+  session_id        String
+  role              CreativeMessageRole
+  content           Json
+  created_at        DateTime            @default(now())
+  creative_sessions creative_sessions   @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model creative_sessions {
+  id                        String                      @id
+  user_id                   String
+  status                    CreativeSessionStatus       @default(BRIEFING)
+  platform                  String?
+  format                    String?
+  brief                     Json?
+  proposed_generation       Json?
+  approved_snapshot         Json?
+  handoff_count             Int                         @default(0)
+  llm_cost_cents            Int                         @default(0)
+  created_at                DateTime                    @default(now())
+  updated_at                DateTime
+  creative_session_messages creative_session_messages[]
+  users                     User                        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  generations               Generation[]
+
+  @@index([status])
+  @@index([user_id])
+}
+
 enum CommunityPostStatus {
   PENDING
   APPROVED
@@ -1155,4 +1210,17 @@ enum EmailBroadcastDeliveryStatus {
   CLICKED
   BOUNCED
   COMPLAINED
+}
+
+enum CreativeMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum CreativeSessionStatus {
+  BRIEFING
+  AWAITING_APPROVAL
+  GENERATING
+  COMPLETED
+  ABANDONED
 }
