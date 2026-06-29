@@ -24,6 +24,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { ListGenerationsQueryDto } from './dto/list-generations-query.dto';
+import { ListUserTransactionsQueryDto } from './dto/list-user-transactions-query.dto';
 import { ListPromptTemplatesQueryDto } from './dto/list-prompt-templates-query.dto';
 import { AdjustCreditsDto } from './dto/adjust-credits.dto';
 import { AdjustFreeGenerationsDto } from './dto/adjust-free-generations.dto';
@@ -165,6 +166,16 @@ export class AdminController {
     @Query() pagination: PaginationDto,
   ) {
     return this.adminService.getUserGenerations(id, pagination);
+  }
+
+  @Get('users/:id/transactions')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Lista o histórico de transações de créditos de um usuário específico' })
+  async getUserTransactions(
+    @Param('id') id: string,
+    @Query() query: ListUserTransactionsQueryDto,
+  ) {
+    return this.adminService.getUserTransactions(id, query);
   }
 
   @Get('generations/providers')

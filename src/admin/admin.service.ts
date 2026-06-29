@@ -11,6 +11,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { ListGenerationsQueryDto } from './dto/list-generations-query.dto';
+import { ListUserTransactionsQueryDto } from './dto/list-user-transactions-query.dto';
 import { ListPromptTemplatesQueryDto } from './dto/list-prompt-templates-query.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
@@ -630,6 +631,90 @@ export class AdminService {
     }));
 
     return new PaginatedResponseDto(data, total, pagination.page, pagination.limit);
+  }
+
+  async getUserTransactions(
+    userId: string,
+    query: ListUserTransactionsQueryDto,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const where: Prisma.CreditTransactionWhereInput = { userId };
+
+    if (query.type) {
+      where.type = query.type;
+    }
+
+    if (query.startDate || query.endDate) {
+      const createdAt: Prisma.DateTimeFilter = {};
+      if (query.startDate) {
+        createdAt.gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        // Date-only ("YYYY-MM-DD") → include the whole day
+        if (/^\d{4}-\d{2}-\d{2}$/.test(query.endDate)) {
+          end.setUTCHours(23, 59, 59, 999);
+        }
+        createdAt.lte = end;
+      }
+      where.createdAt = createdAt;
+    }
+
+    const pagination = query;
+
+    const [transactions, total, spentAgg, receivedAgg] = await Promise.all([
+      this.prisma.creditTransaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      this.prisma.creditTransaction.count({ where }),
+      // Soma dos débitos (amount < 0) — total gasto
+      this.prisma.creditTransaction.aggregate({
+        where: { ...where, amount: { lt: 0 } },
+        _sum: { amount: true },
+      }),
+      // Soma dos créditos (amount > 0) — total recebido
+      this.prisma.creditTransaction.aggregate({
+        where: { ...where, amount: { gt: 0 } },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const spent = Math.abs(spentAgg._sum.amount ?? 0);
+    const received = receivedAgg._sum.amount ?? 0;
+
+    const data = transactions.map((tx) => ({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      source: tx.source,
+      description: tx.description,
+      generationId: tx.generationId,
+      paymentId: tx.paymentId,
+      createdAt: tx.createdAt,
+    }));
+
+    const paginated = new PaginatedResponseDto(
+      data,
+      total,
+      pagination.page,
+      pagination.limit,
+    );
+
+    return {
+      ...paginated,
+      summary: {
+        spent,
+        received,
+        net: received - spent,
+      },
+    };
   }
 
   // ============================================

@@ -692,11 +692,24 @@ export class PaymentsService {
           },
         });
 
-        // Zerar creditos do plano
-        await tx.creditBalance.updateMany({
-          where: { userId: subscription.userId },
-          data: { planCreditsRemaining: 0, planCreditsUsed: 0 },
+        // Só zerar créditos se NÃO existir outra assinatura ativa do usuário.
+        // Evita apagar os créditos de uma assinatura nova/ativa quando uma
+        // assinatura antiga e já superada (ex: duplicada) falha na cobrança.
+        const otherActiveSub = await tx.subscription.findFirst({
+          where: {
+            userId: subscription.userId,
+            status: { in: ['ACTIVE', 'TRIALING'] },
+            id: { not: subscription.id },
+          },
         });
+
+        if (!otherActiveSub) {
+          // Zerar creditos do plano
+          await tx.creditBalance.updateMany({
+            where: { userId: subscription.userId },
+            data: { planCreditsRemaining: 0, planCreditsUsed: 0 },
+          });
+        }
       } else {
         await tx.subscription.update({
           where: { id: subscription.id },
