@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -817,12 +818,16 @@ export class SubscriptionsService {
     userId: string,
     authorizationId: string,
   ): Promise<{ activated: boolean; subscriptionId: string }> {
-    const baseUrl = this.configService.get<string>('ASAAS_BASE_URL', '');
-    const isProdEnv = this.configService.get<string>('NODE_ENV') === 'production';
-    const isSandboxAsaas = baseUrl.includes('sandbox');
-    if (isProdEnv && !isSandboxAsaas) {
-      throw new BadRequestException(
-        'Endpoint disponível somente em sandbox/dev.',
+    // FAIL-CLOSED (incidente 2026-06-30): só permite quando explicitamente
+    // habilitado em ambiente NÃO-produção. Qualquer outra config = bloqueado.
+    // A rota HTTP que expunha isto foi removida do controller; este guard é
+    // defesa em profundidade caso o método volte a ser exposto.
+    const nodeEnv = this.configService.get<string>('NODE_ENV');
+    const devSimEnabled =
+      this.configService.get<string>('ENABLE_PIX_DEV_SIMULATION') === 'true';
+    if (nodeEnv === 'production' || !devSimEnabled) {
+      throw new ForbiddenException(
+        'Ativação simulada desabilitada (apenas dev com ENABLE_PIX_DEV_SIMULATION=true).',
       );
     }
 

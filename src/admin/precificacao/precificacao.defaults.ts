@@ -1,0 +1,118 @@
+/**
+ * Default editable pricing configuration for the "Precificação" admin module.
+ * Source of truth: precificacao.md (raiz do repo).
+ * These values can be overridden at runtime via the config file (see service);
+ * BRL amounts derived from USD are computed at report time using `exchangeRate`.
+ */
+
+export interface InfraCost {
+  name: string;
+  monthlyBRL: number;
+  note?: string;
+}
+
+export interface AiCostRow {
+  /** Grupo da entrega: 'video' | 'image' | 'motion' | 'avatar' | 'voice' */
+  group: string;
+  /** Nome exibido do modelo */
+  model: string;
+  provider: string;
+  /** Variação (resolução / tier) */
+  variant: string;
+  /** Unidade de cobrança do fornecedor */
+  unit: string;
+  /** Custo unitário em USD que pagamos ao fornecedor */
+  usd: number;
+}
+
+export interface ToolByDelivery {
+  delivery: string;
+  tools: string[];
+}
+
+export interface PricingConfig {
+  /** Câmbio R$ / US$ */
+  exchangeRate: number;
+  /** 1 crédito KIE = X USD */
+  kieCreditUsd: number;
+  /** Custo blended por crédito GeraEW (R$) — usado p/ estimar custo de servir */
+  blendedCostPerCreditBRL: number;
+  /** Duração de referência de vídeo (s) */
+  videoSeconds: number;
+  /** Duração de referência de motion control (s) */
+  motionSeconds: number;
+  infra: InfraCost[];
+  aiCosts: AiCostRow[];
+  team: { people: number; monthlyCostBRL: number; hoursPerDay: number };
+  acquisition: { channel: string; cacBRL: number; notes: string };
+  toolsByDelivery: ToolByDelivery[];
+}
+
+export const DEFAULT_PRICING_CONFIG: PricingConfig = {
+  exchangeRate: 5.2,
+  kieCreditUsd: 0.005,
+  blendedCostPerCreditBRL: 0.0026,
+  videoSeconds: 8,
+  motionSeconds: 15,
+
+  infra: [
+    { name: 'Supabase', monthlyBRL: 215.68, note: 'Banco (Postgres) + Auth + Storage' },
+    { name: 'Hostinger', monthlyBRL: 113.38, note: 'Hospedagem / servidor da aplicação' },
+    { name: 'Resend', monthlyBRL: 112.66, note: 'E-mails transacionais' },
+  ],
+
+  aiCosts: [
+    // VÍDEO — Veo 3.1 (KIE) — por vídeo (~8s)
+    { group: 'video', model: 'Veo Fast', provider: 'KIE', variant: '720p', unit: 'vídeo', usd: 0.3 },
+    { group: 'video', model: 'Veo Fast', provider: 'KIE', variant: '1080p', unit: 'vídeo', usd: 0.325 },
+    { group: 'video', model: 'Veo Fast', provider: 'KIE', variant: '4K', unit: 'vídeo', usd: 0.9 },
+    { group: 'video', model: 'Veo Quality', provider: 'KIE', variant: '720p', unit: 'vídeo', usd: 1.25 },
+    { group: 'video', model: 'Veo Quality', provider: 'KIE', variant: '1080p', unit: 'vídeo', usd: 1.275 },
+    { group: 'video', model: 'Veo Quality', provider: 'KIE', variant: '4K', unit: 'vídeo', usd: 1.85 },
+    // VÍDEO — por segundo
+    { group: 'video', model: 'Grok Imagine', provider: 'KIE', variant: '480p', unit: 'segundo', usd: 0.008 },
+    { group: 'video', model: 'Grok Imagine', provider: 'KIE', variant: '720p', unit: 'segundo', usd: 0.015 },
+    { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '720p', unit: 'segundo', usd: 0.205 },
+    { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '1080p', unit: 'segundo', usd: 0.51 },
+    { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '4K', unit: 'segundo', usd: 1.04 },
+    { group: 'video', model: 'Gemini Omni', provider: 'KIE', variant: '720p/1080p (8s)', unit: 'vídeo', usd: 0.75 },
+    { group: 'video', model: 'Gemini Omni', provider: 'KIE', variant: '4K (8s)', unit: 'vídeo', usd: 1.35 },
+
+    // IMAGEM — por imagem
+    { group: 'image', model: 'Nano Banana 2', provider: 'KIE/Google', variant: '1K', unit: 'imagem', usd: 0.04 },
+    { group: 'image', model: 'Nano Banana 2', provider: 'KIE/Google', variant: '2K', unit: 'imagem', usd: 0.06 },
+    { group: 'image', model: 'Nano Banana 2', provider: 'KIE/Google', variant: '4K', unit: 'imagem', usd: 0.09 },
+    { group: 'image', model: 'Nano Banana Pro', provider: 'KIE/Google', variant: '1K/2K', unit: 'imagem', usd: 0.09 },
+    { group: 'image', model: 'Nano Banana Pro', provider: 'KIE/Google', variant: '4K', unit: 'imagem', usd: 0.12 },
+    { group: 'image', model: 'Seedream Lite', provider: 'KIE', variant: 'qualquer', unit: 'imagem', usd: 0.0275 },
+    { group: 'image', model: 'Geraew Unlocked', provider: 'Replicate', variant: 'Seedream 4.5', unit: 'imagem', usd: 0.04 },
+
+    // MOTION — por segundo
+    { group: 'motion', model: 'Motion Control', provider: 'KIE (Kling 2.6)', variant: '720p', unit: 'segundo', usd: 0.055 },
+    { group: 'motion', model: 'Motion Control', provider: 'KIE (Kling 2.6)', variant: '1080p', unit: 'segundo', usd: 0.09 },
+
+    // AVATAR — por minuto
+    { group: 'avatar', model: 'HeyGen Avatar IV — Photo', provider: 'HeyGen', variant: '720p/1080p', unit: 'minuto', usd: 3.0 },
+    { group: 'avatar', model: 'HeyGen Digital Twin / Avatar V', provider: 'HeyGen', variant: '720p/1080p', unit: 'minuto', usd: 4.0 },
+
+    // VOZ
+    { group: 'voice', model: 'TTS Inworld 1.5 Max', provider: 'WaveSpeed', variant: 'por 1.000 chars', unit: '1.000 chars', usd: 0.01 },
+    { group: 'voice', model: 'Clonagem OmniVoice', provider: 'WaveSpeed', variant: 'base', unit: 'run', usd: 0.005 },
+  ],
+
+  team: { people: 2, monthlyCostBRL: 0, hoursPerDay: 1 },
+
+  acquisition: {
+    channel: 'Orgânico',
+    cacBRL: 0,
+    notes: '100% orgânico, sem tráfego pago. CAC monetário ~0.',
+  },
+
+  toolsByDelivery: [
+    { delivery: 'Imagem', tools: ['Nano Banana 2', 'Nano Banana Pro', 'Seedream Lite (KIE)', 'Geraew Unlocked (Replicate/Seedream 4.5)'] },
+    { delivery: 'Vídeo', tools: ['Veo Fast (KIE)', 'Veo Quality (KIE)', 'Grok Imagine', 'Gemini Omni', 'Seedance 2'] },
+    { delivery: 'Motion Control', tools: ['Kling 2.6 (KIE)'] },
+    { delivery: 'Avatar', tools: ['HeyGen (Avatar IV + Avatar V)'] },
+    { delivery: 'Voz / Áudio', tools: ['Inworld 1.5 Max (TTS)', 'OmniVoice (clonagem)'] },
+  ],
+};

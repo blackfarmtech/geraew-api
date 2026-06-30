@@ -107,23 +107,14 @@ export class SubscriptionsController {
     );
   }
 
-  @Post('pix-auto/:authorizationId/dev-simulate-activation')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary:
-      '[DEV/SANDBOX] Simula ativação da autorização sem precisar pagar o QR (só funciona em sandbox/dev)',
-  })
-  @ApiResponse({ status: 200, description: 'Subscription ativada' })
-  @ApiResponse({ status: 400, description: 'Endpoint não disponível em prod' })
-  async devSimulateActivation(
-    @CurrentUser('sub') userId: string,
-    @Param('authorizationId') authorizationId: string,
-  ): Promise<{ activated: boolean; subscriptionId: string }> {
-    return this.subscriptionsService.simulatePixAutoActivation(
-      userId,
-      authorizationId,
-    );
-  }
+  // ⚠️ REMOVIDO (incidente de segurança 2026-06-30): o endpoint
+  // `POST pix-auto/:authorizationId/dev-simulate-activation` ativava o plano e
+  // depositava os créditos cheios SEM verificar pagamento, e estava acessível a
+  // qualquer usuário autenticado (a trava por NODE_ENV/ASAAS_BASE_URL falhava aberta).
+  // Foi explorado para criar contas Studio/Pro com créditos sem pagar.
+  // NÃO reintroduzir em produção. Para simulação de pagamento em dev, use o
+  // ambiente sandbox do ASAAS ou um endpoint gated por @Roles('ADMIN') + flag
+  // explícita que falhe FECHADA fora de dev.
 
   @Patch('upgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
