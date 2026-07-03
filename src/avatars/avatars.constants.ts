@@ -17,6 +17,14 @@ export const DEFAULT_AVATAR_TRAINING_CREDITS: Record<'photo' | 'digital_twin', n
 export const DEFAULT_AVATAR_TRAINING_TIMEOUT_MIN = 90;
 
 /**
+ * Timeout (minutes) for an avatar waiting on the subject's consent approval
+ * (PENDING_CONSENT). Much longer than training — the user may open the consent
+ * link hours later. After this window the cron marks FAILED and refunds.
+ * Overridable via AVATAR_CONSENT_TIMEOUT_MIN.
+ */
+export const DEFAULT_AVATAR_CONSENT_TIMEOUT_MIN = 48 * 60;
+
+/**
  * Min/max source video duration accepted at upload time.
  * HeyGen accepts footage between 15s and 10min; we use 20s-5min as our window.
  */

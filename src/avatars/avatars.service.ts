@@ -22,7 +22,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { CreditsService } from '../credits/credits.service';
 import { ModelsService } from '../models/models.service';
-import { HeyGenProvider } from './providers/heygen.provider';
+import {
+  HeyGenAvatarGroupSnapshot,
+  HeyGenHttpError,
+  HeyGenProvider,
+} from './providers/heygen.provider';
+import { AvatarEventsService } from './avatar-events.service';
 import { CreateAvatarDto } from './dto/create-avatar.dto';
 import { GenerateAvatarVideoDto } from './dto/generate-avatar-video.dto';
 import {
@@ -48,6 +53,7 @@ export class AvatarsService {
     private readonly heygen: HeyGenProvider,
     private readonly configService: ConfigService,
     private readonly modelsService: ModelsService,
+    private readonly events: AvatarEventsService,
     @InjectQueue(AVATAR_QUEUE) private readonly avatarQueue: Queue,
   ) {}
 
@@ -303,11 +309,12 @@ export class AvatarsService {
   async remove(userId: string, id: string): Promise<void> {
     const avatar = await this.findOwnedOrThrow(userId, id);
 
-    // Block delete during active training (per product decision: no cancel during training)
+    // Block delete during active training (per product decision: no cancel during
+    // training). PENDING_CONSENT fica de fora: a espera é do usuário (aprovar o
+    // link da HeyGen) e pode durar horas — ele precisa poder desistir do avatar.
     if (
       avatar.status === AvatarStatus.SUBMITTING ||
-      avatar.status === AvatarStatus.TRAINING ||
-      avatar.status === AvatarStatus.PENDING_CONSENT
+      avatar.status === AvatarStatus.TRAINING
     ) {
       throw new ConflictException({
         code: 'AVATAR_IS_TRAINING',
@@ -345,6 +352,223 @@ export class AvatarsService {
     });
 
     this.logger.log(`Avatar ${avatar.id} soft-deleted for user ${userId}`);
+  }
+
+  // ─── Reconciliação com a HeyGen ────────────────────────────────────────────
+
+  /**
+   * Reconcilia o estado local do avatar com o snapshot da HeyGen. Fonte única
+   * de verdade para as transições TRAINING → PENDING_CONSENT / READY / FAILED,
+   * usada pelo webhook de sucesso e pelo cron de reconciliação.
+   *
+   * Regras aprendidas do incidente do look placeholder (2026-07-02):
+   *  - `consent_status` é null para photo avatars; não-nulo = digital twin,
+   *    que só pode ficar READY com consentimento aprovado.
+   *  - Enquanto o consentimento está pendente, a HeyGen esconde os looks do
+   *    grupo e o id salvo na criação é um placeholder que o POST /v3/videos
+   *    rejeita ("avatar is not supported"). Portanto, digital twin só vira
+   *    READY quando um look real for resolvido via /v3/avatars/looks.
+   */
+  async reconcileFromHeyGen(avatar: UserAvatar): Promise<void> {
+    if (!avatar.heygenGroupId) return;
+
+    let snapshot: HeyGenAvatarGroupSnapshot;
+    try {
+      snapshot = await this.heygen.getAvatarGroup(avatar.heygenGroupId);
+    } catch (err) {
+      // Grupo não existe mais na HeyGen (ex.: exclusão concluída do lado deles):
+      // o avatar nunca vai concluir — falha e estorna em vez de esperar timeout.
+      if (err instanceof HeyGenHttpError && err.status === 404) {
+        await this.failAndRefundAvatar(
+          avatar,
+          'O avatar não existe mais na HeyGen. Crie o avatar novamente.',
+          'heygen_group_not_found',
+        );
+        return;
+      }
+      throw err;
+    }
+    this.logger.log(
+      `[avatar-reconcile] avatar=${avatar.id} status=${snapshot.status} consent=${snapshot.consentStatus} looks=${snapshot.looks.length}`,
+    );
+
+    if (snapshot.status === 'failed' || snapshot.errorCode) {
+      await this.failAndRefundAvatar(
+        avatar,
+        snapshot.errorMessage ?? 'Treinamento falhou na HeyGen.',
+        snapshot.errorCode ?? null,
+      );
+      return;
+    }
+
+    if (snapshot.consentStatus === 'rejected') {
+      await this.failAndRefundAvatar(
+        avatar,
+        'O consentimento do avatar foi recusado na HeyGen.',
+        'consent_rejected',
+      );
+      return;
+    }
+
+    const requiresConsent = snapshot.consentStatus !== null;
+    const consentPending = requiresConsent && snapshot.consentStatus !== 'approved';
+
+    if (consentPending) {
+      // Garante que o usuário tem um link para aprovar. Não há webhook de
+      // consent — o cron detecta a aprovação por polling deste método.
+      let consentUrl = avatar.consentUrl;
+      if (!consentUrl) {
+        try {
+          const consent = await this.heygen.initiateConsent(avatar.heygenGroupId, avatar.id);
+          consentUrl = consent.url;
+        } catch (err) {
+          this.logger.warn(
+            `[avatar-reconcile] initiateConsent failed for ${avatar.id}: ${
+              err instanceof Error ? err.message : err
+            }`,
+          );
+        }
+      }
+
+      // Só vira PENDING_CONSENT quando o treino terminou (é quando o card do
+      // front mostra o botão de aprovar); antes disso continua TRAINING.
+      const nextStatus =
+        snapshot.status === 'completed' ? AvatarStatus.PENDING_CONSENT : AvatarStatus.TRAINING;
+      const changed =
+        avatar.status !== nextStatus ||
+        avatar.consentStatus !== AvatarConsentStatus.PENDING ||
+        consentUrl !== avatar.consentUrl;
+      if (changed) {
+        const updated = await this.prisma.userAvatar.update({
+          where: { id: avatar.id },
+          data: {
+            status: nextStatus,
+            consentStatus: AvatarConsentStatus.PENDING,
+            consentUrl,
+          },
+        });
+        this.events.emit({
+          userId: avatar.userId,
+          userAvatarId: avatar.id,
+          status: nextStatus,
+          consentStatus: updated.consentStatus,
+          data: { consentUrl: updated.consentUrl },
+        });
+      }
+      return;
+    }
+
+    if (snapshot.status === 'completed') {
+      const primaryLook =
+        snapshot.looks.find((l) => l.lookId === avatar.heygenLookId) ?? snapshot.looks[0] ?? null;
+
+      // Digital twin sem look visível: o id salvo na criação é um placeholder
+      // que o POST /v3/videos rejeita. Aguarda a HeyGen expor o look real
+      // (o cron re-tenta a cada minuto até o hard timeout).
+      if (requiresConsent && !primaryLook) {
+        this.logger.warn(
+          `[avatar-reconcile] ${avatar.id} completed + consent ok, mas sem looks visíveis — aguardando a HeyGen expor o look real`,
+        );
+        return;
+      }
+
+      const resolvedLookId = primaryLook?.lookId ?? avatar.heygenLookId;
+      if (primaryLook && primaryLook.lookId !== avatar.heygenLookId) {
+        this.logger.log(
+          `[avatar-reconcile] resolving heygenLookId for ${avatar.id}: ${avatar.heygenLookId} → ${primaryLook.lookId}`,
+        );
+      }
+
+      const updated = await this.prisma.userAvatar.update({
+        where: { id: avatar.id },
+        data: {
+          status: AvatarStatus.READY,
+          trainingCompletedAt: avatar.trainingCompletedAt ?? new Date(),
+          heygenLookId: resolvedLookId,
+          ...(requiresConsent && {
+            consentStatus: AvatarConsentStatus.APPROVED,
+            consentApprovedAt: avatar.consentApprovedAt ?? new Date(),
+          }),
+          // Campos do grupo servem de fallback quando o look vem com nulls
+          // (comum em avatares recém-treinados).
+          previewImageUrl:
+            primaryLook?.previewImageUrl ??
+            snapshot.groupPreviewImageUrl ??
+            avatar.previewImageUrl,
+          previewVideoUrl: primaryLook?.previewVideoUrl ?? avatar.previewVideoUrl,
+          defaultVoiceId:
+            primaryLook?.defaultVoiceId ??
+            snapshot.groupDefaultVoiceId ??
+            avatar.defaultVoiceId,
+          supportedEngines: primaryLook?.supportedEngines ?? avatar.supportedEngines,
+        },
+      });
+
+      if (avatar.status !== AvatarStatus.READY) {
+        this.events.emit({
+          userId: avatar.userId,
+          userAvatarId: avatar.id,
+          status: AvatarStatus.READY,
+          consentStatus: updated.consentStatus,
+          data: { previewImageUrl: updated.previewImageUrl },
+        });
+        this.logger.log(`[avatar-reconcile] ${avatar.id} marcado READY (look=${resolvedLookId})`);
+      }
+      return;
+    }
+
+    // Ainda processando — garante TRAINING local
+    if (
+      avatar.status !== AvatarStatus.TRAINING &&
+      avatar.status !== AvatarStatus.PENDING_CONSENT
+    ) {
+      await this.prisma.userAvatar.update({
+        where: { id: avatar.id },
+        data: { status: AvatarStatus.TRAINING },
+      });
+      this.events.emit({
+        userId: avatar.userId,
+        userAvatarId: avatar.id,
+        status: AvatarStatus.TRAINING,
+        consentStatus: avatar.consentStatus,
+      });
+    }
+  }
+
+  /**
+   * Marca FAILED e estorna os créditos do treinamento. Idempotente: o update
+   * condicional garante um único estorno mesmo se webhook e cron dispararem
+   * ao mesmo tempo (refundForAvatar não tem guarda própria).
+   */
+  async failAndRefundAvatar(
+    avatar: UserAvatar,
+    errorMessage: string,
+    errorCode: string | null = null,
+  ): Promise<void> {
+    const { count } = await this.prisma.userAvatar.updateMany({
+      where: { id: avatar.id, status: { not: AvatarStatus.FAILED } },
+      data: {
+        status: AvatarStatus.FAILED,
+        errorMessage: errorMessage.slice(0, 500),
+        errorCode: errorCode?.slice(0, 100),
+      },
+    });
+    if (count === 0) return; // já estava FAILED — estorno já aconteceu
+
+    await this.creditsService
+      .refundForAvatar(avatar.userId, avatar.id, avatar.creditsConsumed)
+      .catch((err) => {
+        this.logger.error(
+          `refund failed for avatar ${avatar.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      });
+    this.events.emit({
+      userId: avatar.userId,
+      userAvatarId: avatar.id,
+      status: AvatarStatus.FAILED,
+      data: { errorMessage, errorCode },
+    });
+    this.logger.warn(`Avatar ${avatar.id} marcado FAILED + estorno de ${avatar.creditsConsumed}cr`);
   }
 
   // ─── Internals ────────────────────────────────────────────────────────────

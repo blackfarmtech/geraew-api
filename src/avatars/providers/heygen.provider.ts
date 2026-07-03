@@ -12,6 +12,8 @@ export type HeyGenAvatarStatus =
 
 export type HeyGenConsentStatus =
   | 'pending'
+  /** observado na prática após POST /v3/avatars/{id}/consent — ainda não aprovado */
+  | 'skipped'
   | 'approved'
   | 'rejected'
   | null;
@@ -66,6 +68,23 @@ export interface HeyGenCreateVideoInput {
 export interface HeyGenCreateVideoResult {
   videoId: string;
   status: string;
+}
+
+export interface HeyGenInitiateConsentResult {
+  /** Link que o sujeito do avatar visita para gravar/aprovar o consentimento. */
+  url: string | null;
+  consentStatus: HeyGenConsentStatus;
+}
+
+/** Erro HTTP da HeyGen com o status preservado (mensagem já amigável). */
+export class HeyGenHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'HeyGenHttpError';
+  }
 }
 
 @Injectable()
@@ -334,6 +353,72 @@ export class HeyGenProvider {
   }
 
   /**
+   * POST /v3/avatars/{group_id}/consent — gera o link de consentimento que o
+   * sujeito do avatar visita para aprovar o uso (Level 1 — gravação via webcam).
+   * Digital twins criados via API ficam com consent_status "pending" e a HeyGen
+   * esconde os looks do grupo (e rejeita POST /v3/videos) até a aprovação.
+   * Não há evento de webhook para consent — a aprovação é detectada por polling
+   * de GET /v3/avatars/{group_id}.
+   */
+  async initiateConsent(groupId: string, avatarId?: string): Promise<HeyGenInitiateConsentResult> {
+    this.ensureConfigured();
+
+    const body: Record<string, unknown> = {};
+    const rerouteUrl = this.getConsentRerouteUrl(avatarId);
+    if (rerouteUrl) body.reroute_url = rerouteUrl;
+
+    this.logger.log(`[HEYGEN] initiateConsent groupId=${groupId} reroute=${rerouteUrl ?? 'default'}`);
+
+    const response = await this.fetchJson<{ data?: any }>(
+      `${this.baseUrl}/v3/avatars/${encodeURIComponent(groupId)}/consent`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+
+    this.logger.log(
+      `[HEYGEN_RAW_RESPONSE] initiateConsent ${groupId} → ${JSON.stringify(response).slice(0, 500)}`,
+    );
+
+    // Parsing defensivo — a doc mostra { data: { url, avatar_group: { consent_status } } }
+    const data = response?.data ?? (response as Record<string, unknown>);
+    const url =
+      typeof data?.url === 'string'
+        ? data.url
+        : typeof data?.consent_url === 'string'
+          ? data.consent_url
+          : null;
+    const consentStatus: HeyGenConsentStatus =
+      data?.avatar_group?.consent_status ?? data?.consent_status ?? 'pending';
+
+    if (!url) {
+      this.logger.warn(
+        `HeyGen initiateConsent returned no url for ${groupId}: ${JSON.stringify(response).slice(0, 300)}`,
+      );
+    }
+    return { url, consentStatus };
+  }
+
+  /**
+   * Para onde a HeyGen redireciona o sujeito após concluir o consentimento.
+   * Inclui ?consent=done&avatarId=... — o front usa isso para marcar a gravação
+   * como "enviada, aguardando validação" (a API da HeyGen não expõe esse estado:
+   * consent_status fica "pending" tanto antes quanto depois da gravação).
+   */
+  private getConsentRerouteUrl(avatarId?: string): string | undefined {
+    const explicit = (this.configService.get<string>('HEYGEN_CONSENT_REROUTE_URL', '') ?? '').trim();
+    const frontend = (this.configService.get<string>('FRONTEND_URL', '') ?? '').trim();
+    const base = explicit || (frontend ? `${frontend.replace(/\/$/, '')}/avatar` : undefined);
+    if (!base) return undefined;
+    try {
+      const url = new URL(base);
+      url.searchParams.set('consent', 'done');
+      if (avatarId) url.searchParams.set('avatarId', avatarId);
+      return url.toString();
+    } catch {
+      return base;
+    }
+  }
+
+  /**
    * DELETE /v3/avatars/{group_id} — removes the avatar from HeyGen.
    * Best-effort: errors are logged but not re-thrown so our delete flow can proceed.
    */
@@ -598,7 +683,7 @@ export class HeyGenProvider {
     this.logger.error(
       `HeyGen request failed ${init.method ?? 'GET'} ${url} status=${lastStatus} body=${lastBody}`,
     );
-    throw new Error(this.friendlyHttpMessage(lastStatus, lastBody));
+    throw new HeyGenHttpError(this.friendlyHttpMessage(lastStatus, lastBody), lastStatus);
   }
 
   private async fetchWithTimeout(
@@ -640,6 +725,11 @@ export class HeyGenProvider {
       return 'O serviço da HeyGen está instável agora. Tente novamente em alguns minutos.';
     }
     const lower = body.toLowerCase();
+    if (lower.includes('is not supported')) {
+      // POST /v3/videos rejeita o avatar_id quando o look ainda não foi liberado
+      // — na prática, digital twin com consentimento pendente na HeyGen.
+      return 'Este avatar ainda não foi liberado pela HeyGen — normalmente falta aprovar o consentimento. Aprove o consentimento no card do avatar e tente novamente.';
+    }
     if (lower.includes('duration')) {
       return 'O vídeo enviado tem duração inválida. Use um vídeo entre 30s e 5 minutos.';
     }

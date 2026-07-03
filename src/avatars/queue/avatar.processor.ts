@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreditsService } from '../../credits/credits.service';
 import { UploadsService } from '../../uploads/uploads.service';
 import { HeyGenProvider } from '../providers/heygen.provider';
+import { AvatarsService } from '../avatars.service';
 import { AvatarEventsService } from '../avatar-events.service';
 import { WavespeedAudioProvider } from '../../generations/providers/wavespeed-audio.provider';
 import {
@@ -38,6 +39,7 @@ export class AvatarProcessor extends WorkerHost {
     private readonly creditsService: CreditsService,
     private readonly uploadsService: UploadsService,
     private readonly heygen: HeyGenProvider,
+    private readonly avatars: AvatarsService,
     private readonly events: AvatarEventsService,
     private readonly configService: ConfigService,
     private readonly wavespeed: WavespeedAudioProvider,
@@ -103,15 +105,35 @@ export class AvatarProcessor extends WorkerHost {
               fileUrl: avatar.sourceVideoUrl,
             });
 
-      // 2. Persist HeyGen ids and move to TRAINING. Cron + webhook will flip
-      // to READY when HeyGen finishes processing.
+      // 2. Digital twins exigem consentimento na HeyGen (sem ele, os looks
+      // ficam ocultos e o POST /v3/videos rejeita o avatar). Gera o link já
+      // na criação para o usuário poder aprovar enquanto o treino roda; se
+      // falhar aqui, o reconcile tenta de novo quando o treino concluir.
+      let consentStatus: AvatarConsentStatus = AvatarConsentStatus.NOT_REQUIRED;
+      let consentUrl: string | null = null;
+      if (avatarType === 'digital_twin') {
+        consentStatus = AvatarConsentStatus.PENDING;
+        try {
+          const consent = await this.heygen.initiateConsent(created.groupId, avatar.id);
+          consentUrl = consent.url;
+        } catch (err) {
+          this.logger.warn(
+            `[AVATAR_FLOW] initiateConsent failed for ${avatar.id}: ${
+              err instanceof Error ? err.message : err
+            } — reconcile vai tentar de novo`,
+          );
+        }
+      }
+
+      // 3. Persist HeyGen ids and move to TRAINING. Cron + webhook will flip
+      // to PENDING_CONSENT/READY when HeyGen finishes processing.
       const updated = await this.prisma.userAvatar.update({
         where: { id: avatar.id },
         data: {
           heygenLookId: created.lookId,
           heygenGroupId: created.groupId,
-          consentStatus: AvatarConsentStatus.NOT_REQUIRED,
-          consentUrl: null,
+          consentStatus,
+          consentUrl,
           status: AvatarStatus.TRAINING,
         },
       });
@@ -151,6 +173,20 @@ export class AvatarProcessor extends WorkerHost {
     });
     if (!avatar?.heygenLookId) {
       await this.failGeneration(generation.id, generation.userId, generation.creditsConsumed, 'Avatar inválido ou removido.');
+      return;
+    }
+
+    // Guarda: sem consentimento aprovado a HeyGen rejeita o avatar_id — falha
+    // cedo com mensagem acionável em vez do 400 genérico do provedor.
+    if (avatar.status !== AvatarStatus.READY || avatar.consentStatus === AvatarConsentStatus.PENDING) {
+      await this.failGeneration(
+        generation.id,
+        generation.userId,
+        generation.creditsConsumed,
+        avatar.consentStatus === AvatarConsentStatus.PENDING
+          ? 'O avatar ainda aguarda a aprovação de consentimento na HeyGen. Aprove pelo card do avatar e tente novamente.'
+          : `O avatar não está pronto para gerar vídeos (status: ${avatar.status}).`,
+      );
       return;
     }
 
@@ -302,6 +338,16 @@ export class AvatarProcessor extends WorkerHost {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`generate-video failed gen=${generation.id}: ${message}`);
       await this.failGeneration(generation.id, generation.userId, data.creditsConsumed, message);
+      // Se a HeyGen rejeitou o avatar (ex.: consentimento pendente com look
+      // placeholder de um avatar marcado READY antes da correção), reconcilia
+      // o estado local para o card refletir a realidade (PENDING_CONSENT etc.).
+      this.avatars.reconcileFromHeyGen(avatar).catch((reconcileErr) => {
+        this.logger.warn(
+          `[AVATAR_FLOW] reconcile after failed generate-video ${avatar.id}: ${
+            reconcileErr instanceof Error ? reconcileErr.message : reconcileErr
+          }`,
+        );
+      });
       throw err;
     }
   }

@@ -145,76 +145,18 @@ export class HeyGenWebhookService {
       const errorMessage =
         event.event_data.error?.message ?? event.event_data.msg ?? 'Treinamento falhou na HeyGen.';
       const errorCode = event.event_data.error?.code ?? null;
-
-      await this.prisma.userAvatar.update({
-        where: { id: avatar.id },
-        data: {
-          status: AvatarStatus.FAILED,
-          errorMessage: errorMessage.slice(0, 500),
-          errorCode: errorCode?.slice(0, 100),
-        },
-      });
-      await this.creditsService
-        .refundForAvatar(avatar.userId, avatar.id, avatar.creditsConsumed)
-        .catch((err) => {
-          this.logger.error(
-            `refund failed for avatar ${avatar.id}: ${err instanceof Error ? err.message : err}`,
-          );
-        });
-      this.events.emit({
-        userId: avatar.userId,
-        userAvatarId: avatar.id,
-        status: AvatarStatus.FAILED,
-        data: { errorMessage, errorCode },
-      });
+      await this.avatarsService.failAndRefundAvatar(avatar, errorMessage, errorCode);
       return;
     }
 
     if (isSuccess && avatar.heygenGroupId) {
-      // Pull authoritative snapshot from HeyGen — webhook payloads sometimes
-      // omit look details, and we want the engines/voice cached.
-      const snapshot = await this.heygen.getAvatarGroup(avatar.heygenGroupId).catch((err) => {
+      // Reconciliação centralizada: busca o snapshot autoritativo na HeyGen e
+      // decide entre PENDING_CONSENT (digital twin sem consentimento aprovado)
+      // e READY (com o look real resolvido). Ver AvatarsService.reconcileFromHeyGen.
+      await this.avatarsService.reconcileFromHeyGen(avatar).catch((err) => {
         this.logger.warn(
-          `[heygen-webhook] getAvatarGroup failed for ${avatar.heygenGroupId}: ${err instanceof Error ? err.message : err}`,
+          `[heygen-webhook] reconcile failed for ${avatar.id}: ${err instanceof Error ? err.message : err}`,
         );
-        return null;
-      });
-
-      const primaryLook = snapshot?.looks.find((l) => l.lookId === avatar.heygenLookId)
-        ?? snapshot?.looks[0]
-        ?? null;
-
-      // The id we saved at create time can be a placeholder until the look
-      // finishes rendering — overwrite with the real one once we have it.
-      const resolvedLookId = primaryLook?.lookId ?? avatar.heygenLookId;
-
-      const updated = await this.prisma.userAvatar.update({
-        where: { id: avatar.id },
-        data: {
-          status: AvatarStatus.READY,
-          trainingCompletedAt: new Date(),
-          heygenLookId: resolvedLookId,
-          // Group-level fields fall back when the look returns nulls (common
-          // for newly-trained photo/digital_twin avatars).
-          previewImageUrl:
-            primaryLook?.previewImageUrl ??
-            snapshot?.groupPreviewImageUrl ??
-            avatar.previewImageUrl,
-          previewVideoUrl: primaryLook?.previewVideoUrl ?? avatar.previewVideoUrl,
-          defaultVoiceId:
-            primaryLook?.defaultVoiceId ??
-            snapshot?.groupDefaultVoiceId ??
-            avatar.defaultVoiceId,
-          supportedEngines: primaryLook?.supportedEngines ?? avatar.supportedEngines,
-        },
-      });
-
-      this.events.emit({
-        userId: avatar.userId,
-        userAvatarId: avatar.id,
-        status: AvatarStatus.READY,
-        consentStatus: updated.consentStatus,
-        data: { previewImageUrl: updated.previewImageUrl },
       });
     }
   }
