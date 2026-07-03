@@ -418,7 +418,7 @@ async function main() {
   console.log('🎬 Creating AI video models...');
 
   const videoModels = [
-    { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'KIE' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0 },
+    { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'GERAEW' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0 },
     { slug: 'bytedance-seedance-2', label: 'Seedance 2', provider: 'KIE' as const, modelVariant: 'SEEDANCE_2', sortOrder: 1 },
     { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 2 },
     { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 3 },

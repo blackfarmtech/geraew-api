@@ -1008,7 +1008,18 @@ export class GenerationProcessor extends WorkerHost {
       `[OMNI_VIDEO] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} images=${data.imageUrls?.length ?? 0} videos=${data.videoList?.length ?? 0} hasVideo=${data.hasVideoInput} prompt="${data.prompt}"`,
     );
 
-    const buildInput = (prompt: string) => ({
+    // Primário: Vertex (Geraew Provider → /api/video/generate-omni), inputs por URL.
+    const buildVertexInput = (prompt: string) => ({
+      id: data.generationId,
+      prompt,
+      model: 'gemini-omni-video',
+      aspectRatio: data.aspectRatio,
+      imageUrls: data.imageUrls,
+      videoUrls: data.videoList?.map((clip) => clip.url),
+    });
+
+    // Fallback: KIE (mesmas URLs já hospedadas).
+    const buildKieInput = (prompt: string) => ({
       id: data.generationId,
       prompt,
       imageUrls: data.imageUrls,
@@ -1019,23 +1030,51 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     try {
-      const result = await this.geminiOmniVideoProvider.generateOmniVideo(
-        buildInput(data.prompt),
+      const result = await this.geraewProvider.generateOmniVideo(
+        buildVertexInput(data.prompt),
       );
       await this.completeGeneration(data.generationId, result, startTime);
-    } catch (error) {
-      if (this.isSafetyRelatedError(error)) {
+      return;
+    } catch (vertexError) {
+      // Conteúdo bloqueado: refina o prompt na própria Vertex — não cai pro KIE,
+      // que rejeitaria igual e gastaria uma geração à toa.
+      if (this.isSafetyRelatedError(vertexError)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
-          (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildInput(refined)),
+          (refined) => this.geraewProvider.generateOmniVideo(buildVertexInput(refined)),
         );
         if (retryResult) {
           await this.completeGeneration(data.generationId, retryResult, startTime);
           return;
         }
+        throw vertexError;
       }
-      throw error;
+
+      // Falha de infra/erro da Vertex → fallback pra KIE.
+      this.logger.warn(
+        `[OMNI_VIDEO] ${data.generationId} Vertex falhou (${(vertexError as Error).message}) — caindo pro KIE`,
+      );
+
+      try {
+        const result = await this.geminiOmniVideoProvider.generateOmniVideo(
+          buildKieInput(data.prompt),
+        );
+        await this.completeGeneration(data.generationId, result, startTime);
+      } catch (kieError) {
+        if (this.isSafetyRelatedError(kieError)) {
+          const retryResult = await this.retryWithRefinedPrompt(
+            data.generationId,
+            data.prompt,
+            (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildKieInput(refined)),
+          );
+          if (retryResult) {
+            await this.completeGeneration(data.generationId, retryResult, startTime);
+            return;
+          }
+        }
+        throw kieError;
+      }
     }
   }
 

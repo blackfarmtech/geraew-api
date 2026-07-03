@@ -18,6 +18,9 @@ const VIDEO_RESOLUTION_MAP: Record<string, string> = {
   RES_4K: '4K',
 };
 
+/** Modelo Vertex (Interactions API) usado pelo endpoint /generate-omni */
+const OMNI_VERTEX_MODEL = 'gemini-omni-flash-preview';
+
 // ─── Input interfaces ───────────────────────────────────────
 
 export interface TextToVideoInput {
@@ -45,6 +48,15 @@ export interface ReferenceVideoInput extends TextToVideoInput {
     mimeType: string;
     referenceType: 'asset' | 'style';
   }>;
+}
+
+export interface OmniVideoInput {
+  id: string;
+  prompt: string;
+  model: string; // slug interno usado no registro da geração (ex.: gemini-omni-video)
+  aspectRatio?: string;
+  imageUrls?: string[]; // imagens de referência já hospedadas (público)
+  videoUrls?: string[]; // vídeo(s) de referência já hospedado(s) (público)
 }
 
 export interface ImageGenerationInput {
@@ -261,7 +273,64 @@ export class GeraewProvider {
     );
   }
 
+  // ─── Route 5: POST /api/video/generate-omni (Vertex Interactions) ─
+
+  async generateOmniVideo(input: OmniVideoInput): Promise<GenerationResult> {
+    this.logger.log(
+      `Generating omni video — images=${input.imageUrls?.length ?? 0} videos=${input.videoUrls?.length ?? 0}`,
+    );
+
+    // O endpoint /generate-omni recebe base64; os inputs aqui já estão
+    // hospedados (S3 público), então baixamos e convertemos na fronteira.
+    const body: Record<string, unknown> = {
+      prompt: input.prompt,
+      model: OMNI_VERTEX_MODEL,
+      aspect_ratio: input.aspectRatio ?? '16:9',
+      delivery: 'uri',
+    };
+
+    if (input.imageUrls?.length) {
+      // Cada imagem vira um content item na Vertex (reference_to_video p/ 2+).
+      body.images = await Promise.all(
+        input.imageUrls.map(async (url) => {
+          const img = await this.fetchAsBase64(url);
+          return { base64: img.base64, mime_type: img.mimeType };
+        }),
+      );
+    }
+
+    if (input.videoUrls?.length) {
+      const vid = await this.fetchAsBase64(input.videoUrls[0]);
+      body.video_base64 = vid.base64;
+      body.video_mime_type = vid.mimeType;
+    }
+
+    // A task é inferida pelo Geraew Provider a partir dos inputs enviados.
+    return this.startAndPollVideo(
+      '/api/video/generate-omni',
+      body,
+      input.id,
+      input.model,
+    );
+  }
+
   // ─── Shared helpers ───────────────────────────────────────
+
+  /** Baixa um asset hospedado e devolve base64 + mime type. */
+  private async fetchAsBase64(
+    url: string,
+  ): Promise<{ base64: string; mimeType: string }> {
+    const response = await this.fetchWithTimeout(url, {}, 120_000);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch omni input (${response.status}): ${url}`,
+      );
+    }
+    const mimeType =
+      response.headers.get('content-type') ?? 'application/octet-stream';
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return { base64: buffer.toString('base64'), mimeType };
+  }
 
   /** Maps frontend model IDs to actual geraew-provider API model names */
   private resolveModel(model: string): string {
@@ -486,7 +555,11 @@ export class GeraewProvider {
   private sanitizeBodyForLog(body: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (key === 'first_frame' || key === 'last_frame') {
+      if (
+        key === 'first_frame' ||
+        key === 'last_frame' ||
+        key === 'video_base64'
+      ) {
         sanitized[key] = `[base64 ${typeof value === 'string' ? `${Math.round(value.length / 1024)}KB` : 'omitted'}]`;
       } else if (key === 'reference_images' && Array.isArray(value)) {
         sanitized[key] = value.map((ref: Record<string, unknown>) => ({

@@ -2258,7 +2258,7 @@ CRITICAL REQUIREMENTS:
         hasAudio: false,
         aspectRatio: dto.aspect_ratio,
         creditsConsumed: creditsRequired,
-        parameters: { provider: 'kie', hasVideoInput },
+        parameters: { provider: 'vertex', hasVideoInput },
       },
     });
 
