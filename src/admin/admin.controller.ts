@@ -66,6 +66,20 @@ export class AdminController {
     return this.adminService.getFinancialStats(dto.days);
   }
 
+  @Get('stats/utm-conversions')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Receita por criativo/UTM (coorte por cadastro)' })
+  async getUtmConversions(@Query() dto: DateRangeDto) {
+    return this.adminService.getUtmConversions(dto.days);
+  }
+
+  @Get('stats/utm-requests')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Requisições — cadastros com atribuição (detalhe por usuário)' })
+  async getUtmRequests(@Query() dto: PaginationDto) {
+    return this.adminService.getUtmRequests(dto.page, dto.limit);
+  }
+
   @Get('stats/users')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Estatísticas de usuários (novos, distribuição, churn)' })

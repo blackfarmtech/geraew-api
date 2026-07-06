@@ -38,6 +38,101 @@ export class AdminService {
   ) {}
 
   /**
+   * Receita por criativo (UTM). Coorte por data de CADASTRO no período: agrupa os
+   * usuários por utm_content/campaign/source e soma a receita (lifetime) que esses
+   * cadastros geraram em payments COMPLETED. Responde "qual criativo traz clientes
+   * que gastam". Inclui bucket sem UTM (direto/orgânico) para comparação.
+   */
+  async getUtmConversions(days: number) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const rows = await this.prisma.$queryRaw<
+      {
+        utmSource: string | null;
+        utmCampaign: string | null;
+        utmContent: string | null;
+        utmMedium: string | null;
+        signups: number;
+        customers: number;
+        revenueCents: number;
+      }[]
+    >(Prisma.sql`
+      SELECT
+        u.utm_source   AS "utmSource",
+        u.utm_campaign AS "utmCampaign",
+        u.utm_content  AS "utmContent",
+        u.utm_medium   AS "utmMedium",
+        COUNT(DISTINCT u.id)::int AS "signups",
+        COUNT(DISTINCT p.user_id) FILTER (WHERE p.status = 'COMPLETED')::int AS "customers",
+        COALESCE(SUM(p.amount_cents) FILTER (WHERE p.status = 'COMPLETED'), 0)::int AS "revenueCents"
+      FROM users u
+      LEFT JOIN payments p ON p.user_id = u.id
+      WHERE u.created_at >= ${since}
+      GROUP BY u.utm_source, u.utm_campaign, u.utm_content, u.utm_medium
+      ORDER BY "revenueCents" DESC, "signups" DESC
+    `);
+
+    const totals = rows.reduce(
+      (acc, r) => {
+        acc.signups += r.signups;
+        acc.customers += r.customers;
+        acc.revenueCents += r.revenueCents;
+        return acc;
+      },
+      { signups: 0, customers: 0, revenueCents: 0 },
+    );
+
+    return { days, since: since.toISOString(), totals, rows };
+  }
+
+  /**
+   * "Requisições" — uma linha por usuário cadastrado que veio de tráfego rastreável
+   * (tem utm_source, fbclid, gclid ou referrer). Traz tudo que capturamos no cadastro:
+   * UTMs, click ids, referrer, landing page, IP e user-agent (device/SO/navegador são
+   * derivados no front). Paginado, mais recentes primeiro.
+   */
+  async getUtmRequests(page: number, limit: number) {
+    const where: Prisma.UserWhereInput = {
+      OR: [
+        { utmSource: { not: null } },
+        { fbclid: { not: null } },
+        { gclid: { not: null } },
+        { referrer: { not: null } },
+      ],
+    };
+
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true,
+          country: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
+          utmContent: true,
+          utmTerm: true,
+          fbclid: true,
+          gclid: true,
+          referrer: true,
+          landingPage: true,
+          signupIp: true,
+          signupUserAgent: true,
+        },
+      }),
+    ]);
+
+    return { page, limit, total, data };
+  }
+
+  /**
    * Generates an optimized WebP thumbnail for a prompt template image.
    * Returns null on failure; callers should fall back to the original imageUrl.
    */
