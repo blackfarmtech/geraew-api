@@ -27,6 +27,22 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { detectLocaleFromHeaders } from '../common/utils/locale.util';
 
+/** Extrai IP real (atrás de proxy/CDN) e user-agent para o Meta CAPI. */
+function extractClientInfo(req: any): { ip?: string; userAgent?: string } {
+  const fwd = req.headers?.['x-forwarded-for'];
+  const ip =
+    (typeof fwd === 'string' ? fwd.split(',')[0].trim() : undefined) ||
+    req.headers?.['cf-connecting-ip'] ||
+    req.ip ||
+    req.socket?.remoteAddress ||
+    undefined;
+  const userAgent = req.headers?.['user-agent'];
+  return {
+    ip: typeof ip === 'string' ? ip : undefined,
+    userAgent: typeof userAgent === 'string' ? userAgent : undefined,
+  };
+}
+
 @ApiTags('auth')
 @Controller('api/v1/auth')
 export class AuthController {
@@ -65,7 +81,11 @@ export class AuthController {
     @Body() registerDto: RegisterDto,
     @Req() req: any,
   ): Promise<AuthResponseDto> {
-    return this.authService.register(registerDto, detectLocaleFromHeaders(req.headers));
+    return this.authService.register(
+      registerDto,
+      detectLocaleFromHeaders(req.headers),
+      extractClientInfo(req),
+    );
   }
 
   @Public()
@@ -139,6 +159,7 @@ export class AuthController {
       googleAuthDto.referralCode,
       detectLocaleFromHeaders(req.headers),
       googleAuthDto.tracking,
+      extractClientInfo(req),
     );
   }
 

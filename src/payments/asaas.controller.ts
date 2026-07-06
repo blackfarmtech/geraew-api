@@ -19,6 +19,7 @@ import { AsaasService } from './asaas.service';
 import { AsaasWebhookService } from './webhooks/asaas-webhook.service';
 import { CreatePixBoostDto } from './dto/create-pix-boost.dto';
 import { PixResponseDto } from './dto/pix-response.dto';
+import { ConversionsService } from '../marketing/conversions.service';
 
 @ApiTags('asaas')
 @Controller('api/v1')
@@ -28,6 +29,7 @@ export class AsaasController {
     private readonly asaasWebhookService: AsaasWebhookService,
     private readonly plansService: PlansService,
     private readonly prisma: PrismaService,
+    private readonly conversions: ConversionsService,
   ) {}
 
   @Post('payments/pix/boost')
@@ -77,6 +79,19 @@ export class AsaasController {
         packageId: pkg.id,
         ...(user.referredByCode ? { referredByCode: user.referredByCode } : {}),
       }),
+    });
+
+    // InitiateCheckout → UTMfy (waiting_payment). orderId = pix.id casa com o
+    // Purchase disparado no webhook quando o PIX é confirmado.
+    this.conversions.trackInitiateCheckout({
+      userId,
+      orderId: pix.id,
+      amountCents: pix.amountCents,
+      currency: 'BRL',
+      provider: 'asaas',
+      paymentMethod: 'pix',
+      productId: pkg.id,
+      productName: `Créditos ${pkg.name}`,
     });
 
     return {

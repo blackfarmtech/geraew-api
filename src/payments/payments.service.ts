@@ -56,6 +56,18 @@ export class PaymentsService {
     });
   }
 
+  /** Resolve userId + slug do plano a partir do id de assinatura do gateway (tracking). */
+  async findSubscriptionByExternalId(
+    externalSubscriptionId: string,
+  ): Promise<{ userId: string; planSlug: string | null } | null> {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { externalSubscriptionId },
+      select: { userId: true, plan: { select: { slug: true } } },
+    });
+    if (!sub) return null;
+    return { userId: sub.userId, planSlug: sub.plan?.slug ?? null };
+  }
+
   /**
    * Processa o primeiro pagamento de uma assinatura (checkout.session.completed).
    * Cria subscription local, inicializa créditos e registra payment.
@@ -68,7 +80,7 @@ export class PaymentsService {
     externalPaymentId: string,
     currency: string,
     referredByCode?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const plan = await this.prisma.plan.findUnique({
       where: { slug: planSlug },
     });
@@ -81,7 +93,7 @@ export class PaymentsService {
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-    await this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // Idempotência: check DENTRO da transaction para evitar race condition
       const existingPayment = await tx.payment.findFirst({
         where: { externalPaymentId },
@@ -90,7 +102,7 @@ export class PaymentsService {
         this.logger.log(
           `Payment ${externalPaymentId} already exists, skipping subscription creation`,
         );
-        return;
+        return false;
       }
 
       // Cancelar subscriptions anteriores do usuário
@@ -187,7 +199,12 @@ export class PaymentsService {
           );
         }
       }
+
+      return true;
     });
+
+    // Webhook duplicado: nada novo criado — não reenvia email nem dispara conversão.
+    if (!created) return false;
 
     this.logger.log(
       `Processed subscription payment for user ${userId}, plan ${planSlug}`,
@@ -206,6 +223,8 @@ export class PaymentsService {
         plan.creditsPerMonth,
       );
     }
+
+    return true;
   }
 
   /**
@@ -220,7 +239,7 @@ export class PaymentsService {
     currency: string,
     referredByCode?: string,
     provider: 'stripe' | 'asaas' = 'stripe',
-  ): Promise<void> {
+  ): Promise<boolean> {
     const creditPackage = await this.prisma.creditPackage.findUnique({
       where: { id: packageId },
     });
@@ -229,7 +248,7 @@ export class PaymentsService {
       throw new NotFoundException(`Pacote "${packageId}" não encontrado`);
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // Idempotência: check DENTRO da transaction para evitar race condition
       const existingPayment = await tx.payment.findFirst({
         where: { externalPaymentId },
@@ -238,7 +257,7 @@ export class PaymentsService {
         this.logger.log(
           `Payment ${externalPaymentId} already exists, skipping credit purchase`,
         );
-        return;
+        return false;
       }
 
       // Adicionar créditos bônus
@@ -283,7 +302,11 @@ export class PaymentsService {
 
       // Registrar comissão do afiliado se o usuário foi indicado
       await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
+
+      return true;
     });
+
+    if (!created) return false;
 
     this.logger.log(
       `Processed credit purchase for user ${userId}, package ${creditPackage.name}`,
@@ -302,6 +325,8 @@ export class PaymentsService {
         creditPackage.name,
       );
     }
+
+    return true;
   }
 
   /**
@@ -438,7 +463,7 @@ export class PaymentsService {
     amountCents: number,
     externalPaymentId: string,
     currency: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { externalSubscriptionId: stripeSubscriptionId },
       include: { plan: true },
@@ -448,7 +473,7 @@ export class PaymentsService {
       this.logger.warn(
         `Subscription not found for Stripe ID ${stripeSubscriptionId}`,
       );
-      return;
+      return false;
     }
 
     // Idempotência: verificar se este pagamento já foi processado
@@ -459,7 +484,7 @@ export class PaymentsService {
       this.logger.log(
         `Renewal payment ${externalPaymentId} already exists, skipping`,
       );
-      return;
+      return false;
     }
 
     // Se tem downgrade agendado, aplicar o novo plano
@@ -563,6 +588,8 @@ export class PaymentsService {
     // Se essa renovação fechou uma campanha de recuperação de churn,
     // conceder bônus de retorno (se ainda dentro da janela de elegibilidade).
     await this.closeRecoveryCampaignIfAny(subscription.id, subscription.userId);
+
+    return true;
   }
 
   /**

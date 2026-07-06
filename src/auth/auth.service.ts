@@ -24,9 +24,28 @@ function mapTrackingToUserFields(tracking?: TrackingDto) {
     utmContent: tracking.utm_content,
     utmTerm: tracking.utm_term,
     fbclid: tracking.fbclid,
+    fbc: tracking.fbc,
+    fbp: tracking.fbp,
     gclid: tracking.gclid,
     referrer: tracking.referrer,
     landingPage: tracking.landing_page,
+  };
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => v != null && v !== ''),
+  );
+}
+
+export interface ClientInfo {
+  ip?: string;
+  userAgent?: string;
+}
+
+/** IP/UA do cadastro — usados como client_ip_address/client_user_agent no Meta CAPI. */
+function mapClientInfoToUserFields(clientInfo?: ClientInfo) {
+  if (!clientInfo) return {};
+  const fields: Record<string, string | undefined> = {
+    signupIp: clientInfo.ip?.slice(0, 100),
+    signupUserAgent: clientInfo.userAgent?.slice(0, 512),
   };
   return Object.fromEntries(
     Object.entries(fields).filter(([, v]) => v != null && v !== ''),
@@ -62,7 +81,7 @@ export class AuthService {
   /**
    * Registra um novo usuário
    */
-  async register(registerDto: RegisterDto, locale?: LocaleContext): Promise<AuthResponseDto> {
+  async register(registerDto: RegisterDto, locale?: LocaleContext, clientInfo?: ClientInfo): Promise<AuthResponseDto> {
     const { email, password, name, referralCode, tracking } = registerDto;
 
     // Verifica se o email já está em uso
@@ -103,6 +122,7 @@ export class AuthService {
           ...(locale?.country && { country: locale.country }),
           ...(locale && { currency: locale.currency, locale: locale.locale }),
           ...mapTrackingToUserFields(tracking),
+          ...mapClientInfoToUserFields(clientInfo),
         },
       });
 
@@ -287,7 +307,7 @@ export class AuthService {
   /**
    * Login/Cadastro via Google OAuth (verifica ID token ou access token)
    */
-  async googleAuthWithToken(googleToken: string, referralCode?: string, locale?: LocaleContext, tracking?: TrackingDto): Promise<AuthResponseDto> {
+  async googleAuthWithToken(googleToken: string, referralCode?: string, locale?: LocaleContext, tracking?: TrackingDto, clientInfo?: ClientInfo): Promise<AuthResponseDto> {
     try {
       const { OAuth2Client } = await import('google-auth-library');
       const client = new OAuth2Client(this.configService.get('GOOGLE_CLIENT_ID'));
@@ -313,6 +333,7 @@ export class AuthService {
           provider: 'google',
           referralCode,
           tracking,
+          clientInfo,
         }, locale);
       } catch {
         // Se falhar como ID token, tenta como access token
@@ -338,6 +359,7 @@ export class AuthService {
           provider: 'google',
           referralCode,
           tracking,
+          clientInfo,
         }, locale);
       }
     } catch (error) {
@@ -357,6 +379,7 @@ export class AuthService {
     provider: string;
     referralCode?: string;
     tracking?: TrackingDto;
+    clientInfo?: ClientInfo;
   }, locale?: LocaleContext): Promise<AuthResponseDto> {
     // Busca usuário existente por email ou Google ID
     let user = await this.prisma.user.findFirst({
@@ -418,6 +441,7 @@ export class AuthService {
             ...(locale?.country && { country: locale.country }),
             ...(locale && { currency: locale.currency, locale: locale.locale }),
             ...mapTrackingToUserFields(googleUser.tracking),
+            ...mapClientInfoToUserFields(googleUser.clientInfo),
           },
         });
 

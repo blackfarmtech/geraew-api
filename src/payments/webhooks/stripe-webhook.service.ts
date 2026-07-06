@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { WebhookLogsService } from '../../webhook-logs/webhook-logs.service';
 import { PaymentsService } from '../payments.service';
 import { StripeService } from '../stripe.service';
+import { ConversionsService } from '../../marketing/conversions.service';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class StripeWebhookService {
     private readonly webhookLogsService: WebhookLogsService,
     private readonly paymentsService: PaymentsService,
     private readonly stripeService: StripeService,
+    private readonly conversions: ConversionsService,
   ) {}
 
   async handleWebhook(payload: Buffer, signature: string): Promise<void> {
@@ -138,7 +140,7 @@ export class StripeWebhookService {
         return;
       }
 
-      await this.paymentsService.processSubscriptionPayment(
+      const created = await this.paymentsService.processSubscriptionPayment(
         userId,
         planSlug,
         stripeSubscriptionId,
@@ -147,6 +149,21 @@ export class StripeWebhookService {
         this.requireCurrency(session.currency, `session ${session.id}`),
         metadata.referredByCode,
       );
+
+      // Purchase → UTMfy + Meta CAPI. orderId = session.id (mesmo id que o Pixel
+      // envia na página de sucesso, via ?session_id=) para o Meta deduplicar.
+      if (created) {
+        this.conversions.trackPurchase({
+          userId,
+          orderId: session.id,
+          amountCents: session.amount_total ?? 0,
+          currency: this.requireCurrency(session.currency, `session ${session.id}`),
+          provider: 'stripe',
+          paymentMethod: 'credit_card',
+          productId: planSlug,
+          productName: `Assinatura ${planSlug}`,
+        });
+      }
 
       // Se é upgrade, cancelar a sub antiga no Stripe agora que a nova foi criada
       const oldExternalSubscriptionId = metadata.oldExternalSubscriptionId;
@@ -170,7 +187,7 @@ export class StripeWebhookService {
         return;
       }
 
-      await this.paymentsService.processCreditPurchase(
+      const created = await this.paymentsService.processCreditPurchase(
         userId,
         packageId,
         session.amount_total ?? 0,
@@ -178,6 +195,19 @@ export class StripeWebhookService {
         this.requireCurrency(session.currency, `session ${session.id}`),
         metadata.referredByCode,
       );
+
+      if (created) {
+        this.conversions.trackPurchase({
+          userId,
+          orderId: session.id,
+          amountCents: session.amount_total ?? 0,
+          currency: this.requireCurrency(session.currency, `session ${session.id}`),
+          provider: 'stripe',
+          paymentMethod: 'credit_card',
+          productId: packageId,
+          productName: `Créditos ${packageId}`,
+        });
+      }
     } else {
       this.logger.warn(`Unknown checkout type: ${type}`);
     }
@@ -234,14 +264,35 @@ export class StripeWebhookService {
       ? new Date(invoice.lines.data[0].period.end * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    await this.paymentsService.handleSubscriptionRenewal(
+    const currency = this.requireCurrency(invoice.currency, `invoice ${invoice.id}`);
+    const created = await this.paymentsService.handleSubscriptionRenewal(
       stripeSubscriptionId,
       periodStart,
       periodEnd,
       invoice.amount_paid ?? 0,
       invoice.id,
-      this.requireCurrency(invoice.currency, `invoice ${invoice.id}`),
+      currency,
     );
+
+    // Renovação paga também é uma compra (para ROAS/LTV na UTMfy e valor no Meta).
+    if (created && invoice.id) {
+      const sub = await this.paymentsService.findSubscriptionByExternalId(
+        stripeSubscriptionId,
+      );
+      if (sub) {
+        this.conversions.trackPurchase({
+          userId: sub.userId,
+          orderId: invoice.id,
+          amountCents: invoice.amount_paid ?? 0,
+          currency,
+          provider: 'stripe',
+          paymentMethod: 'credit_card',
+          productId: sub.planSlug ?? 'subscription',
+          productName: `Renovação ${sub.planSlug ?? 'assinatura'}`,
+          isRenewal: true,
+        });
+      }
+    }
   }
 
   /**

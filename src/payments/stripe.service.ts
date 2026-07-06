@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConversionsService } from '../marketing/conversions.service';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class StripeService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly conversions: ConversionsService,
   ) {
     this.stripe = new Stripe(
       this.configService.getOrThrow<string>('STRIPE_SECRET_KEY'),
@@ -149,6 +151,19 @@ export class StripeService {
         'http://localhost:3000/payment/cancel',
     });
 
+    // InitiateCheckout → UTMfy (waiting_payment). orderId = session.id casa com o
+    // Purchase disparado no webhook checkout.session.completed.
+    this.conversions.trackInitiateCheckout({
+      userId,
+      orderId: session.id,
+      amountCents: priceCents,
+      currency,
+      provider: 'stripe',
+      paymentMethod: 'credit_card',
+      productId: planSlug,
+      productName: `Assinatura ${planSlug}`,
+    });
+
     return session.url!;
   }
 
@@ -200,6 +215,17 @@ export class StripeService {
         'http://localhost:3000/payment/success?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: this.configService.get<string>('STRIPE_CANCEL_URL') ??
         'http://localhost:3000/payment/cancel',
+    });
+
+    this.conversions.trackInitiateCheckout({
+      userId,
+      orderId: session.id,
+      amountCents: priceCents,
+      currency: 'BRL',
+      provider: 'stripe',
+      paymentMethod: 'credit_card',
+      productId: packageId,
+      productName: `Créditos ${packageId}`,
     });
 
     return session.url!;

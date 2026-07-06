@@ -38,6 +38,18 @@ export class TrackingDto {
   @MaxLength(512)
   fbclid?: string;
 
+  @ApiPropertyOptional({ description: 'Cookie _fbc do Pixel (fb.1.<ts>.<fbclid>)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  fbc?: string;
+
+  @ApiPropertyOptional({ description: 'Cookie _fbp do Pixel' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  fbp?: string;
+
   @ApiPropertyOptional({ description: 'Google click id' })
   @IsOptional()
   @IsString()

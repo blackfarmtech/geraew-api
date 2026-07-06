@@ -48,6 +48,7 @@ import { UnlimitedModule } from './unlimited/unlimited.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { CommunityModule } from './community/community.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MarketingModule } from './marketing/marketing.module';
 import { parseRedisConfig } from './common/redis-config';
 
 
@@ -129,6 +130,7 @@ import { parseRedisConfig } from './common/redis-config';
     ResendWebhooksModule,
     AvatarsModule,
     UnlimitedModule,
+    MarketingModule,
   ],
   controllers: [AppController],
   providers: [

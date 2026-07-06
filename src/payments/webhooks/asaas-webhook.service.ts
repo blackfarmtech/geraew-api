@@ -12,6 +12,7 @@ import { AsaasService } from '../asaas.service';
 import { AsaasSubscriptionsService } from '../asaas-subscriptions.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../email/email.service';
+import { ConversionsService } from '../../marketing/conversions.service';
 
 interface AsaasWebhookEnvelope {
   event?: string;
@@ -69,6 +70,7 @@ export class AsaasWebhookService {
     private readonly asaasSubscriptionsService: AsaasSubscriptionsService,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly conversions: ConversionsService,
   ) {}
 
   async handleWebhook(
@@ -245,7 +247,7 @@ export class AsaasWebhookService {
       );
       return;
     }
-    await this.paymentsService.processCreditPurchase(
+    const created = await this.paymentsService.processCreditPurchase(
       ref.userId,
       ref.packageId,
       payment.amountCents,
@@ -255,6 +257,20 @@ export class AsaasWebhookService {
       'asaas',
     );
     this.logger.log(`Boost payment ${paymentId} confirmado pro user ${ref.userId}`);
+
+    if (created) {
+      // orderId = paymentId (mesmo id que o front usa no polling do PIX → dedup Meta).
+      this.conversions.trackPurchase({
+        userId: ref.userId,
+        orderId: paymentId,
+        amountCents: payment.amountCents,
+        currency: 'BRL',
+        provider: 'asaas',
+        paymentMethod: 'pix',
+        productId: ref.packageId,
+        productName: `Créditos ${ref.packageId}`,
+      });
+    }
   }
 
   /**
@@ -283,14 +299,14 @@ export class AsaasWebhookService {
     const newPeriodEnd = new Date(now);
     newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
 
-    await this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // Idempotência: se já existe payment com esse externalPaymentId, skip
       const existing = await tx.payment.findFirst({
         where: { externalPaymentId: paymentId },
       });
       if (existing) {
         this.logger.log(`Payment ${paymentId} já registrado, skip`);
-        return;
+        return false;
       }
 
       await tx.payment.create({
@@ -343,11 +359,27 @@ export class AsaasWebhookService {
           description: `Renovação ${subscription.plan.name} (PIX Auto)`,
         },
       });
+
+      return true;
     });
 
     this.logger.log(
       `Subscription ${subscription.id} renovada via PIX Auto pagamento ${paymentId}`,
     );
+
+    if (created) {
+      // Cobre a 1ª cobrança (aquisição) e as renovações via PIX Automático.
+      this.conversions.trackPurchase({
+        userId: subscription.userId,
+        orderId: paymentId,
+        amountCents,
+        currency: 'BRL',
+        provider: 'asaas',
+        paymentMethod: 'pix',
+        productId: subscription.plan.slug,
+        productName: `Assinatura ${subscription.plan.slug} (PIX)`,
+      });
+    }
   }
 
   // ───────────────────────────────────────────────────────────────────
