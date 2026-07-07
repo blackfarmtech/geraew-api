@@ -27,6 +27,8 @@ async function bootstrap() {
     'https://geraew.ai',
     // MCP connector clients (browser-side metadata discovery for the remote MCP server)
     'https://claude.ai', 'https://claude.com', 'https://cursor.com',
+    // The API's own public origin (login page form posts same-origin)
+    (process.env.MCP_PUBLIC_URL || '').replace(/\/+$/, ''),
     'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
   ].filter(Boolean);
 
@@ -48,8 +50,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, server-to-server)
-      if (!origin) return callback(null, true);
+      // Allow requests with no origin (mobile apps, curl, server-to-server) and
+      // the opaque "null" origin sent by OAuth redirect / sandboxed contexts
+      // (used by the Claude connector flow).
+      if (!origin || origin === 'null') return callback(null, true);
       if (allAllowedOrigins.has(origin)) return callback(null, true);
 
       console.warn(`CORS blocked origin: ${origin}`);
