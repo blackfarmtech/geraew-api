@@ -40,6 +40,8 @@ interface McpAccessTokenPayload {
   scope: string;
   aud: string;
   typ: 'mcp';
+  exp?: number;
+  iat?: number;
 }
 
 /**
@@ -219,6 +221,8 @@ export class GeraewOAuthProvider implements OAuthServerProvider {
       token,
       clientId: payload.client_id,
       scopes: payload.scope ? payload.scope.split(' ') : [],
+      // Required by the SDK bearer middleware — it rejects tokens without it.
+      expiresAt: payload.exp,
       resource: new URL(payload.aud),
       extra: { userId: payload.sub },
     };
