@@ -33,10 +33,6 @@ model User {
   unlimitedModeImage      Boolean                   @default(false) @map("unlimited_mode_image")
   unlimitedModeVideo      Boolean                   @default(false) @map("unlimited_mode_video")
   fbclid                  String?
-  fbc                     String?
-  fbp                     String?
-  signupIp                String?                   @map("signup_ip")
-  signupUserAgent         String?                   @map("signup_user_agent")
   gclid                   String?
   landingPage             String?                   @map("landing_page")
   referrer                String?
@@ -47,6 +43,10 @@ model User {
   utmTerm                 String?                   @map("utm_term")
   asaasCustomerId         String?                   @unique @map("asaas_customer_id")
   taxId                   String?                   @map("tax_id")
+  fbc                     String?
+  fbp                     String?
+  signupIp                String?                   @map("signup_ip")
+  signupUserAgent         String?                   @map("signup_user_agent")
   affiliateEarnings       AffiliateEarning[]        @relation("referred_user_earnings")
   affiliate               Affiliate?
   brands                  Brand[]
@@ -507,6 +507,60 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("refresh_tokens")
+}
+
+// ============================================
+// MCP OAuth (remote connector) — dynamic clients, auth codes, refresh tokens.
+// userId is stored without a FK relation to avoid touching the User model.
+// ============================================
+model McpOAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String?  @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  grantTypes              String[] @map("grant_types")
+  responseTypes           String[] @map("response_types")
+  scope                   String?
+  tokenEndpointAuthMethod String?  @map("token_endpoint_auth_method")
+  clientIdIssuedAt        Int?     @map("client_id_issued_at")
+  clientSecretExpiresAt   Int?     @map("client_secret_expires_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  @@map("mcp_oauth_clients")
+}
+
+model McpAuthCode {
+  id                  String   @id @default(cuid())
+  code                String   @unique
+  clientId            String   @map("client_id")
+  userId              String   @map("user_id")
+  redirectUri         String   @map("redirect_uri")
+  codeChallenge       String   @map("code_challenge")
+  codeChallengeMethod String   @default("S256") @map("code_challenge_method")
+  resource            String?
+  scopes              String[]
+  expiresAt           DateTime @map("expires_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("mcp_auth_codes")
+}
+
+model McpRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scopes    String[]
+  resource  String?
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("mcp_refresh_tokens")
 }
 
 model PasswordResetToken {

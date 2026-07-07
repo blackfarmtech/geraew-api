@@ -466,10 +466,25 @@ export class GeraewProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error(`[VIDEO POLL] Error response (${response.status}): ${errorText}`);
+        const requestId =
+          response.headers.get('x-request-id') ||
+          response.headers.get('x-goog-request-id') ||
+          'none';
+        this.logger.error(
+          `[VIDEO POLL] Error response (${response.status}) on attempt ${attempt + 1}/${maxAttempts} ` +
+            `operationName=${operationName} requestId=${requestId}: ${errorText}`,
+        );
         const safetyError = ContentSafetyError.fromErrorMessage(errorText);
         if (safetyError) {
           throw safetyError;
+        }
+        // 5xx no poll costuma ser erro transitório do Vertex — não mata a
+        // geração inteira: loga e tenta o próximo poll.
+        if (response.status >= 500 && attempt < maxAttempts - 1) {
+          this.logger.warn(
+            `[VIDEO POLL] Transient ${response.status} — retrying poll (attempt ${attempt + 1}/${maxAttempts})`,
+          );
+          continue;
         }
         throw new Error(
           `Video status check error (${response.status}): ${errorText}`,

@@ -49,6 +49,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { CommunityModule } from './community/community.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MarketingModule } from './marketing/marketing.module';
+import { McpModule } from './mcp/mcp.module';
 import { parseRedisConfig } from './common/redis-config';
 
 
@@ -131,6 +132,7 @@ import { parseRedisConfig } from './common/redis-config';
     AvatarsModule,
     UnlimitedModule,
     MarketingModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [

@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as express from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { McpService } from './mcp/mcp.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -24,6 +25,8 @@ async function bootstrap() {
   const allowedOrigins = [
     ...(process.env.FRONTEND_URL?.split(',').map(u => u.trim()) ?? []),
     'https://geraew.ai',
+    // MCP connector clients (browser-side metadata discovery for the remote MCP server)
+    'https://claude.ai', 'https://claude.com', 'https://cursor.com',
     'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
   ].filter(Boolean);
 
@@ -75,6 +78,12 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
   }
+
+  // Mount the remote MCP connector (OAuth + Streamable HTTP) on the Express app.
+  // Registered after Nest's router so unmatched /mcp, /authorize, /.well-known,
+  // and /token routes fall through to it.
+  const mcpService = app.get(McpService);
+  mcpService.mount(app.getHttpAdapter().getInstance());
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
