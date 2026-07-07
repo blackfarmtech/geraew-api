@@ -10,7 +10,6 @@ MicroSaaS de geração de imagens e vídeos com IA, similar ao Higgsfield. Públ
 
 ## Regras de Negócio
 
-### Sistema de Créditos
 
 Toda operação consome créditos fixos por geração (não por segundo).
 
