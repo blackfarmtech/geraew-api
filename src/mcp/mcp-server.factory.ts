@@ -8,6 +8,14 @@ import type { GenerateImageDto } from '../generations/dto/generate-image.dto';
 import type { GenerateVideoTextToVideoDto } from '../generations/dto/videos/generate-video-text-to-video.dto';
 import type { GenerateVideoImageToVideoDto } from '../generations/dto/videos/generate-video-image-to-video.dto';
 import type { GenerateFaceSwapDto } from '../generations/dto/generate-face-swap.dto';
+import sharp = require('sharp');
+
+const IMAGE_GEN_TYPES = [
+  'TEXT_TO_IMAGE',
+  'IMAGE_TO_IMAGE',
+  'FACE_SWAP',
+  'VIRTUAL_TRY_ON',
+];
 
 const IMAGE_RES: Record<string, Resolution> = {
   '1k': Resolution.RES_1K,
@@ -18,6 +26,14 @@ const VIDEO_RES: Record<string, Resolution> = {
   '720p': Resolution.RES_720P,
   '1080p': Resolution.RES_1080P,
   '4k': Resolution.RES_4K,
+};
+
+// Friendly image-model names shown to the assistant → internal GeraEW slugs.
+const IMAGE_MODEL_MAP: Record<string, string> = {
+  'Nano Banana 2': 'gemini-3.1-flash-image-preview',
+  'Nano Banana Pro': 'gemini-3-pro-image-preview',
+  'GPT Image 2': 'gpt-image-2',
+  'Geraew Unlocked': 'sem-censura',
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -128,6 +144,117 @@ export class McpServerFactory {
     };
   }
 
+  /**
+   * Fetches an image URL and returns a lightweight base64 JPEG preview (max
+   * 1024px, quality 80) so it can be rendered inline in the chat without
+   * shipping the full-resolution file. Returns null on any failure.
+   */
+  private async inlinePreview(
+    url: string,
+  ): Promise<{ data: string; mimeType: string } | null> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const input = Buffer.from(await res.arrayBuffer());
+      const out = await sharp(input)
+        .rotate()
+        .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      return { data: out.toString('base64'), mimeType: 'image/jpeg' };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Builds a tool result for a finished generation: a text summary plus inline
+   * image previews (the images themselves, or a video's thumbnail).
+   */
+  private async mediaResult(gen: any): Promise<{
+    content: Array<Record<string, unknown>>;
+    structuredContent: Record<string, unknown>;
+  }> {
+    const summary = this.summarize(gen);
+    const content: Array<Record<string, unknown>> = [
+      { type: 'text', text: JSON.stringify(summary, null, 2) },
+    ];
+
+    if (gen.status === 'COMPLETED' && Array.isArray(gen.outputs)) {
+      const isImageGen = IMAGE_GEN_TYPES.includes(gen.type);
+      for (const o of gen.outputs.slice(0, 4)) {
+        const isImage =
+          isImageGen || (o.mimeType ?? '').startsWith('image/');
+        const src = isImage ? o.url : o.thumbnailUrl; // video → thumbnail
+        if (!src) continue;
+        const preview = await this.inlinePreview(src);
+        if (preview) {
+          content.push({
+            type: 'image',
+            data: preview.data,
+            mimeType: preview.mimeType,
+          });
+        }
+      }
+    }
+
+    return { content, structuredContent: summary };
+  }
+
+  /**
+   * Aggregates a batch of finished generations into one result: a text summary
+   * of all jobs plus inline previews of every completed image (capped).
+   */
+  private async mediaResultMany(
+    gens: any[],
+    errors: string[] = [],
+  ): Promise<{
+    content: Array<Record<string, unknown>>;
+    structuredContent: Record<string, unknown>;
+  }> {
+    const ok = gens.filter(Boolean);
+    const summary = {
+      requested: gens.length + errors.length,
+      completed: ok.filter((g) => g.status === 'COMPLETED').length,
+      failed:
+        errors.length + ok.filter((g) => g.status === 'FAILED').length,
+      total_credits: ok.reduce(
+        (sum, g) => sum + (g.creditsConsumed ?? 0),
+        0,
+      ),
+      generations: ok.map((g) => this.summarize(g)),
+      ...(errors.length ? { errors } : {}),
+    };
+
+    const content: Array<Record<string, unknown>> = [
+      { type: 'text', text: JSON.stringify(summary, null, 2) },
+    ];
+
+    // Collect one inline preview per completed image output, capped at 8 total.
+    let previews = 0;
+    for (const g of ok) {
+      if (g.status !== 'COMPLETED' || !Array.isArray(g.outputs)) continue;
+      const isImageGen = IMAGE_GEN_TYPES.includes(g.type);
+      for (const o of g.outputs) {
+        if (previews >= 8) break;
+        const isImage = isImageGen || (o.mimeType ?? '').startsWith('image/');
+        const src = isImage ? o.url : o.thumbnailUrl;
+        if (!src) continue;
+        const preview = await this.inlinePreview(src);
+        if (preview) {
+          content.push({
+            type: 'image',
+            data: preview.data,
+            mimeType: preview.mimeType,
+          });
+          previews++;
+        }
+      }
+    }
+
+    return { content, structuredContent: summary };
+  }
+
   private registerTools(server: RegisterableServer, userId: string): void {
     const waitControls = {
       wait: z
@@ -149,18 +276,28 @@ export class McpServerFactory {
       {
         title: 'Generate Image',
         description:
-          'Generate an image from a text prompt, or edit/remix reference images when image_urls are provided. Returns CDN URLs of the result.',
+          'Generate one or more images from a text prompt, or edit/remix reference images when image_urls are provided. Set count>1 to generate several images IN PARALLEL from the same prompt (one batch, fired simultaneously) — use this instead of calling the tool repeatedly. Returns inline previews + CDN URLs.',
         inputSchema: {
           prompt: z.string().min(1),
+          count: z
+            .number()
+            .int()
+            .min(1)
+            .max(8)
+            .default(1)
+            .describe(
+              'How many images to generate in parallel from this prompt (fired simultaneously). Each consumes credits. Plan concurrency limits apply.',
+            ),
           model: z
-            .enum([
-              'gemini-3-pro-image-preview',
-              'gemini-3.1-flash-image-preview',
-              'sem-censura',
-              'gpt-image-2',
-              'seedream-5-lite',
-            ])
-            .default('gemini-3.1-flash-image-preview'),
+            .enum(['Nano Banana 2', 'Nano Banana Pro', 'GPT Image 2', 'Geraew Unlocked'])
+            .default('Nano Banana 2')
+            .describe(
+              'Modelo de imagem (escolha conforme o pedido do usuário; senão use o padrão):\n' +
+                '• "Nano Banana 2" — rápido e ótimo custo-benefício. 90/130/190 créditos em 1K/2K/4K. (padrão)\n' +
+                '• "Nano Banana Pro" — máxima qualidade e aderência ao prompt. 190/190/250 créditos em 1K/2K/4K.\n' +
+                '• "GPT Image 2" — melhor para texto/tipografia e composições. 90/130/190 créditos em 1K/2K/4K. Não suporta 4K em proporção 1:1.\n' +
+                '• "Geraew Unlocked" — geração sem censura. Apenas 2K/4K (130/190 créditos); 1K é elevado para 2K.',
+            ),
           resolution: z.enum(['1k', '2k', '4k']).default('2k'),
           aspect_ratio: z
             .enum(['1:1', '3:2', '2:3', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'])
@@ -187,21 +324,65 @@ export class McpServerFactory {
                 }),
               )
             : undefined;
+          const modelSlug =
+            IMAGE_MODEL_MAP[p.model] ?? 'gemini-3.1-flash-image-preview';
+          // Geraew Unlocked (sem-censura) only supports 2K/4K.
+          let resKey = p.resolution;
+          if (modelSlug === 'sem-censura' && resKey === '1k') resKey = '2k';
           const dto = {
             prompt: p.prompt,
-            model: p.model,
-            resolution: IMAGE_RES[p.resolution],
+            model: modelSlug,
+            resolution: IMAGE_RES[resKey],
             ...(p.aspect_ratio ? { aspect_ratio: p.aspect_ratio } : {}),
             ...(images ? { images } : {}),
           } as GenerateImageDto;
-          const created = await this.generations.generateImage(userId, dto);
-          if (!p.wait) return this.result({ id: created.id, status: created.status });
-          const gen = await this.waitFor(
-            userId,
-            created.id,
-            (p.max_wait_seconds ?? 180) * 1000,
+
+          const count = p.count ?? 1;
+
+          // Single image → keep the simple/rich single result.
+          if (count === 1) {
+            const created = await this.generations.generateImage(userId, dto);
+            if (!p.wait)
+              return this.result({ id: created.id, status: created.status });
+            const gen = await this.waitFor(
+              userId,
+              created.id,
+              (p.max_wait_seconds ?? 180) * 1000,
+            );
+            return await this.mediaResult(gen);
+          }
+
+          // Batch → fire all generations simultaneously.
+          const errors: string[] = [];
+          const settled = await Promise.all(
+            Array.from({ length: count }, () =>
+              this.generations
+                .generateImage(userId, dto)
+                .catch((e: any) => {
+                  errors.push(
+                    e?.response?.error?.message ?? e?.message ?? String(e),
+                  );
+                  return null;
+                }),
+            ),
           );
-          return this.result(this.summarize(gen));
+          const created = settled.filter(Boolean) as Array<{ id: string }>;
+
+          if (!p.wait) {
+            return this.result({
+              batch: count,
+              started: created.length,
+              ids: created.map((c) => c.id),
+              ...(errors.length ? { errors } : {}),
+            });
+          }
+
+          const gens = await Promise.all(
+            created.map((c) =>
+              this.waitFor(userId, c.id, (p.max_wait_seconds ?? 240) * 1000),
+            ),
+          );
+          return await this.mediaResultMany(gens, errors);
         } catch (error) {
           return this.errorResult(error);
         }
@@ -253,7 +434,7 @@ export class McpServerFactory {
             created.id,
             (p.max_wait_seconds ?? 480) * 1000,
           );
-          return this.result(this.summarize(gen));
+          return await this.mediaResult(gen);
         } catch (error) {
           return this.errorResult(error);
         }
@@ -307,7 +488,7 @@ export class McpServerFactory {
             created.id,
             (p.max_wait_seconds ?? 480) * 1000,
           );
-          return this.result(this.summarize(gen));
+          return await this.mediaResult(gen);
         } catch (error) {
           return this.errorResult(error);
         }
@@ -347,7 +528,7 @@ export class McpServerFactory {
             created.id,
             (p.max_wait_seconds ?? 180) * 1000,
           );
-          return this.result(this.summarize(gen));
+          return await this.mediaResult(gen);
         } catch (error) {
           return this.errorResult(error);
         }
@@ -367,7 +548,7 @@ export class McpServerFactory {
       async (p) => {
         try {
           const gen = await this.generations.findById(userId, p.id);
-          return this.result(this.summarize(gen));
+          return await this.mediaResult(gen);
         } catch (error) {
           return this.errorResult(error);
         }
