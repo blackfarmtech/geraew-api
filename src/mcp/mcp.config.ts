@@ -22,6 +22,17 @@ export class McpConfig {
     return raw.replace(/\/+$/, '');
   }
 
+  /** Public CDN origin serving generated/uploaded files (no trailing slash), if set. */
+  get cdnUrl(): string | undefined {
+    const raw = this.config.get<string>('S3_PUBLIC_URL');
+    if (!raw) return undefined;
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return raw.replace(/\/+$/, '');
+    }
+  }
+
   /** OAuth issuer / authorization server identifier. */
   get issuerUrl(): URL {
     return new URL(this.publicUrl);

@@ -1,13 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { Resolution } from '@prisma/client';
+import { Resolution, GenerationType } from '@prisma/client';
 import { GenerationsService } from '../generations/generations.service';
 import { CreditsService } from '../credits/credits.service';
+import { McpConfig } from './mcp.config';
+import { UploadSessionStore } from './upload-session.store';
+import {
+  UPLOAD_WIDGET_URI,
+  UPLOAD_WIDGET_MIME,
+  UPLOAD_WIDGET_HTML,
+} from './upload-widget';
 import type { GenerateImageDto } from '../generations/dto/generate-image.dto';
 import type { GenerateVideoTextToVideoDto } from '../generations/dto/videos/generate-video-text-to-video.dto';
 import type { GenerateVideoImageToVideoDto } from '../generations/dto/videos/generate-video-image-to-video.dto';
 import type { GenerateFaceSwapDto } from '../generations/dto/generate-face-swap.dto';
+import type { GenerateMotionControlDto } from '../generations/dto/videos/generate-motion-control.dto';
+import type { UpscaleImageDto } from '../generations/dto/upscale-image.dto';
+import type { GenerateVirtualTryOnDto } from '../generations/dto/generate-virtual-try-on.dto';
 import sharp = require('sharp');
 
 const IMAGE_GEN_TYPES = [
@@ -36,15 +46,54 @@ const IMAGE_MODEL_MAP: Record<string, string> = {
   'Geraew Unlocked': 'sem-censura',
 };
 
+// Any resolution key (image or video) → Prisma Resolution. Used by the cost
+// preflight tool, which spans both image and video operations.
+const ALL_RES: Record<string, Resolution> = {
+  '1k': Resolution.RES_1K,
+  '2k': Resolution.RES_2K,
+  '4k': Resolution.RES_4K,
+  '720p': Resolution.RES_720P,
+  '1080p': Resolution.RES_1080P,
+};
+
+// Friendly model name → cost variant (mirrors getModelVariant in the service).
+// Only the models the cost table differentiates on need to appear here.
+const MODEL_VARIANTS: Record<string, string> = {
+  'Nano Banana 2': 'NB2',
+  'Nano Banana Pro': 'NBP',
+  'GPT Image 2': 'GPT_IMAGE_2',
+  'Geraew Unlocked': 'SEM_CENSURA',
+  'geraew-fast': 'GERAEW_FAST',
+  'geraew-quality': 'GERAEW_QUALITY',
+};
+
+// Cost-preflight operation → the GenerationType its pricing is keyed on.
+const ESTIMATE_TYPE: Record<string, GenerationType> = {
+  image: GenerationType.TEXT_TO_IMAGE,
+  video: GenerationType.TEXT_TO_VIDEO,
+  motion_control: GenerationType.MOTION_CONTROL,
+  face_swap: GenerationType.FACE_SWAP,
+  upscale: GenerationType.TEXT_TO_IMAGE,
+  virtual_try_on: GenerationType.VIRTUAL_TRY_ON,
+};
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
-/** Minimal, non-generic view of McpServer.registerTool to keep tsc cheap. */
+/** Minimal, non-generic view of McpServer to keep tsc cheap. */
 interface RegisterableServer {
   registerTool(
     name: string,
     config: Record<string, unknown>,
     handler: (args: any) => Promise<unknown>,
+  ): void;
+  registerResource(
+    name: string,
+    uri: string,
+    config: Record<string, unknown>,
+    readCallback: () =>
+      | { contents: Array<Record<string, unknown>> }
+      | Promise<{ contents: Array<Record<string, unknown>> }>,
   ): void;
 }
 
@@ -61,6 +110,8 @@ export class McpServerFactory {
   constructor(
     private readonly generations: GenerationsService,
     private readonly credits: CreditsService,
+    private readonly config: McpConfig,
+    private readonly uploadSessions: UploadSessionStore,
   ) {}
 
   build(userId: string): McpServer {
@@ -176,8 +227,17 @@ export class McpServerFactory {
     structuredContent: Record<string, unknown>;
   }> {
     const summary = this.summarize(gen);
+    // Keep the visible text minimal and URL-free so the assistant renders the
+    // attached image(s) instead of listing links. Full URLs live in
+    // structuredContent for machine use.
+    const line =
+      gen.status === 'COMPLETED'
+        ? `✅ Pronto — ${gen.creditsConsumed ?? 0} créditos consumidos. Imagem anexada abaixo.`
+        : gen.status === 'FAILED'
+          ? `❌ Falhou: ${gen.errorMessage ?? 'erro desconhecido'}`
+          : `⏳ Status: ${gen.status}`;
     const content: Array<Record<string, unknown>> = [
-      { type: 'text', text: JSON.stringify(summary, null, 2) },
+      { type: 'text', text: line },
     ];
 
     if (gen.status === 'COMPLETED' && Array.isArray(gen.outputs)) {
@@ -226,8 +286,13 @@ export class McpServerFactory {
       ...(errors.length ? { errors } : {}),
     };
 
+    // URL-free summary line so the assistant shows the attached images instead
+    // of dumping links. Details/URLs remain in structuredContent.
     const content: Array<Record<string, unknown>> = [
-      { type: 'text', text: JSON.stringify(summary, null, 2) },
+      {
+        type: 'text',
+        text: `✅ ${summary.completed}/${summary.requested} imagem(ns) pronta(s) — ${summary.total_credits} créditos no total. Imagens anexadas abaixo.${summary.failed ? ` (${summary.failed} falharam)` : ''}`,
+      },
     ];
 
     // Collect one inline preview per completed image output, capped at 8 total.
@@ -256,6 +321,37 @@ export class McpServerFactory {
   }
 
   private registerTools(server: RegisterableServer, userId: string): void {
+    // ── MCP Apps UI: inline in-chat upload widget ─────────────────────
+    // Declared once per server. Hosts that negotiated `io.modelcontextprotocol/ui`
+    // render this HTML in a sandboxed iframe when geraew_upload_image runs.
+    server.registerResource(
+      'geraew-upload-widget',
+      UPLOAD_WIDGET_URI,
+      {
+        mimeType: UPLOAD_WIDGET_MIME,
+        _meta: {
+          ui: {
+            csp: {
+              // The iframe POSTs the image bytes to our /u/:token endpoint…
+              connectDomains: [this.config.publicUrl],
+              // …and results live on the CDN.
+              resourceDomains: this.config.cdnUrl ? [this.config.cdnUrl] : [],
+            },
+            prefersBorder: true,
+          },
+        },
+      },
+      () => ({
+        contents: [
+          {
+            uri: UPLOAD_WIDGET_URI,
+            mimeType: UPLOAD_WIDGET_MIME,
+            text: UPLOAD_WIDGET_HTML,
+          },
+        ],
+      }),
+    );
+
     const waitControls = {
       wait: z
         .boolean()
@@ -276,7 +372,7 @@ export class McpServerFactory {
       {
         title: 'Generate Image',
         description:
-          'Generate one or more images from a text prompt, or edit/remix reference images when image_urls are provided. Set count>1 to generate several images IN PARALLEL from the same prompt (one batch, fired simultaneously) — use this instead of calling the tool repeatedly. Returns inline previews + CDN URLs.',
+          'Generate one or more images from a text prompt, or edit/remix reference images when image_urls are provided. Set count>1 to generate several images IN PARALLEL from the same prompt (one batch, fired simultaneously) — use this instead of calling the tool repeatedly. Returns inline previews + CDN URLs. NOTE: image_urls must be PUBLIC URLs. If the user wants to use their OWN image (e.g. one they pasted/attached in the chat) as a reference, you cannot pass the attachment directly — first call geraew_upload_image to get a link for them to upload it, then use the returned URL here.',
         inputSchema: {
           prompt: z.string().min(1),
           count: z
@@ -383,6 +479,121 @@ export class McpServerFactory {
             ),
           );
           return await this.mediaResultMany(gens, errors);
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
+    // ── Upload the user's own image (bring-your-own reference) ─────────
+    server.registerTool(
+      'geraew_upload_image',
+      {
+        title: 'Upload the user’s own image',
+        description:
+          "Let the USER upload their OWN image (e.g. one they pasted/attached in the chat) into GeraEW to use as a reference. You cannot forward a chat attachment directly to the generation tools — they only take public URLs — so call this whenever the user wants their own photo as a reference. On supported clients this renders an INLINE upload widget right in the chat: just tell the user to drop their image in the widget above. When they finish, a message with the public image_url is sent back automatically — pass that URL to geraew_generate_image (image_urls), geraew_face_swap, geraew_virtual_try_on, geraew_upscale_image or geraew_motion_control. If the widget does not appear, a fallback upload link is included in the text; the user opens it, uploads, then you call geraew_get_upload with the token to receive the URL. Valid for 15 minutes.",
+        inputSchema: {},
+        _meta: {
+          ui: {
+            resourceUri: UPLOAD_WIDGET_URI,
+            visibility: ['model', 'app'],
+          },
+        },
+        annotations: { readOnlyHint: false, openWorldHint: true },
+      },
+      async () => {
+        try {
+          const token = this.uploadSessions.create(userId);
+          const uploadUrl = `${this.config.publicUrl}/u/${token}`;
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text:
+                  'Peça ao usuário para enviar a imagem no widget de upload acima. ' +
+                  'Assim que ele terminar, você recebe a URL pública automaticamente. ' +
+                  `(Se o widget não aparecer neste cliente, o usuário pode abrir este link e enviar por lá: ${uploadUrl} — depois chame geraew_get_upload com o token "${token}".)`,
+              },
+            ],
+            structuredContent: {
+              upload_url: uploadUrl,
+              upload_endpoint: uploadUrl,
+              token,
+              status: 'pending',
+              expires_in_seconds: 15 * 60,
+            },
+          };
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
+    // ── Poll an upload session for the finished image ─────────────────
+    server.registerTool(
+      'geraew_get_upload',
+      {
+        title: 'Get uploaded image',
+        description:
+          'Check an upload session created by geraew_upload_image and return the public URL of the image the user uploaded. With wait=true (default) this blocks until the user finishes uploading (or the timeout). Pass the resulting image_url to geraew_generate_image (image_urls) or geraew_face_swap.',
+        inputSchema: {
+          token: z
+            .string()
+            .min(1)
+            .describe('The token returned by geraew_upload_image.'),
+          wait: z
+            .boolean()
+            .default(true)
+            .describe('Wait until the user finishes uploading.'),
+          max_wait_seconds: z
+            .number()
+            .int()
+            .min(10)
+            .max(600)
+            .optional()
+            .describe('Max seconds to wait when wait=true (default 300).'),
+        },
+        annotations: {
+          readOnlyHint: true,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+      },
+      async (p) => {
+        try {
+          const finished = (): {
+            status: string;
+            image_url?: string;
+          } | null => {
+            const s = this.uploadSessions.get(p.token);
+            if (!s) return { status: 'expired' };
+            if (s.status === 'completed' && s.imageUrl)
+              return { status: 'completed', image_url: s.imageUrl };
+            return null; // still pending
+          };
+
+          const immediate = finished();
+          if (immediate) return this.result(immediate);
+
+          if (p.wait === false) {
+            return this.result({
+              status: 'pending',
+              message:
+                'Ainda não recebi a imagem. Peça ao usuário para abrir o link e enviar.',
+            });
+          }
+
+          const deadline = Date.now() + (p.max_wait_seconds ?? 300) * 1000;
+          while (Date.now() < deadline) {
+            await sleep(2500);
+            const done = finished();
+            if (done) return this.result(done);
+          }
+          return this.result({
+            status: 'pending',
+            message:
+              'Tempo esgotado sem receber a imagem. Confirme com o usuário e chame geraew_get_upload de novo com o mesmo token.',
+          });
         } catch (error) {
           return this.errorResult(error);
         }
@@ -535,6 +746,187 @@ export class McpServerFactory {
       },
     );
 
+    // ── Motion Control (image + reference video → video) ──────────────
+    server.registerTool(
+      'geraew_motion_control',
+      {
+        title: 'Motion Control',
+        description:
+          'Transfer the motion and camera movement of a REFERENCE VIDEO onto your character IMAGE (Kling 2.6). The persona in the image performs the exact movements/dance/gestures from the reference clip. Give image_url (the character/persona still) and video_url (the motion reference, mp4/mov/mkv). Both must be PUBLIC URLs — if the user wants their own photo/video, call geraew_upload_image first and use the returned URL. Video jobs take minutes; default wait=false — poll with geraew_get_generation.',
+        inputSchema: {
+          image_url: z
+            .string()
+            .url()
+            .describe(
+              'Public URL of the character/persona still image to animate.',
+            ),
+          video_url: z
+            .string()
+            .url()
+            .describe(
+              'Public URL of the reference motion video (mp4/mov/mkv).',
+            ),
+          resolution: z.enum(['720p', '1080p']).default('720p'),
+          wait: z.boolean().default(false),
+          max_wait_seconds: z.number().int().min(10).max(600).optional(),
+        },
+        annotations: { readOnlyHint: false, openWorldHint: true },
+      },
+      async (p) => {
+        try {
+          const img = await this.fetchToBase64(p.image_url);
+          const vid = await this.fetchToBase64(p.video_url);
+          const imageMime =
+            img.mime === 'image/png'
+              ? 'image/png'
+              : img.mime === 'image/webp'
+                ? 'image/webp'
+                : 'image/jpeg';
+          const videoMime =
+            vid.mime === 'video/quicktime'
+              ? 'video/quicktime'
+              : vid.mime === 'video/x-matroska'
+                ? 'video/x-matroska'
+                : 'video/mp4';
+          const dto = {
+            image: img.base64,
+            image_mime_type: imageMime,
+            video: vid.base64,
+            video_mime_type: videoMime,
+            resolution: p.resolution,
+          } as GenerateMotionControlDto;
+          const created = await this.generations.generateMotionControl(
+            userId,
+            dto,
+          );
+          if (!p.wait)
+            return this.result({ id: created.id, status: created.status });
+          const gen = await this.waitFor(
+            userId,
+            created.id,
+            (p.max_wait_seconds ?? 480) * 1000,
+          );
+          return await this.mediaResult(gen);
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
+    // ── Upscale image ─────────────────────────────────────────────────
+    server.registerTool(
+      'geraew_upscale_image',
+      {
+        title: 'Upscale Image',
+        description:
+          "Upscale and enhance an existing image to higher quality (2K) — sharper, cleaner, fewer compression artifacts — while preserving every detail, the exact composition, colors and content. Give image_url (a PUBLIC URL; for the user's own photo call geraew_upload_image first). Use this instead of re-generating when the user just wants a better-resolution version of an image they already have.",
+        inputSchema: {
+          image_url: z
+            .string()
+            .url()
+            .describe('Public URL of the image to upscale.'),
+          model: z
+            .enum(['Nano Banana 2', 'Nano Banana Pro'])
+            .default('Nano Banana Pro')
+            .describe('Engine used for the enhancement pass.'),
+          ...waitControls,
+        },
+        annotations: { readOnlyHint: false, openWorldHint: true },
+      },
+      async (p) => {
+        try {
+          const { base64, mime } = await this.fetchToBase64(p.image_url);
+          const dto = {
+            image: base64,
+            mime_type: mime === 'image/png' ? 'image/png' : 'image/jpeg',
+            model: IMAGE_MODEL_MAP[p.model] ?? 'gemini-3-pro-image-preview',
+          } as UpscaleImageDto;
+          const created = await this.generations.generateUpscale(userId, dto);
+          if (!p.wait)
+            return this.result({ id: created.id, status: created.status });
+          const gen = await this.waitFor(
+            userId,
+            created.id,
+            (p.max_wait_seconds ?? 180) * 1000,
+          );
+          return await this.mediaResult(gen);
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
+    // ── Virtual Try-On (dress a persona in a garment) ─────────────────
+    server.registerTool(
+      'geraew_virtual_try_on',
+      {
+        title: 'Virtual Try-On',
+        description:
+          "Dress an AI influencer/persona in a piece of clothing from a product photo — the influencer keeps their identity and pose while wearing the given outfit. Perfect for fashion content, TikTok Shop / product reviews and UGC. Give influencer_image_url (the persona) and clothing_image_url (the garment/product photo). Both must be PUBLIC URLs — for the user's own photos call geraew_upload_image first.",
+        inputSchema: {
+          influencer_image_url: z
+            .string()
+            .url()
+            .describe('Public URL of the AI influencer/persona photo.'),
+          clothing_image_url: z
+            .string()
+            .url()
+            .describe('Public URL of the clothing/product photo.'),
+          additional_instructions: z
+            .string()
+            .optional()
+            .describe('Extra guidance, e.g. "outdoor setting, natural light".'),
+          model: z
+            .enum(['Nano Banana 2', 'Nano Banana Pro'])
+            .default('Nano Banana 2'),
+          aspect_ratio: z
+            .enum(['1:1', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9'])
+            .default('3:4'),
+          resolution: z.enum(['1k', '2k', '4k']).default('2k'),
+          ...waitControls,
+        },
+        annotations: { readOnlyHint: false, openWorldHint: true },
+      },
+      async (p) => {
+        try {
+          const inf = await this.fetchToBase64(p.influencer_image_url);
+          const clo = await this.fetchToBase64(p.clothing_image_url);
+          const mimeOf = (m: string): string =>
+            m === 'image/png'
+              ? 'image/png'
+              : m === 'image/webp'
+                ? 'image/webp'
+                : 'image/jpeg';
+          const dto = {
+            influencer_image: inf.base64,
+            influencer_image_mime_type: mimeOf(inf.mime),
+            clothing_image: clo.base64,
+            clothing_image_mime_type: mimeOf(clo.mime),
+            ...(p.additional_instructions
+              ? { additional_instructions: p.additional_instructions }
+              : {}),
+            model: IMAGE_MODEL_MAP[p.model] ?? 'gemini-3.1-flash-image-preview',
+            resolution: IMAGE_RES[p.resolution],
+            aspect_ratio: p.aspect_ratio,
+          } as GenerateVirtualTryOnDto;
+          const created = await this.generations.generateVirtualTryOn(
+            userId,
+            dto,
+          );
+          if (!p.wait)
+            return this.result({ id: created.id, status: created.status });
+          const gen = await this.waitFor(
+            userId,
+            created.id,
+            (p.max_wait_seconds ?? 180) * 1000,
+          );
+          return await this.mediaResult(gen);
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
     // ── Get generation ────────────────────────────────────────────────
     server.registerTool(
       'geraew_get_generation',
@@ -582,6 +974,84 @@ export class McpServerFactory {
               this.summarize(g),
             ),
           });
+        } catch (error) {
+          return this.errorResult(error);
+        }
+      },
+    );
+
+    // ── Estimate cost (preflight, spends nothing) ─────────────────────
+    server.registerTool(
+      'geraew_estimate_cost',
+      {
+        title: 'Estimate Credit Cost',
+        description:
+          'Preflight the credit cost of a generation BEFORE running it — a price check. Returns how many credits the operation would cost, whether the user has enough balance, and whether a free generation applies. Call this when the user asks "how much does X cost?", or before an expensive video / large batch so they can confirm. This generates NOTHING and consumes NO credits.',
+        inputSchema: {
+          operation: z
+            .enum([
+              'image',
+              'video',
+              'motion_control',
+              'face_swap',
+              'upscale',
+              'virtual_try_on',
+            ])
+            .describe('Which kind of generation you want to price.'),
+          resolution: z
+            .enum(['1k', '2k', '4k', '720p', '1080p'])
+            .default('2k')
+            .describe('Use 1k/2k/4k for images, 720p/1080p/4k for videos.'),
+          model: z
+            .enum([
+              'Nano Banana 2',
+              'Nano Banana Pro',
+              'GPT Image 2',
+              'Geraew Unlocked',
+              'geraew-fast',
+              'geraew-quality',
+            ])
+            .optional()
+            .describe(
+              'Model whose pricing to use (affects image and video cost).',
+            ),
+          duration_seconds: z
+            .number()
+            .int()
+            .min(1)
+            .max(60)
+            .optional()
+            .describe('For video / motion_control.'),
+          generate_audio: z
+            .boolean()
+            .default(false)
+            .describe('For video: audio increases the cost.'),
+          count: z
+            .number()
+            .int()
+            .min(1)
+            .max(8)
+            .default(1)
+            .describe('Number of samples (cost scales linearly).'),
+        },
+        annotations: {
+          readOnlyHint: true,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
+      },
+      async (p) => {
+        try {
+          const est = await this.credits.estimateCost(
+            userId,
+            ESTIMATE_TYPE[p.operation],
+            ALL_RES[p.resolution],
+            p.duration_seconds,
+            p.generate_audio,
+            p.count ?? 1,
+            p.model ? MODEL_VARIANTS[p.model] : undefined,
+          );
+          return this.result(est);
         } catch (error) {
           return this.errorResult(error);
         }

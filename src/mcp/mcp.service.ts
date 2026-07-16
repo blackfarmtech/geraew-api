@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as express from 'express';
 import type { Express, Request, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -10,7 +11,18 @@ import { McpConfig } from './mcp.config';
 import { GeraewOAuthProvider, LOGIN_PAGE_CSP } from './oauth/geraew-oauth.provider';
 import { McpServerFactory } from './mcp-server.factory';
 import { renderLoginPage } from './oauth/login-page';
+import { renderUploadPage, UPLOAD_PAGE_CSP } from './upload-page';
+import { UploadSessionStore } from './upload-session.store';
+import { UploadsService } from '../uploads/uploads.service';
 import { AuthService } from '../auth/auth.service';
+
+/** Content types accepted by the drop page → file extension. */
+const UPLOAD_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
  * Mounts the remote MCP connector on the underlying Express app:
@@ -27,6 +39,8 @@ export class McpService {
     private readonly provider: GeraewOAuthProvider,
     private readonly factory: McpServerFactory,
     private readonly authService: AuthService,
+    private readonly uploadSessions: UploadSessionStore,
+    private readonly uploads: UploadsService,
   ) {}
 
   mount(app: Express): void {
@@ -71,9 +85,106 @@ export class McpService {
       },
     );
 
+    // ── "Bring your own image" drop page ──────────────────────────────
+    // Unauthenticated on purpose: the opaque session token in the path is the
+    // capability. Created by the MCP tool `geraew_upload_image`; the user opens
+    // the link and drops their image, which the tool then references by URL.
+    const rawImage = express.raw({ type: () => true, limit: '30mb' });
+    // The MCP Apps upload widget runs in a sandboxed (opaque-origin) iframe, so
+    // its POST is cross-origin and triggers a CORS preflight. The opaque token
+    // in the path is the capability, so a wildcard origin is acceptable here.
+    app.options('/u/:token', (_req, res) => {
+      this.setUploadCors(res);
+      res.status(204).end();
+    });
+    app.get('/u/:token', (req, res) => this.renderDrop(req, res));
+    app.post('/u/:token', rawImage, (req, res) => {
+      this.handleUpload(req, res).catch((err) => {
+        this.logger.error(`upload handler error: ${err?.message}`);
+        if (!res.headersSent) {
+          this.setUploadCors(res);
+          res.status(500).json({ ok: false, message: 'Internal error' });
+        }
+      });
+    });
+
     this.logger.log(
       `MCP connector mounted at ${this.config.resourceUrl.href} (issuer ${this.config.issuerUrl.href})`,
     );
+  }
+
+  /** Serves the drop page for an upload session (or an expired/done state). */
+  private renderDrop(req: Request, res: Response): void {
+    const token = String(req.params.token ?? '');
+    const session = this.uploadSessions.get(token);
+    const html = session
+      ? renderUploadPage({
+          action: `/u/${encodeURIComponent(token)}`,
+          alreadyUrl:
+            session.status === 'completed' ? session.imageUrl : undefined,
+        })
+      : renderUploadPage({ action: '', expired: true });
+    res
+      .status(session ? 200 : 410)
+      .set('Content-Type', 'text/html; charset=utf-8')
+      .set('Content-Security-Policy', UPLOAD_PAGE_CSP)
+      .send(html);
+  }
+
+  /** Permissive CORS for the token-capability upload endpoint (see mount()). */
+  private setUploadCors(res: Response): void {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Max-Age', '600');
+  }
+
+  /** Receives the raw image bytes, stores them in R2, completes the session. */
+  private async handleUpload(req: Request, res: Response): Promise<void> {
+    this.setUploadCors(res);
+    const token = String(req.params.token ?? '');
+    const session = this.uploadSessions.get(token);
+    if (!session) {
+      res.status(410).json({ ok: false, message: 'Link expirado.' });
+      return;
+    }
+
+    const contentType = String(req.headers['content-type'] ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    const ext = UPLOAD_EXT[contentType];
+    if (!ext) {
+      res.status(400).json({
+        ok: false,
+        message: 'Formato não suportado. Use PNG, JPG ou WEBP.',
+      });
+      return;
+    }
+
+    const body = req.body as unknown;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      res.status(400).json({ ok: false, message: 'Arquivo vazio.' });
+      return;
+    }
+    if (body.length > MAX_UPLOAD_BYTES) {
+      res
+        .status(400)
+        .json({ ok: false, message: 'Arquivo muito grande (máx 25MB).' });
+      return;
+    }
+
+    const url = await this.uploads.uploadBuffer(
+      body,
+      `mcp-uploads/${session.userId}`,
+      `reference.${ext}`,
+      contentType,
+    );
+    this.uploadSessions.complete(token, url);
+    this.logger.log(
+      `MCP upload stored for session ${token} (${body.length} bytes)`,
+    );
+    res.status(200).json({ ok: true, url });
   }
 
   private async handleLogin(req: Request, res: Response): Promise<void> {
