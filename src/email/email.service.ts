@@ -258,7 +258,8 @@ export class EmailService implements OnModuleInit {
   async sendAffiliatePaymentEmail(params: {
     to: string;
     name: string;
-    totalCents: number;
+    /** um total por moeda — comissões de moedas diferentes não são somadas */
+    totals: { currency: string; cents: number }[];
     earningsCount: number;
     attachment?: { filename: string; content: string; contentType?: string };
   }): Promise<void> {
@@ -272,7 +273,7 @@ export class EmailService implements OnModuleInit {
         from: this.fromEmail,
         to: [params.to],
         subject: 'Suas comissões foram pagas — Geraew',
-        html: this.getAffiliatePaymentTemplate(params.name, params.totalCents, params.earningsCount),
+        html: this.getAffiliatePaymentTemplate(params.name, params.totals, params.earningsCount),
         ...(params.attachment && {
           attachments: [
             {
@@ -756,17 +757,19 @@ export class EmailService implements OnModuleInit {
 
   private getAffiliatePaymentTemplate(
     name: string,
-    totalCents: number,
+    totals: { currency: string; cents: number }[],
     earningsCount: number,
   ): string {
     const dashboardUrl = `${this.frontendUrl}/painel-afiliado`;
     const logoHtml = this.logoUrl
       ? `<img src="${this.logoUrl}" alt="Geraew" width="80" height="80" style="display: block; border-radius: 12px;">`
       : '';
-    const totalFormatted = (totalCents / 100).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    });
+    // um valor por moeda, empilhados — nunca somados
+    const totalFormatted = totals
+      .map(({ currency, cents }) =>
+        (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency }),
+      )
+      .join('<br>');
     const earningsLabel = earningsCount === 1 ? '1 comissão paga' : `${earningsCount} comissões pagas`;
 
     return `
