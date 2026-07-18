@@ -4,6 +4,7 @@ import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/
 import { EmailService } from '../email/email.service';
 import { AsaasSubscriptionsService } from './asaas-subscriptions.service';
 import { StripeService } from './stripe.service';
+import { normalizeCurrency, stripeFeeCents } from '../common/utils/currency.util';
 
 const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
@@ -175,7 +176,7 @@ export class PaymentsService {
       });
 
       // Registrar comissão do afiliado se o usuário foi indicado
-      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
+      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, currency, referredByCode);
 
       // Welcome bonus Ultra Basic: 2 vídeos grátis (GERAEW_FAST) no primeiro acesso.
       // Idempotente por usuário: só concede se o user nunca teve ultra-basic antes.
@@ -301,7 +302,7 @@ export class PaymentsService {
       });
 
       // Registrar comissão do afiliado se o usuário foi indicado
-      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, referredByCode);
+      await this.recordAffiliateEarning(tx, userId, payment.id, amountCents, currency, referredByCode);
 
       return true;
     });
@@ -577,7 +578,7 @@ export class PaymentsService {
         select: { referredByCode: true },
       });
       if (user?.referredByCode) {
-        await this.recordAffiliateEarning(tx, subscription.userId, payment.id, amountCents, user.referredByCode);
+        await this.recordAffiliateEarning(tx, subscription.userId, payment.id, amountCents, currency, user.referredByCode);
       }
     });
 
@@ -975,12 +976,14 @@ export class PaymentsService {
   /**
    * Registra comissão do afiliado para um pagamento.
    * Busca o afiliado pelo código, calcula a comissão e cria o registro.
+   * A comissão é gravada na moeda da compra — nunca convertida aqui.
    */
   private async recordAffiliateEarning(
     tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
     userId: string,
     paymentId: string,
     amountCents: number,
+    currency: string,
     referredByCode?: string,
   ): Promise<void> {
     if (!referredByCode || amountCents <= 0) return;
@@ -992,8 +995,8 @@ export class PaymentsService {
 
     if (!affiliate?.isActive) return;
 
-    // Calcula valor líquido após taxa Stripe (3.99% + R$0,39)
-    const stripeFee = Math.round(amountCents * 0.0399) + 39;
+    const cur = normalizeCurrency(currency);
+    const stripeFee = stripeFeeCents(amountCents, cur);
     const netAmountCents = amountCents - stripeFee;
 
     const commissionCents = Math.round(
@@ -1009,12 +1012,13 @@ export class PaymentsService {
         userId,
         amountCents: netAmountCents,
         commissionCents,
+        currency: cur,
         status: 'PENDING',
       },
     });
 
     this.logger.log(
-      `Affiliate earning recorded: ${commissionCents} centavos for affiliate ${affiliate.id} (${affiliate.commissionPercent}% of net ${netAmountCents}, original ${amountCents}, stripe fee ${stripeFee})`,
+      `Affiliate earning recorded: ${commissionCents} ${cur} cents for affiliate ${affiliate.id} (${affiliate.commissionPercent}% of net ${netAmountCents}, original ${amountCents}, stripe fee ${stripeFee})`,
     );
   }
 }
