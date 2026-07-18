@@ -58,11 +58,14 @@ export class GenerateGeminiOmniVideoDto {
   prompt: string;
 
   @ApiProperty({
+    // 4K removido: o Omni Flash não controla resolução (o modelo decide);
+    // cobrar o premium de 4K sem entregar era um mismatch. 720p/1080p têm o
+    // mesmo preço. O fallback KIE também passa a receber só 720p/1080p.
     description: 'Resolução do vídeo',
-    enum: ['RES_720P', 'RES_1080P', 'RES_4K'],
+    enum: ['RES_720P', 'RES_1080P'],
   })
   @IsEnum(Resolution)
-  @IsIn(['RES_720P', 'RES_1080P', 'RES_4K'])
+  @IsIn(['RES_720P', 'RES_1080P'])
   resolution: Resolution;
 
   @ApiProperty({
