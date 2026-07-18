@@ -115,7 +115,23 @@ export class McpServerFactory {
   ) {}
 
   build(userId: string): McpServer {
-    const server = new McpServer({ name: 'geraew', version: '1.0.0' });
+    // Advertise the MCP Apps UI extension so the host (claude.ai) enables
+    // rendering of our `ui://` widget resource. Without the server declaring
+    // this, hosts negotiate the capability one-sided and fail to load the app
+    // ("Não foi possível acessar…"). Mirrors the client-side capability.
+    const server = new McpServer(
+      { name: 'geraew', version: '1.0.0' },
+      {
+        capabilities: {
+          resources: {},
+          extensions: {
+            'io.modelcontextprotocol/ui': {
+              mimeTypes: [UPLOAD_WIDGET_MIME],
+            },
+          },
+        },
+      },
+    );
     // Register via a loosely-typed reference: the zod raw-shape generics on
     // registerTool are extremely expensive to infer and blow up tsc's heap
     // when combined with this project's large type graph.
@@ -341,15 +357,22 @@ export class McpServerFactory {
           },
         },
       },
-      () => ({
-        contents: [
-          {
-            uri: UPLOAD_WIDGET_URI,
-            mimeType: UPLOAD_WIDGET_MIME,
-            text: UPLOAD_WIDGET_HTML,
-          },
-        ],
-      }),
+      () => {
+        // Diagnostic: proves the host actually fetched the UI resource. If this
+        // never logs but the widget still errors, the host isn't negotiating
+        // the UI extension; if it logs but the widget won't render, the issue
+        // is client-side (CSP / iframe handshake).
+        this.logger.log(`MCP Apps UI resource read: ${UPLOAD_WIDGET_URI}`);
+        return {
+          contents: [
+            {
+              uri: UPLOAD_WIDGET_URI,
+              mimeType: UPLOAD_WIDGET_MIME,
+              text: UPLOAD_WIDGET_HTML,
+            },
+          ],
+        };
+      },
     );
 
     const waitControls = {
