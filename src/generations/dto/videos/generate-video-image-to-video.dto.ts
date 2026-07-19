@@ -34,12 +34,14 @@ export class GenerateVideoImageToVideoDto {
 
   @ApiPropertyOptional({
     description: 'Duracao do video em segundos',
+    enum: [4, 6, 8],
     default: 8,
     example: 8,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @IsIn([4, 6, 8])
   duration_seconds?: number;
 
   @ApiPropertyOptional({

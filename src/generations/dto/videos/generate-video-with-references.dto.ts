@@ -59,13 +59,16 @@ export class GenerateVideoWithReferencesDto {
   resolution: Resolution;
 
   @ApiPropertyOptional({
-    description: 'Duracao do video em segundos',
+    description:
+      'Duracao do video em segundos. Com imagens de referencia o Veo 3.1 so gera 8s — outros valores sao ajustados para 8 automaticamente.',
+    enum: [4, 6, 8],
     default: 8,
     example: 8,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @IsIn([4, 6, 8])
   duration_seconds?: number;
 
   @ApiPropertyOptional({

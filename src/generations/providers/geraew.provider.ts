@@ -21,6 +21,9 @@ const VIDEO_RESOLUTION_MAP: Record<string, string> = {
 /** Modelo Vertex (Interactions API) usado pelo endpoint /generate-omni */
 const OMNI_VERTEX_MODEL = 'gemini-omni-flash-preview';
 
+/** Única duração aceita pelo Veo 3.1 quando há imagens de referência */
+const REFERENCE_VIDEO_DURATION_SECONDS = 8;
+
 // ─── Input interfaces ───────────────────────────────────────
 
 export interface TextToVideoInput {
@@ -264,6 +267,21 @@ export class GeraewProvider {
         reference_type: ref.referenceType,
       })),
     };
+
+    // O Veo 3.1 só gera 8s quando há imagens de referência — 4s/6s são
+    // rejeitados pela API. O custo em créditos é fixo por geração
+    // (isPerSecond = false), então forçar 8s não cobra nada a mais.
+    if (
+      input.referenceImages.length > 0 &&
+      body.duration_seconds !== REFERENCE_VIDEO_DURATION_SECONDS
+    ) {
+      if (input.durationSeconds !== undefined) {
+        this.logger.warn(
+          `Duração ${input.durationSeconds}s não é suportada com imagens de referência — ajustando para ${REFERENCE_VIDEO_DURATION_SECONDS}s (generation ${input.id})`,
+        );
+      }
+      body.duration_seconds = REFERENCE_VIDEO_DURATION_SECONDS;
+    }
 
     return this.startAndPollVideo(
       '/api/video/generate-references',
