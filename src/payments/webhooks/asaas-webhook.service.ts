@@ -8,11 +8,12 @@ import { Prisma } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { WebhookLogsService } from '../../webhook-logs/webhook-logs.service';
 import { PaymentsService } from '../payments.service';
-import { AsaasService } from '../asaas.service';
+import { AsaasService, AsaasPaymentStatusResult } from '../asaas.service';
 import { AsaasSubscriptionsService } from '../asaas-subscriptions.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../email/email.service';
 import { ConversionsService } from '../../marketing/conversions.service';
+import { decodeAsaasReference } from '../external-reference.util';
 
 interface AsaasWebhookEnvelope {
   event?: string;
@@ -33,17 +34,6 @@ interface AsaasWebhookEnvelope {
     status?: string;
     externalReference?: string | null;
   };
-}
-
-interface BoostExternalRef {
-  userId?: string;
-  packageId?: string;
-  referredByCode?: string;
-}
-
-interface SubscriptionExternalRef {
-  userId?: string;
-  planSlug?: string;
 }
 
 /**
@@ -185,14 +175,12 @@ export class AsaasWebhookService {
       return;
     }
 
-    // Se o payment referencia uma autorização PIX Auto, é cobrança recorrente.
-    // Senão, é boost (fluxo original).
-    const authorizationId = await this.getAuthorizationIdOfPayment(paymentId);
+    const subscriptionId = await this.resolveSubscriptionId(payment);
 
-    if (authorizationId) {
+    if (subscriptionId) {
       await this.processRecurringChargePaid(
         paymentId,
-        authorizationId,
+        subscriptionId,
         payment.amountCents,
       );
     } else {
@@ -200,50 +188,79 @@ export class AsaasWebhookService {
     }
   }
 
-  private async getAuthorizationIdOfPayment(
-    paymentId: string,
+  /**
+   * Descobre a qual subscription um pagamento pertence. Três vínculos, do mais
+   * confiável para o menos:
+   *
+   * 1. `externalReference` — nós mesmos gravamos o id da assinatura ao criar a
+   *    cobrança recorrente, e o ASAAS devolve intacto. É a única fonte que não
+   *    depende de campo opcional deles.
+   * 2. `pixAutomaticAuthorizationId` — presente nas cobranças recorrentes.
+   * 3. `customer` — o pagamento do QR inicial é sintético ("Cobrança gerada
+   *    automaticamente a partir de Pix recebido"), vem sem externalReference e
+   *    sem authorizationId; o customer é o único elo. Sem este fallback a
+   *    primeira cobrança de toda assinatura PIX era classificada como boost e
+   *    descartada, e nenhuma receita PIX era registrada.
+   *
+   * Retorna null quando o pagamento não é de assinatura (ex.: boost).
+   */
+  private async resolveSubscriptionId(
+    payment: AsaasPaymentStatusResult,
   ): Promise<string | null> {
-    // ASAAS payment retornado por GET /payments/{id} inclui o campo
-    // pixAutomaticAuthorizationId quando aplicável. Aqui replicamos a chamada
-    // pra ter o dado mais atual (já está sendo feita em checkPaymentStatus,
-    // mas o helper retorna shape reduzido). Vou inferir do externalReference por enquanto:
-    // o controller que criou a cobrança recorrente colocou { userId, planSlug, authId } no externalReference.
-    // Se ASAAS não preservar isso, faremos um GET /payments/{id} aqui depois.
-    try {
-      const raw = await fetch(
-        `${this.asaasBaseUrl()}/payments/${encodeURIComponent(paymentId)}`,
-        {
-          headers: {
-            access_token: this.asaasApiKey(),
-            Accept: 'application/json',
-          },
-        },
-      );
-      if (!raw.ok) return null;
-      const data = (await raw.json()) as { pixAutomaticAuthorizationId?: string };
-      return data.pixAutomaticAuthorizationId ?? null;
-    } catch {
-      return null;
-    }
-  }
+    const ref = decodeAsaasReference(payment.externalReference);
 
-  // Helpers privados pra reusar config do AsaasService
-  private asaasBaseUrl(): string {
-    return (this.asaasService as unknown as { baseUrl: string }).baseUrl ??
-      'https://api-sandbox.asaas.com/v3';
-  }
-  private asaasApiKey(): string {
-    return (this.asaasService as unknown as { apiKey: string }).apiKey ?? '';
+    if (ref?.kind === 'subscription') {
+      const found = await this.prisma.subscription.findUnique({
+        where: { id: ref.subscriptionId },
+        select: { id: true },
+      });
+      if (found) return found.id;
+      this.logger.warn(
+        `externalReference aponta para subscription ${ref.subscriptionId} inexistente`,
+      );
+    }
+
+    if (payment.pixAutomaticAuthorizationId) {
+      const found = await this.prisma.subscription.findFirst({
+        where: { asaasAuthorizationId: payment.pixAutomaticAuthorizationId },
+        select: { id: true },
+      });
+      if (found) return found.id;
+    }
+
+    // Boost tem referência própria — não é assinatura e não deve cair no
+    // fallback por customer.
+    if (ref?.kind === 'boost') return null;
+
+    if (payment.customerId) {
+      const found = await this.prisma.subscription.findFirst({
+        where: {
+          paymentMethod: 'pix_auto_asaas',
+          status: { in: ['ACTIVE', 'TRIALING'] },
+          user: { asaasCustomerId: payment.customerId },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (found) {
+        this.logger.log(
+          `Payment ${payment.id} vinculado à subscription ${found.id} via customer ${payment.customerId}`,
+        );
+        return found.id;
+      }
+    }
+
+    return null;
   }
 
   private async processBoostPaid(
     paymentId: string,
     payment: { amountCents: number; externalReference?: string | null },
   ): Promise<void> {
-    const ref = this.parseBoostRef(payment.externalReference);
-    if (!ref.userId || !ref.packageId) {
+    const ref = decodeAsaasReference(payment.externalReference);
+    if (ref?.kind !== 'boost') {
       this.logger.error(
-        `Payment ${paymentId} sem userId/packageId — não dá pra creditar`,
+        `Payment ${paymentId} sem referência de boost utilizável — não dá pra creditar`,
       );
       return;
     }
@@ -280,17 +297,17 @@ export class AsaasWebhookService {
    */
   private async processRecurringChargePaid(
     paymentId: string,
-    authorizationId: string,
+    subscriptionId: string,
     amountCents: number,
   ): Promise<void> {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: { asaasAuthorizationId: authorizationId },
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
       include: { plan: true, user: true },
     });
 
     if (!subscription) {
       this.logger.warn(
-        `Payment ${paymentId} aponta pra autorização ${authorizationId} sem subscription local`,
+        `Payment ${paymentId} aponta pra subscription ${subscriptionId} inexistente`,
       );
       return;
     }
@@ -304,23 +321,38 @@ export class AsaasWebhookService {
       const existing = await tx.payment.findFirst({
         where: { externalPaymentId: paymentId },
       });
-      if (existing) {
-        this.logger.log(`Payment ${paymentId} já registrado, skip`);
+
+      // Só é reprocessamento se o pagamento já foi liquidado. O cron cria a
+      // cobrança como PENDING ao agendá-la; tratar isso como "já registrado"
+      // faria o webhook de liquidação abortar e a assinatura nunca renovar.
+      if (existing?.status === 'COMPLETED') {
+        this.logger.log(`Payment ${paymentId} já liquidado, skip`);
         return false;
       }
 
-      await tx.payment.create({
-        data: {
-          userId: subscription.userId,
-          type: 'SUBSCRIPTION',
-          amountCents,
-          currency: 'BRL',
-          status: 'COMPLETED',
-          provider: 'asaas',
-          externalPaymentId: paymentId,
-          subscriptionId: subscription.id,
-        },
-      });
+      if (existing) {
+        await tx.payment.update({
+          where: { id: existing.id },
+          data: {
+            status: 'COMPLETED',
+            amountCents,
+            subscriptionId: subscription.id,
+          },
+        });
+      } else {
+        await tx.payment.create({
+          data: {
+            userId: subscription.userId,
+            type: 'SUBSCRIPTION',
+            amountCents,
+            currency: 'BRL',
+            status: 'COMPLETED',
+            provider: 'asaas',
+            externalPaymentId: paymentId,
+            subscriptionId: subscription.id,
+          },
+        });
+      }
 
       await tx.subscription.update({
         where: { id: subscription.id },
@@ -423,18 +455,4 @@ export class AsaasWebhookService {
     }
   }
 
-  private parseBoostRef(raw: string | null | undefined): BoostExternalRef {
-    if (!raw) return {};
-    try {
-      const parsed = JSON.parse(raw) as BoostExternalRef;
-      return {
-        userId: typeof parsed.userId === 'string' ? parsed.userId : undefined,
-        packageId: typeof parsed.packageId === 'string' ? parsed.packageId : undefined,
-        referredByCode:
-          typeof parsed.referredByCode === 'string' ? parsed.referredByCode : undefined,
-      };
-    } catch {
-      return {};
-    }
-  }
 }

@@ -31,6 +31,10 @@ export interface AsaasPaymentStatusResult {
   status: AsaasPixStatus;
   amountCents: number;
   externalReference?: string | null;
+  /** Customer do ASAAS. Único vínculo disponível no pagamento sintético do QR inicial. */
+  customerId?: string | null;
+  /** Presente apenas nas cobranças recorrentes que nós criamos. */
+  pixAutomaticAuthorizationId?: string | null;
 }
 
 interface CreatePixInput {
@@ -54,6 +58,7 @@ interface AsaasPayment {
   customer: string;
   billingType: string;
   externalReference?: string | null;
+  pixAutomaticAuthorizationId?: string | null;
   dueDate: string;
 }
 
@@ -192,6 +197,8 @@ export class AsaasService {
       status: this.mapStatus(payment.status),
       amountCents: Math.round(payment.value * 100),
       externalReference: payment.externalReference ?? null,
+      customerId: payment.customer ?? null,
+      pixAutomaticAuthorizationId: payment.pixAutomaticAuthorizationId ?? null,
     };
   }
 

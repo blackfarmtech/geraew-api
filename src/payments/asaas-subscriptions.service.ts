@@ -224,6 +224,10 @@ export class AsaasSubscriptionsService {
         return 'EXPIRED';
       case 'REJECTED':
       case 'DENIED':
+      // O ASAAS devolve REFUSED quando o pagador recusa a autorização no app
+      // do banco. Sem este caso, caía no default e virava PENDING — uma
+      // autorização recusada ficava parecendo que ainda ia ser aprovada.
+      case 'REFUSED':
         return 'REJECTED';
       case 'CREATED':
       case 'PENDING':

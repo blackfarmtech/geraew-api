@@ -18,6 +18,7 @@ import { PlansService } from '../plans/plans.service';
 import { AsaasService } from './asaas.service';
 import { AsaasWebhookService } from './webhooks/asaas-webhook.service';
 import { CreatePixBoostDto } from './dto/create-pix-boost.dto';
+import { encodeAsaasReference } from './external-reference.util';
 import { PixResponseDto } from './dto/pix-response.dto';
 import { ConversionsService } from '../marketing/conversions.service';
 
@@ -74,7 +75,8 @@ export class AsaasController {
       customerId,
       amountCents: price.priceCents,
       description: `Boost — ${pkg.name}`,
-      externalReference: JSON.stringify({
+      externalReference: encodeAsaasReference({
+        kind: 'boost',
         userId,
         packageId: pkg.id,
         ...(user.referredByCode ? { referredByCode: user.referredByCode } : {}),
