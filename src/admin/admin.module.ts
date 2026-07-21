@@ -15,6 +15,7 @@ import { PrecificacaoService } from './precificacao/precificacao.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { ModelsModule } from '../models/models.module';
+import { CronModule } from '../cron/cron.module';
 import { GENERATION_UNLIMITED_QUEUE } from '../generations/queue/generation-queue.constants';
 
 @Module({
@@ -22,6 +23,7 @@ import { GENERATION_UNLIMITED_QUEUE } from '../generations/queue/generation-queu
     PrismaModule,
     UploadsModule,
     ModelsModule,
+    CronModule,
     BullModule.registerQueue({ name: GENERATION_UNLIMITED_QUEUE }),
   ],
   controllers: [AdminController, AdminStripeController, AdminUnlimitedController, AdminCronsController, AdminVertexController, PrecificacaoController],

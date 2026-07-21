@@ -213,6 +213,54 @@ describe('PixAutoBillingService', () => {
     });
   });
 
+  describe('disparo manual (opções)', () => {
+    it('respeita maxCharges — para de cobrar ao atingir o teto', async () => {
+      const { service, createRecurringCharge } = build({
+        subscriptions: [
+          makeSub({ id: 'sub_1' }),
+          makeSub({ id: 'sub_2' }),
+          makeSub({ id: 'sub_3' }),
+        ],
+      });
+
+      const summary = await service.run(new Date('2026-07-08T06:00:00Z'), {
+        maxCharges: 1,
+      });
+
+      expect(summary.criadas).toBe(1);
+      expect(createRecurringCharge).toHaveBeenCalledTimes(1);
+    });
+
+    it('dryRunOverride simula mesmo sem a env de dry_run', async () => {
+      const { service, createRecurringCharge } = build({
+        subscriptions: [makeSub()],
+      });
+
+      const summary = await service.run(new Date('2026-07-08T06:00:00Z'), {
+        dryRunOverride: true,
+      });
+
+      expect(summary.modo).toBe('dry_run');
+      expect(summary.simuladas).toBe(1);
+      expect(summary.criadas).toBe(0);
+      expect(createRecurringCharge).not.toHaveBeenCalled();
+    });
+
+    it('onlySubscriptionId restringe a busca a uma assinatura', async () => {
+      const { service, prisma } = build({ subscriptions: [makeSub()] });
+
+      await service.run(new Date('2026-07-08T06:00:00Z'), {
+        onlySubscriptionId: 'sub_alvo',
+      });
+
+      expect(prisma.subscription.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'sub_alvo' }),
+        }),
+      );
+    });
+  });
+
   describe('modo dry run', () => {
     it('não chama o ASAAS e apenas contabiliza o que faria', async () => {
       const { service, createRecurringCharge } = build({

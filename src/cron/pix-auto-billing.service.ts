@@ -46,7 +46,7 @@ type SkipReason =
   | 'sem_customer_id'
   | 'autorizacao_inativa';
 
-interface BillingSummary extends Record<string, unknown> {
+export interface BillingSummary extends Record<string, unknown> {
   candidatos: number;
   criadas: number;
   simuladas: number;
@@ -59,6 +59,19 @@ interface BillingSummary extends Record<string, unknown> {
     statusAsaas: string;
   }>;
   modo: 'live' | 'dry_run';
+}
+
+/**
+ * Opções do disparo manual (endpoint de admin). No cron agendado nada disso é
+ * passado — roda com os defaults (sem limite, todas as assinaturas elegíveis).
+ */
+export interface RunOptions {
+  /** Teto de cobranças a criar nesta execução. Protege o teste controlado. */
+  maxCharges?: number;
+  /** Restringe a uma única assinatura — usado para validar 1 cobrança real. */
+  onlySubscriptionId?: string;
+  /** Sobrescreve o modo dry-run do ambiente (true = simula, false = cobra). */
+  dryRunOverride?: boolean;
 }
 
 /**
@@ -103,7 +116,11 @@ export class PixAutoBillingService {
   }
 
   /** Exposto para o disparo manual do admin e para os testes. */
-  async run(now: Date = new Date()): Promise<BillingSummary> {
+  async run(
+    now: Date = new Date(),
+    options: RunOptions = {},
+  ): Promise<BillingSummary> {
+    const dryRun = options.dryRunOverride ?? this.dryRun;
     const today = todayInBrasilia(now);
     const lookaheadEnd = new Date(now.getTime() + LOOKAHEAD_DAYS * 86400000);
     const overdueFloor = new Date(now.getTime() - MAX_OVERDUE_DAYS * 86400000);
@@ -114,6 +131,9 @@ export class PixAutoBillingService {
         paymentMethod: 'pix_auto_asaas',
         asaasAuthorizationStatus: 'ACTIVE',
         currentPeriodEnd: { gte: overdueFloor, lte: lookaheadEnd },
+        ...(options.onlySubscriptionId
+          ? { id: options.onlySubscriptionId }
+          : {}),
       },
       include: { plan: true, user: true },
     });
@@ -126,7 +146,7 @@ export class PixAutoBillingService {
       puladas: {},
       erros: [],
       dessincronizadas: [],
-      modo: this.dryRun ? 'dry_run' : 'live',
+      modo: dryRun ? 'dry_run' : 'live',
     };
 
     const skip = (reason: SkipReason) => {
@@ -138,6 +158,15 @@ export class PixAutoBillingService {
     );
 
     for (const sub of candidates) {
+      // Trava do disparo manual: para de criar quando atinge o teto pedido.
+      // Não afeta o cron agendado (sem maxCharges).
+      if (
+        options.maxCharges != null &&
+        summary.criadas + summary.simuladas >= options.maxCharges
+      ) {
+        break;
+      }
+
       try {
         // Uma cobrança por ciclo. Se a do ciclo atual já existe, nada a fazer.
         const alreadyCharged = await this.prisma.payment.findFirst({
@@ -192,7 +221,7 @@ export class PixAutoBillingService {
           continue;
         }
 
-        if (this.dryRun) {
+        if (dryRun) {
           summary.simuladas++;
           this.logger.log(
             `[DRY RUN] Criaria cobrança de R$ ${(sub.plan.priceCents / 100).toFixed(2)} ` +

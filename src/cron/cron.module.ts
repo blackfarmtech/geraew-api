@@ -21,6 +21,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     PaymentRecoveryCampaignService,
     PixAutoBillingService,
   ],
-  exports: [CronLoggerService],
+  exports: [CronLoggerService, PixAutoBillingService],
 })
 export class CronModule {}
