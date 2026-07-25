@@ -9,6 +9,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PlansService } from '../../plans/plans.service';
 import { StripeService } from '../../payments/stripe.service';
 import { CreditsService } from '../../credits/credits.service';
+import { ConfigService } from '@nestjs/config';
+import { AsaasService } from '../../payments/asaas.service';
+import { AsaasSubscriptionsService } from '../../payments/asaas-subscriptions.service';
+import { PaymentsService } from '../../payments/payments.service';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -105,8 +109,23 @@ const mockPrisma = {
   },
 };
 
+const PLANS_BY_ID: Record<string, any> = {
+  'plan-free': mockPlanFree,
+  'plan-starter': mockPlanStarter,
+  'plan-pro': mockPlanPro,
+  'plan-studio': mockPlanStudio,
+};
+
 const mockPlansService = {
   findPlanBySlug: jest.fn(),
+  resolvePlanPrice: jest.fn(async (planId: string) => {
+    const plan = PLANS_BY_ID[planId];
+    return {
+      currency: 'BRL',
+      priceCents: plan?.priceCents ?? 0,
+      stripePriceId: plan?.stripePriceId ?? null,
+    };
+  }),
 };
 
 const mockStripeService = {
@@ -118,10 +137,32 @@ const mockStripeService = {
   applyRetentionDiscount: jest.fn(),
   pauseSubscription: jest.fn(),
   getSubscriptionDiscount: jest.fn(),
+  findLiveSubscription: jest.fn(),
+  createBillingPortalSession: jest.fn(),
 };
 
 const mockCreditsService = {
   addBonusCredits: jest.fn(),
+};
+
+const mockAsaasService = {
+  createSubscription: jest.fn(),
+  cancelSubscription: jest.fn(),
+};
+
+const mockAsaasSubscriptionsService = {
+  getAuthorization: jest.fn(),
+  createAuthorization: jest.fn(),
+};
+
+const mockPaymentsService = {
+  activatePixAutoSubscription: jest.fn(),
+};
+
+const mockConfigService = {
+  get: jest.fn((key: string) =>
+    key === 'FRONTEND_URL' ? 'https://geraew.ai' : undefined,
+  ),
 };
 
 // ── Test Suite ───────────────────────────────────────────────────────
@@ -132,6 +173,10 @@ describe('SubscriptionsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    // Default: nenhuma subscription viva no Stripe. Os testes que exercitam a
+    // barreira anti-duplicidade sobrescrevem isso.
+    mockStripeService.findLiveSubscription.mockResolvedValue(null);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SubscriptionsService,
@@ -139,6 +184,13 @@ describe('SubscriptionsService', () => {
         { provide: PlansService, useValue: mockPlansService },
         { provide: StripeService, useValue: mockStripeService },
         { provide: CreditsService, useValue: mockCreditsService },
+        { provide: AsaasService, useValue: mockAsaasService },
+        {
+          provide: AsaasSubscriptionsService,
+          useValue: mockAsaasSubscriptionsService,
+        },
+        { provide: PaymentsService, useValue: mockPaymentsService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -247,6 +299,49 @@ describe('SubscriptionsService', () => {
       await expect(service.createSubscription('user-1', 'pro')).rejects.toThrow(
         'Usuário já possui uma assinatura ativa. Use upgrade ou downgrade.',
       );
+    });
+
+    // Regressão: cliente com fatura atrasada conseguia passar pelo checkout e
+    // criar uma segunda assinatura paralela do mesmo plano. Se o retry do Stripe
+    // aprovasse a fatura antiga depois, ele ficava com duas subs cobrando.
+    it('deve mandar para o billing portal quando a assinatura está PAST_DUE, sem criar checkout novo', async () => {
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanPro, { status: 'PAST_DUE' }),
+      );
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue(mockUser);
+      mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
+      mockStripeService.createBillingPortalSession.mockResolvedValue(
+        'https://billing.stripe.com/p/session_past_due',
+      );
+
+      const result = await service.createSubscription('user-1', 'pro');
+
+      expect(result).toEqual({
+        checkoutUrl: 'https://billing.stripe.com/p/session_past_due',
+      });
+      expect(mockStripeService.createSubscriptionCheckout).not.toHaveBeenCalled();
+    });
+
+    it('deve mandar para o billing portal quando o Stripe tem sub viva sem registro no banco', async () => {
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue(mockUser);
+      mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
+      mockStripeService.findLiveSubscription.mockResolvedValue({
+        id: 'sub_stripe_orfa',
+        status: 'past_due',
+      });
+      mockStripeService.createBillingPortalSession.mockResolvedValue(
+        'https://billing.stripe.com/p/session_orfa',
+      );
+
+      const result = await service.createSubscription('user-1', 'pro');
+
+      expect(result).toEqual({
+        checkoutUrl: 'https://billing.stripe.com/p/session_orfa',
+      });
+      expect(mockStripeService.createSubscriptionCheckout).not.toHaveBeenCalled();
     });
 
     it('deve criar customer no Stripe quando não existe', async () => {

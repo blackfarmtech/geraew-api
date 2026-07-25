@@ -252,6 +252,35 @@ export class StripeService {
    * Faz upgrade de subscription: cria nova sub com cupom (cobra só a diferença)
    * e cancela a antiga. Cria a nova ANTES de cancelar a antiga para segurança.
    */
+  /**
+   * Busca no Stripe qualquer subscription do customer que ainda esteja cobrando
+   * (active, past_due, trialing ou unpaid). Usado como segunda barreira antes de
+   * criar um checkout novo, para o caso do banco estar dessincronizado do Stripe.
+   */
+  async findLiveSubscription(
+    customerId: string,
+  ): Promise<{ id: string; status: string } | null> {
+    const LIVE_STATUSES = ['active', 'past_due', 'trialing', 'unpaid'];
+
+    try {
+      const subs = await this.stripe.subscriptions.list({
+        customer: customerId,
+        status: 'all',
+        limit: 100,
+      });
+
+      const live = subs.data.find((s) => LIVE_STATUSES.includes(s.status));
+      return live ? { id: live.id, status: live.status } : null;
+    } catch (error) {
+      // Nunca bloquear a venda por instabilidade do Stripe — a trava do banco
+      // já cobre o caso normal; esta aqui é defesa em profundidade.
+      this.logger.error(
+        `Falha ao listar subscriptions de ${customerId}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   async upgradeSubscription(
     customerId: string,
     oldSubscriptionId: string,

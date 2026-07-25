@@ -114,19 +114,46 @@ export class SubscriptionsService {
       );
     }
 
+    // PAST_DUE conta como assinatura existente. Sem isso, quem tem fatura
+    // atrasada consegue passar pelo checkout e criar uma SEGUNDA assinatura
+    // paralela — e se o retry do Stripe aprovar a fatura antiga depois, o
+    // usuário fica com duas subs ativas cobrando o mesmo plano.
     const existing = await this.prisma.subscription.findFirst({
       where: {
         userId,
-        status: { in: ['ACTIVE', 'TRIALING'] },
+        status: { in: ['ACTIVE', 'PAST_DUE', 'TRIALING'] },
         plan: { slug: { not: 'free' } },
       },
       include: { plan: true },
     });
 
+    if (existing?.status === 'PAST_DUE') {
+      // Bloquear seria um beco sem saída: ele não conseguiria pagar de jeito
+      // nenhum. Mandamos pro billing portal, onde troca o cartão e quita a
+      // fatura em aberto na assinatura que já existe.
+      this.logger.warn(
+        `User ${userId} tentou assinar ${planSlug} com subscription ${existing.id} PAST_DUE — redirecionando para o billing portal`,
+      );
+      const { portalUrl } = await this.createBillingPortalSession(userId);
+      return { checkoutUrl: portalUrl };
+    }
+
     if (existing) {
       throw new ConflictException(
         'Usuário já possui uma assinatura ativa. Use upgrade ou downgrade.',
       );
+    }
+
+    // Segunda barreira, direto no Stripe: protege contra divergência entre o
+    // banco e o provider (webhook perdido, sub criada fora do fluxo, etc).
+    const customerId = await this.getStripeCustomerId(userId);
+    const stripeSub = await this.stripeService.findLiveSubscription(customerId);
+    if (stripeSub) {
+      this.logger.warn(
+        `User ${userId} tem subscription ${stripeSub.id} (${stripeSub.status}) no Stripe sem registro ativo no banco — redirecionando para o billing portal`,
+      );
+      const { portalUrl } = await this.createBillingPortalSession(userId);
+      return { checkoutUrl: portalUrl };
     }
 
     const checkoutUrl = await this.buildCheckoutForPlan(
@@ -875,6 +902,14 @@ export class SubscriptionsService {
       status: auth.status,
       subscriptionActive: false,
     };
+  }
+
+  private async getStripeCustomerId(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    return this.stripeService.getOrCreateCustomer(userId, user.email, user.name);
   }
 
   private async buildCheckoutForPlan(
