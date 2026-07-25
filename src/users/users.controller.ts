@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CompleteOnboardingProfileDto } from './dto/complete-onboarding-profile.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 import { CurrentUser } from '../common/decorators';
 
@@ -69,6 +70,26 @@ export class UsersController {
     @CurrentUser('sub') userId: string,
   ): Promise<UserProfileResponseDto> {
     return this.usersService.completeOnboarding(userId);
+  }
+
+  @Patch('me/onboarding-profile')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Salvar cadastro de perfil (nicho + contato) do primeiro acesso',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Perfil salvo com sucesso',
+    type: UserProfileResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  async completeOnboardingProfile(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CompleteOnboardingProfileDto,
+  ): Promise<UserProfileResponseDto> {
+    return this.usersService.completeOnboardingProfile(userId, dto);
   }
 
   @Delete('me')

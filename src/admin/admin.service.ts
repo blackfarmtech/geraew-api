@@ -370,6 +370,15 @@ export class AdminService {
       oauthProvider: user.oauthProvider,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      // cadastro de perfil respondido no primeiro acesso
+      profileCompletedAt: user.profileCompletedAt,
+      profileType: user.profileType,
+      profileTypeOther: user.profileTypeOther,
+      niche: user.niche,
+      nicheOther: user.nicheOther,
+      salesChannels: user.salesChannels,
+      phone: user.phone,
+      instagramHandle: user.instagramHandle,
       subscription: user.subscriptions[0]
         ? {
             id: user.subscriptions[0].id,
@@ -949,6 +958,160 @@ export class AdminService {
       totalRevenueCents,
       totalApiCostCents,
       marginPercent,
+    };
+  }
+
+  /**
+   * Dashboard de público: agregações do cadastro de perfil (nicho + contato)
+   * respondido no primeiro acesso.
+   *
+   * A coorte é por data de cadastro do usuário — `days` omitido traz todo o
+   * histórico. Só entram contas ativas. "Pagante" = assinatura ACTIVE em plano
+   * diferente de `free`, que é como o resto do admin conta.
+   */
+  async getAudienceInsights(days?: number) {
+    const since = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : null;
+    const cohort = since
+      ? Prisma.sql`AND u.created_at >= ${since}`
+      : Prisma.empty;
+
+    const [totals, profileTypes, niches, channels, otherProfileTypes, otherNiches, daily] =
+      await Promise.all([
+        this.prisma.$queryRaw<
+          [
+            {
+              active_users: number;
+              answered: number;
+              with_phone: number;
+              with_instagram: number;
+            },
+          ]
+        >`
+          SELECT COUNT(*)::int AS active_users,
+                 COUNT(u.profile_completed_at)::int AS answered,
+                 COUNT(u.phone)::int AS with_phone,
+                 COUNT(u.instagram_handle)::int AS with_instagram
+          FROM users u
+          WHERE u.is_active = true
+          ${cohort}
+        `,
+
+        // perfil × conversão em plano pago
+        this.prisma.$queryRaw<
+          { id: string; users: number; paid_users: number }[]
+        >`
+          SELECT u.profile_type AS id,
+                 COUNT(DISTINCT u.id)::int AS users,
+                 COUNT(DISTINCT CASE WHEN p.slug IS NOT NULL AND p.slug <> 'free' THEN u.id END)::int AS paid_users
+          FROM users u
+          LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'ACTIVE'
+          LEFT JOIN plans p ON p.id = s.plan_id
+          WHERE u.is_active = true
+            AND u.profile_type IS NOT NULL
+            ${cohort}
+          GROUP BY u.profile_type
+          ORDER BY users DESC
+        `,
+
+        // nicho × conversão em plano pago
+        this.prisma.$queryRaw<
+          { id: string; users: number; paid_users: number }[]
+        >`
+          SELECT u.niche AS id,
+                 COUNT(DISTINCT u.id)::int AS users,
+                 COUNT(DISTINCT CASE WHEN p.slug IS NOT NULL AND p.slug <> 'free' THEN u.id END)::int AS paid_users
+          FROM users u
+          LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'ACTIVE'
+          LEFT JOIN plans p ON p.id = s.plan_id
+          WHERE u.is_active = true
+            AND u.niche IS NOT NULL
+            ${cohort}
+          GROUP BY u.niche
+          ORDER BY users DESC
+        `,
+
+        // canais — coluna array, um usuário conta em vários
+        this.prisma.$queryRaw<{ id: string; users: number }[]>`
+          SELECT ch AS id, COUNT(*)::int AS users
+          FROM users u, unnest(u.sales_channels) AS ch
+          WHERE u.is_active = true
+          ${cohort}
+          GROUP BY ch
+          ORDER BY users DESC
+        `,
+
+        // respostas abertas de perfil
+        this.prisma.$queryRaw<{ text: string; users: number }[]>`
+          SELECT u.profile_type_other AS text, COUNT(*)::int AS users
+          FROM users u
+          WHERE u.is_active = true
+            AND u.profile_type = 'OTHER'
+            AND u.profile_type_other IS NOT NULL
+            ${cohort}
+          GROUP BY u.profile_type_other
+          ORDER BY users DESC, text ASC
+          LIMIT 50
+        `,
+
+        // respostas abertas de nicho
+        this.prisma.$queryRaw<{ text: string; users: number }[]>`
+          SELECT u.niche_other AS text, COUNT(*)::int AS users
+          FROM users u
+          WHERE u.is_active = true
+            AND u.niche = 'OTHER'
+            AND u.niche_other IS NOT NULL
+            ${cohort}
+          GROUP BY u.niche_other
+          ORDER BY users DESC, text ASC
+          LIMIT 50
+        `,
+
+        // respostas por dia — adoção do formulário
+        this.prisma.$queryRaw<{ date: Date; count: number }[]>`
+          SELECT DATE_TRUNC('day', u.profile_completed_at)::date AS date,
+                 COUNT(*)::int AS count
+          FROM users u
+          WHERE u.is_active = true
+            AND u.profile_completed_at IS NOT NULL
+            ${cohort}
+          GROUP BY 1
+          ORDER BY 1 ASC
+        `,
+      ]);
+
+    const t = totals[0] ?? {
+      active_users: 0,
+      answered: 0,
+      with_phone: 0,
+      with_instagram: 0,
+    };
+
+    return {
+      periodDays: days ?? null,
+      totals: {
+        activeUsers: t.active_users,
+        answered: t.answered,
+        pending: t.active_users - t.answered,
+        withPhone: t.with_phone,
+        withInstagram: t.with_instagram,
+      },
+      profileTypes: profileTypes.map((r) => ({
+        id: r.id,
+        users: r.users,
+        paidUsers: r.paid_users,
+      })),
+      niches: niches.map((r) => ({
+        id: r.id,
+        users: r.users,
+        paidUsers: r.paid_users,
+      })),
+      channels,
+      otherProfileTypes: otherProfileTypes,
+      otherNiches: otherNiches,
+      daily: daily.map((r) => ({
+        date: r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date),
+        count: r.count,
+      })),
     };
   }
 

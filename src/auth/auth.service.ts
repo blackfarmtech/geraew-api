@@ -253,6 +253,7 @@ export class AuthService {
       role: user.role,
       emailVerified: user.emailVerified,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
+      profileCompleted: !!user.profileCompletedAt,
       createdAt: user.createdAt,
     };
   }

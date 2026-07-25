@@ -22,6 +22,12 @@ export class UserResponseDto {
   @ApiProperty()
   hasCompletedOnboarding: boolean;
 
+  @ApiProperty({
+    description:
+      'true quando o usuário já respondeu o cadastro de perfil (nicho + contato)',
+  })
+  profileCompleted: boolean;
+
   @ApiProperty()
   createdAt: Date;
 }

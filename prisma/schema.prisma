@@ -23,6 +23,19 @@ model User {
   createdAt               DateTime                  @default(now()) @map("created_at")
   updatedAt               DateTime                  @updatedAt @map("updated_at")
   hasCompletedOnboarding  Boolean                   @default(false) @map("has_completed_onboarding")
+  /// * cadastro de perfil (nicho + contato) exigido no primeiro acesso — null = ainda não respondeu
+  profileCompletedAt      DateTime?                 @map("profile_completed_at")
+  /// * quem o usuário é: SELLER | AFFILIATE | PHOTOGRAPHER | SOCIAL_MEDIA | BRAND_AGENCY | AI_SERVICES | OTHER
+  profileType             String?                   @map("profile_type")
+  /// * texto livre preenchido quando profileType = OTHER
+  profileTypeOther        String?                   @map("profile_type_other")
+  /// * nicho em que atua: FASHION | BEAUTY | HEALTH | ... (ver users.constants.ts)
+  niche                   String?
+  /// * texto livre preenchido quando niche = OTHER
+  nicheOther              String?                   @map("niche_other")
+  /// * onde vende/publica hoje: TIKTOK_SHOP | SHOPEE | INSTAGRAM | ... (ver users.constants.ts)
+  salesChannels           String[]                  @default([]) @map("sales_channels")
+  instagramHandle         String?                   @map("instagram_handle")
   phone                   String?
   phoneVerified           Boolean?                  @map("phone_verified")
   referredByCode          String?                   @map("referred_by_code")
@@ -81,6 +94,8 @@ model User {
   @@index([oauthProvider, oauthProviderId])
   @@index([utmCampaign])
   @@index([utmSource])
+  @@index([profileType])
+  @@index([niche])
   @@map("users")
 }
 
@@ -509,18 +524,14 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// ============================================
-// MCP OAuth (remote connector) — dynamic clients, auth codes, refresh tokens.
-// userId is stored without a FK relation to avoid touching the User model.
-// ============================================
 model McpOAuthClient {
   id                      String   @id @default(cuid())
   clientId                String   @unique @map("client_id")
   clientSecretHash        String?  @map("client_secret_hash")
   clientName              String?  @map("client_name")
-  redirectUris            String[] @map("redirect_uris")
-  grantTypes              String[] @map("grant_types")
-  responseTypes           String[] @map("response_types")
+  redirectUris            String[] @default([]) @map("redirect_uris")
+  grantTypes              String[] @default([]) @map("grant_types")
+  responseTypes           String[] @default([]) @map("response_types")
   scope                   String?
   tokenEndpointAuthMethod String?  @map("token_endpoint_auth_method")
   clientIdIssuedAt        Int?     @map("client_id_issued_at")
@@ -539,7 +550,7 @@ model McpAuthCode {
   codeChallenge       String   @map("code_challenge")
   codeChallengeMethod String   @default("S256") @map("code_challenge_method")
   resource            String?
-  scopes              String[]
+  scopes              String[] @default([])
   expiresAt           DateTime @map("expires_at")
   createdAt           DateTime @default(now()) @map("created_at")
 
@@ -552,7 +563,7 @@ model McpRefreshToken {
   tokenHash String   @unique @map("token_hash")
   clientId  String   @map("client_id")
   userId    String   @map("user_id")
-  scopes    String[]
+  scopes    String[] @default([])
   resource  String?
   expiresAt DateTime @map("expires_at")
   revoked   Boolean  @default(false)
@@ -681,12 +692,12 @@ model AffiliateEarning {
   userId          String                 @map("user_id")
   amountCents     Int                    @map("amount_cents")
   commissionCents Int                    @map("commission_cents")
-  /// moeda de origem da compra, copiada de Payment.currency — saldos nunca são
-  /// somados entre moedas; a conversão para BRL acontece só no saque
-  currency        String                 @default("BRL")
   status          AffiliateEarningStatus @default(PENDING)
   paidAt          DateTime?              @map("paid_at")
   createdAt       DateTime               @default(now()) @map("created_at")
+  /// moeda de origem da compra, copiada de Payment.currency — saldos nunca são
+  /// somados entre moedas; a conversão para BRL acontece só no saque
+  currency        String                 @default("BRL")
   affiliate       Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   payment         Payment                @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   user            User                   @relation("referred_user_earnings", fields: [userId], references: [id], onDelete: Cascade)

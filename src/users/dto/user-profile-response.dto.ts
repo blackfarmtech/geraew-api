@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { NICHES, PROFILE_TYPES, SALES_CHANNELS } from '../users.constants';
 
 export class PlanInfoDto {
   @ApiProperty() slug: string;
@@ -40,6 +41,23 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional() plan: PlanInfoDto | null;
   @ApiPropertyOptional() credits: CreditInfoDto | null;
   @ApiPropertyOptional() subscription: SubscriptionInfoDto | null;
+  @ApiProperty({
+    description:
+      'true quando o usuário já respondeu o cadastro de perfil (nicho + contato)',
+  })
+  profileCompleted: boolean;
+  @ApiPropertyOptional({ enum: PROFILE_TYPES }) profileType: string | null;
+  @ApiPropertyOptional({ description: 'Texto livre quando profileType = OTHER' })
+  profileTypeOther: string | null;
+  @ApiPropertyOptional({ enum: NICHES }) niche: string | null;
+  @ApiPropertyOptional({ description: 'Texto livre quando niche = OTHER' })
+  nicheOther: string | null;
+  @ApiProperty({ enum: SALES_CHANNELS, isArray: true })
+  salesChannels: string[];
+  @ApiPropertyOptional({ description: 'Celular/WhatsApp em E.164' })
+  phone: string | null;
+  @ApiPropertyOptional({ description: 'Handle do Instagram, sem "@"' })
+  instagramHandle: string | null;
   @ApiProperty() feedbackSubmitted: boolean;
   @ApiProperty({ description: 'true se o usuário já cadastrou CPF/CNPJ em alguma compra PIX anterior' })
   hasTaxIdOnFile: boolean;

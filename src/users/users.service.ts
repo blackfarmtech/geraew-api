@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CompleteOnboardingProfileDto } from './dto/complete-onboarding-profile.dto';
+import { OTHER_OPTION } from './users.constants';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 
 function maskTaxId(taxId: string | null): string | null {
@@ -79,10 +81,54 @@ export class UsersService {
           cancelAtPeriodEnd: activeSubscription.cancelAtPeriodEnd,
         }
         : null,
+      profileCompleted: !!user.profileCompletedAt,
+      profileType: user.profileType,
+      profileTypeOther: user.profileTypeOther,
+      niche: user.niche,
+      nicheOther: user.nicheOther,
+      salesChannels: user.salesChannels,
+      phone: user.phone,
+      instagramHandle: user.instagramHandle,
       feedbackSubmitted: !!user.feedback,
       hasTaxIdOnFile: !!user.taxId,
       taxIdMasked: maskTaxId(user.taxId),
     };
+  }
+
+  /**
+   * Salva o cadastro de perfil (nicho + contato) pedido no primeiro acesso e
+   * marca `profileCompletedAt` — é isso que faz o modal parar de aparecer.
+   * Reenviar o formulário simplesmente atualiza os dados.
+   */
+  async completeOnboardingProfile(
+    userId: string,
+    dto: CompleteOnboardingProfileDto,
+  ): Promise<UserProfileResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isActive: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        profileType: dto.profileType,
+        niche: dto.niche,
+        // o texto livre só faz sentido junto da opção "Outro"
+        profileTypeOther:
+          dto.profileType === OTHER_OPTION ? (dto.profileTypeOther ?? null) : null,
+        nicheOther: dto.niche === OTHER_OPTION ? (dto.nicheOther ?? null) : null,
+        salesChannels: dto.salesChannels ?? [],
+        phone: dto.phone,
+        instagramHandle: dto.instagramHandle ?? null,
+        profileCompletedAt: user.profileCompletedAt ?? new Date(),
+      },
+    });
+
+    return this.getProfile(userId);
   }
 
   async updateProfile(

@@ -32,6 +32,7 @@ import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
 import { DateRangeDto } from './dto/date-range.dto';
+import { AudienceRangeDto } from './dto/audience-range.dto';
 import { AdminUploadDto } from './dto/admin-upload.dto';
 import { CreatePromptSectionDto } from './dto/create-prompt-section.dto';
 import { UpdatePromptSectionDto } from './dto/update-prompt-section.dto';
@@ -64,6 +65,15 @@ export class AdminController {
   @ApiOperation({ summary: 'Estatísticas financeiras (MRR, receita, margem)' })
   async getFinancialStats(@Query() dto: DateRangeDto) {
     return this.adminService.getFinancialStats(dto.days);
+  }
+
+  @Get('stats/audience')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Dashboard de público — perfil, nicho, canais e contato dos usuários',
+  })
+  async getAudienceInsights(@Query() dto: AudienceRangeDto) {
+    return this.adminService.getAudienceInsights(dto.days);
   }
 
   @Get('stats/utm-conversions')

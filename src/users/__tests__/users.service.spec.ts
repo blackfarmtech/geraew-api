@@ -45,8 +45,50 @@ const mockUser = {
   oauthProvider: null,
   oauthProviderId: null,
   passwordHash: 'hashed',
+  hasCompletedOnboarding: false,
+  country: null,
+  locale: 'pt-BR',
+  currency: 'BRL',
+  timezone: null,
+  profileCompletedAt: null,
+  profileType: null,
+  profileTypeOther: null,
+  niche: null,
+  nicheOther: null,
+  salesChannels: [],
+  phone: null,
+  instagramHandle: null,
+  taxId: null,
   subscriptions: [mockSubscription],
   creditBalance: mockCreditBalance,
+  feedback: null,
+};
+
+/** Campos do perfil que não dependem de plano/créditos/assinatura. */
+const expectedBaseProfile = {
+  id: 'user-1',
+  email: 'test@example.com',
+  name: 'Test User',
+  avatarUrl: null,
+  role: 'USER',
+  emailVerified: false,
+  createdAt: now,
+  hasCompletedOnboarding: false,
+  country: null,
+  locale: 'pt-BR',
+  currency: 'BRL',
+  timezone: null,
+  profileCompleted: false,
+  profileType: null,
+  profileTypeOther: null,
+  niche: null,
+  nicheOther: null,
+  salesChannels: [],
+  phone: null,
+  instagramHandle: null,
+  feedbackSubmitted: false,
+  hasTaxIdOnFile: false,
+  taxIdMasked: null,
 };
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -98,17 +140,12 @@ describe('UsersService', () => {
             include: { plan: true },
           },
           creditBalance: true,
+          feedback: { select: { id: true } },
         },
       });
 
       expect(result).toEqual({
-        id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        avatarUrl: null,
-        role: 'USER',
-        emailVerified: false,
-        createdAt: now,
+        ...expectedBaseProfile,
         plan: {
           slug: 'free',
           name: 'Free',
@@ -259,6 +296,134 @@ describe('UsersService', () => {
 
       // findUnique should be called twice: once for existence check, once for getProfile
       expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ─────────────── completeOnboardingProfile ───────────────
+
+  describe('completeOnboardingProfile', () => {
+    const dto = {
+      profileType: 'SELLER',
+      niche: 'BEAUTY',
+      salesChannels: ['TIKTOK_SHOP', 'INSTAGRAM'],
+      phone: '+5511912345678',
+      instagramHandle: 'geraew.ai',
+    };
+
+    it('should persist the answers and stamp profileCompletedAt', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(mockUser)
+        .mockResolvedValueOnce({ ...mockUser, ...dto, profileCompletedAt: now });
+
+      const result = await service.completeOnboardingProfile('user-1', dto);
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          profileType: 'SELLER',
+          niche: 'BEAUTY',
+          profileTypeOther: null,
+          nicheOther: null,
+          salesChannels: ['TIKTOK_SHOP', 'INSTAGRAM'],
+          phone: '+5511912345678',
+          instagramHandle: 'geraew.ai',
+          profileCompletedAt: expect.any(Date),
+        },
+      });
+      expect(result.profileCompleted).toBe(true);
+      expect(result.niche).toBe('BEAUTY');
+    });
+
+    it('should persist the free text when the answer is OTHER', async () => {
+      const otherDto = {
+        profileType: 'OTHER',
+        profileTypeOther: 'Dropshipping internacional',
+        niche: 'OTHER',
+        nicheOther: 'Papelaria criativa',
+        phone: '+5511912345678',
+      };
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(mockUser)
+        .mockResolvedValueOnce({ ...mockUser, ...otherDto, profileCompletedAt: now });
+
+      await service.completeOnboardingProfile('user-1', otherDto);
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            profileTypeOther: 'Dropshipping internacional',
+            nicheOther: 'Papelaria criativa',
+          }),
+        }),
+      );
+    });
+
+    it('should drop a stale free text when the answer is no longer OTHER', async () => {
+      const answered = {
+        ...mockUser,
+        profileType: 'OTHER',
+        profileTypeOther: 'Dropshipping internacional',
+        profileCompletedAt: now,
+      };
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(answered)
+        .mockResolvedValueOnce(answered);
+
+      // reenviando o formulário com uma opção da lista + texto antigo pendurado
+      await service.completeOnboardingProfile('user-1', {
+        ...dto,
+        profileTypeOther: 'Dropshipping internacional',
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ profileTypeOther: null }),
+        }),
+      );
+    });
+
+    it('should keep the original profileCompletedAt when answering again', async () => {
+      const answered = { ...mockUser, profileCompletedAt: now };
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(answered)
+        .mockResolvedValueOnce({ ...answered, ...dto });
+
+      await service.completeOnboardingProfile('user-1', dto);
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ profileCompletedAt: now }),
+        }),
+      );
+    });
+
+    it('should default salesChannels to an empty array when omitted', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(mockUser)
+        .mockResolvedValueOnce(mockUser);
+
+      await service.completeOnboardingProfile('user-1', {
+        profileType: 'PHOTOGRAPHER',
+        niche: 'FASHION',
+        phone: '+5511912345678',
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            salesChannels: [],
+            instagramHandle: null,
+          }),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.completeOnboardingProfile('nonexistent', dto),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

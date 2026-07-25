@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from '../users.controller';
 import { UsersService } from '../users.service';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import { CompleteOnboardingProfileDto } from '../dto/complete-onboarding-profile.dto';
 import { UserProfileResponseDto } from '../dto/user-profile-response.dto';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
@@ -42,6 +43,14 @@ const mockProfile: UserProfileResponseDto = {
     currentPeriodEnd: now,
     cancelAtPeriodEnd: false,
   },
+  profileCompleted: false,
+  profileType: null,
+  profileTypeOther: null,
+  niche: null,
+  nicheOther: null,
+  salesChannels: [],
+  phone: null,
+  instagramHandle: null,
   feedbackSubmitted: false,
   hasTaxIdOnFile: false,
   taxIdMasked: null,
@@ -50,6 +59,7 @@ const mockProfile: UserProfileResponseDto = {
 const mockUsersService = {
   getProfile: jest.fn().mockResolvedValue(mockProfile),
   updateProfile: jest.fn().mockResolvedValue(mockProfile),
+  completeOnboardingProfile: jest.fn().mockResolvedValue(mockProfile),
   deleteAccount: jest
     .fn()
     .mockResolvedValue({ message: 'Conta desativada com sucesso' }),
@@ -95,6 +105,26 @@ describe('UsersController', () => {
         dto,
       );
       expect(mockUsersService.updateProfile).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(mockProfile);
+    });
+  });
+
+  describe('completeOnboardingProfile', () => {
+    it('should delegate to usersService.completeOnboardingProfile(userId, dto)', async () => {
+      const dto: CompleteOnboardingProfileDto = {
+        profileType: 'SELLER',
+        niche: 'BEAUTY',
+        salesChannels: ['TIKTOK_SHOP'],
+        phone: '+5511912345678',
+      };
+
+      const result = await controller.completeOnboardingProfile('user-1', dto);
+
+      expect(mockUsersService.completeOnboardingProfile).toHaveBeenCalledWith(
+        'user-1',
+        dto,
+      );
+      expect(mockUsersService.completeOnboardingProfile).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockProfile);
     });
   });
