@@ -127,6 +127,7 @@ export class VisualAnalyzerService {
     userText: string,
   ): Promise<string> {
     const res = await this.chatClient.chat({
+      caller: 'POST /brands (visual-analyzer)',
       system_instruction: SYSTEM_PROMPT,
       max_output_tokens: 4096,
       temperature: 0.3,

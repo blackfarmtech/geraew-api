@@ -17,9 +17,12 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
-  // Body parsers that preserve rawBody for Stripe webhook verification
-  app.use(express.json({ limit: '50mb', verify: (req: any, _res, buf) => { req.rawBody = buf; } }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // Body parsers that preserve rawBody for Stripe webhook verification.
+  // As imagens de referência trafegam em base64 dentro do JSON: 8 referências de
+  // 10 MB (teto do front) viram ~107 MB depois do encode, então o limite precisa
+  // de folga sobre isso.
+  app.use(express.json({ limit: '150mb', verify: (req: any, _res, buf) => { req.rawBody = buf; } }));
+  app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
   // Enable CORS with restricted origins
   const allowedOrigins = [

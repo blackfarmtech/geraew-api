@@ -8,11 +8,12 @@ export class UpscaleImageDto {
 
   @ApiPropertyOptional({
     description: 'MIME type da imagem de entrada',
+    enum: ['image/jpeg', 'image/png', 'image/webp'],
     default: 'image/png',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['image/jpeg', 'image/png'])
+  @IsIn(['image/jpeg', 'image/png', 'image/webp'])
   mime_type?: string;
 
   @ApiProperty({

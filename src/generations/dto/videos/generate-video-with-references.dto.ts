@@ -19,12 +19,12 @@ export class ReferenceImageDto {
 
   @ApiPropertyOptional({
     description: 'MIME type da imagem',
-    enum: ['image/jpeg', 'image/png'],
+    enum: ['image/jpeg', 'image/png', 'image/webp'],
     default: 'image/jpeg',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['image/jpeg', 'image/png'])
+  @IsIn(['image/jpeg', 'image/png', 'image/webp'])
   mime_type?: string;
 
   @ApiProperty({

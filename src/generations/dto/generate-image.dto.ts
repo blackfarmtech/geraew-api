@@ -18,11 +18,12 @@ export class ImageInputDto {
 
   @ApiPropertyOptional({
     description: 'MIME type da imagem',
+    enum: ['image/jpeg', 'image/png', 'image/webp'],
     default: 'image/png',
   })
   @IsOptional()
   @IsString()
-  @IsIn(['image/jpeg', 'image/png'])
+  @IsIn(['image/jpeg', 'image/png', 'image/webp'])
   mime_type?: string;
 }
 

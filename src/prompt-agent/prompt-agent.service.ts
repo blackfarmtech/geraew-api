@@ -274,6 +274,7 @@ export class PromptAgentService {
 
   private async callModel(imageBlock: ChatPart, extraUserText?: string): Promise<string> {
     const res = await this.chatClient.chat({
+      caller: 'POST /prompt-agent/analyze-image',
       system_instruction: SYSTEM_PROMPT,
       max_output_tokens: 4096,
       temperature: 0.2,

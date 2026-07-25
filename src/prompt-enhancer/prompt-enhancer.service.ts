@@ -781,6 +781,7 @@ export class PromptEnhancerService {
     parts.push({ text: textMessage });
 
     const response = await this.chatClient.chat({
+      caller: 'POST /prompt-enhancer/enhance',
       system_instruction: SYSTEM_PROMPT,
       max_output_tokens: 1500,
       temperature: 0.7,
@@ -955,6 +956,7 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     );
 
     const response = await this.chatClient.chat({
+      caller: 'safety-refiner (fila de geração)',
       system_instruction: PromptEnhancerService.SAFETY_REFINER_SYSTEM_PROMPT,
       max_output_tokens: 1500,
       temperature: 0.7,
@@ -1013,6 +1015,7 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     this.logger.log(`[INFLUENCER] Input: ${hasReferenceImage ? '[reference image]' : JSON.stringify(characterSelections)}`);
 
     const response = await this.chatClient.chat({
+      caller: 'POST /prompt-enhancer/enhance-influencer',
       system_instruction: systemPrompt,
       max_output_tokens: 6000,
       temperature: 1.0,
