@@ -139,9 +139,9 @@ export class PlansService {
       return PlansService.calculateOmniCost(resolution, durationSeconds, hasVideoInput);
     }
 
-    // Bytedance Seedance 2.0 — per-second, varia por resolution e hasVideoInput.
-    if (modelVariant === 'SEEDANCE_2') {
-      return PlansService.calculateSeedanceCost(resolution, durationSeconds, hasVideoInput);
+    // Bytedance Seedance 2.0 / 2.5 — per-second, varia por resolution e hasVideoInput.
+    if (modelVariant === 'SEEDANCE_2' || modelVariant === 'SEEDANCE_2_5') {
+      return PlansService.calculateSeedanceCost(resolution, durationSeconds, hasVideoInput, modelVariant);
     }
 
     const cost = await this.getCreditCost(generationType, resolution, hasAudio, modelVariant);
@@ -214,14 +214,30 @@ export class PlansService {
     RES_1080P: 440,
   };
 
+  // Pricing Bytedance Seedance 2.5 — mesma estrutura do 2.0.
+  // TODO(preço): valores PROVISÓRIOS = cópia do Seedance 2.0. Confirmar o custo
+  // real do 'bytedance/seedance-2-5' na KIE e reancorar (~1408 cr/USD).
+  private static readonly SEEDANCE_2_5_PRICING_NO_VIDEO: Record<string, number> = {
+    RES_480P:  130,
+    RES_720P:  290,
+    RES_1080P: 720,
+  };
+  private static readonly SEEDANCE_2_5_PRICING_WITH_VIDEO: Record<string, number> = {
+    RES_480P:   80,
+    RES_720P:  175,
+    RES_1080P: 440,
+  };
+
   private static calculateSeedanceCost(
     resolution: Resolution,
     durationSeconds: number | undefined,
     hasVideoInput: boolean,
+    modelVariant: 'SEEDANCE_2' | 'SEEDANCE_2_5' = 'SEEDANCE_2',
   ): number {
+    const is25 = modelVariant === 'SEEDANCE_2_5';
     const pricing = hasVideoInput
-      ? PlansService.SEEDANCE_PRICING_WITH_VIDEO
-      : PlansService.SEEDANCE_PRICING_NO_VIDEO;
+      ? is25 ? PlansService.SEEDANCE_2_5_PRICING_WITH_VIDEO : PlansService.SEEDANCE_PRICING_WITH_VIDEO
+      : is25 ? PlansService.SEEDANCE_2_5_PRICING_NO_VIDEO : PlansService.SEEDANCE_PRICING_NO_VIDEO;
     const perSecond = pricing[resolution];
     if (!perSecond) {
       throw new NotFoundException(
