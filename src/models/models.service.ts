@@ -27,6 +27,28 @@ export class ModelsService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     try {
       await this.prisma.aiModel.upsert({
+        where: { slug: 'bytedance-seedance-2-5' },
+        update: {},
+        create: {
+          slug: 'bytedance-seedance-2-5',
+          label: 'Seedance 2.5',
+          provider: AiModelProvider.KIE,
+          modelVariant: 'SEEDANCE_2_5',
+          sortOrder: 1,
+          type: AiModelType.VIDEO,
+          isActive: true,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to ensure 'bytedance-seedance-2-5' AiModel row: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+    }
+
+    try {
+      await this.prisma.aiModel.upsert({
         where: { slug: 'audio-generation' },
         update: {},
         create: {
