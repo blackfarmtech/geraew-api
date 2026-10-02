@@ -41,7 +41,8 @@ export function resolveFreeGenerationType(
   if (type === GenerationType.VIRTUAL_TRY_ON) return FreeGenerationType.VIRTUAL_TRY_ON;
   if (modelVariant === 'NB2') return FreeGenerationType.NB2;
   if (modelVariant === 'NBP') return FreeGenerationType.NB_PRO;
-  if (modelVariant === 'GERAEW_FAST') return FreeGenerationType.GERAEW_FAST;
+  // Vídeo grátis = Veo 3.1 Fast (KIE). O enum segue GERAEW_FAST por compatibilidade.
+  if (modelVariant === 'VEO_FAST') return FreeGenerationType.GERAEW_FAST;
   return null;
 }
 

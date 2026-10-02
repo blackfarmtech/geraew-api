@@ -25,7 +25,10 @@
     "CANNOT_PAUSE_FREE": "Não é possível pausar o plano Free",
     "NO_SCHEDULED_DOWNGRADE": "Nenhum downgrade agendado encontrado",
     "NO_CANCEL_PENDING": "Nenhuma assinatura ativa com cancelamento pendente encontrada",
-    "PLAN_NOT_FOUND": "Plano não encontrado"
+    "PLAN_NOT_FOUND": "Plano não encontrado",
+    "CHANGE_ONLY_AT_RENEWAL": "Essa troca de plano só vale na renovação. Agende-a pela opção de downgrade.",
+    "ANNUAL_NO_DISCOUNT_OFFER": "Ofertas de desconto e pausa não se aplicam ao plano anual.",
+    "ANNUAL_CANNOT_PAUSE": "Não é possível pausar o plano anual."
   },
   "generations": {
     "MAX_CONCURRENT_REACHED": "Limite de gerações simultâneas atingido",

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Resolution, SubscriptionStatus } from '@prisma/client';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,11 +25,23 @@ export class UnlimitedService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(UNLIMITED_REDIS) private readonly redis: Redis,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * O modo ilimitado foi descontinuado. O código continua aqui, mas só volta a
+   * valer com UNLIMITED_ENABLED=true explícito — qualquer outro valor (ou
+   * ausência) mantém o recurso desligado para todos os planos.
+   */
+  isEnabled(): boolean {
+    return this.configService.get<string>('UNLIMITED_ENABLED') === 'true';
+  }
 
   // ── Plan resolution ───────────────────────────────────────────────────
 
   async getPlanContext(userId: string): Promise<UnlimitedPlanContext | null> {
+    if (!this.isEnabled()) return null;
+
     const subscription = await this.prisma.subscription.findFirst({
       where: { userId, status: SubscriptionStatus.ACTIVE },
       orderBy: { currentPeriodEnd: 'desc' },

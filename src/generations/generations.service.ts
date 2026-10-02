@@ -58,10 +58,8 @@ import { containsNsfwContent } from './utils/nsfw-blocklist';
  * Mapeia o nome do modelo da API para o modelVariant usado na tabela credit_costs.
  * NBP = gemini-3-pro-image-preview (Nano Banana Pro)
  * NB2 = gemini-3.1-flash-image-preview (Nano Banana 2)
- * GERAEW_FAST = geraew-fast (geraew-provider)
- * GERAEW_QUALITY = geraew-quality (geraew-provider)
- * VEO_FAST = veo3_fast (KIE API)
- * VEO_MAX = veo3 (KIE API)
+ * VEO_FAST = veo3_fast (KIE API — exibido como "Veo 3.1 Fast")
+ * VEO_MAX = veo3 (KIE API — exibido como "Veo 3.1 Quality")
  */
 function getModelVariant(model: string | undefined | null): string | null {
   if (!model) return null;
@@ -75,11 +73,6 @@ function getModelVariant(model: string | undefined | null): string | null {
     'sem-censura': 'SEM_CENSURA',
     // GPT Image 2 (Kie API)
     'gpt-image-2': 'GPT_IMAGE_2',
-    // GeraEW provider (video)
-    'geraew-fast': 'GERAEW_FAST',
-    'geraew-quality': 'GERAEW_QUALITY',
-    'veo-3.1-fast-generate-001': 'GERAEW_FAST', // backward compat
-    'veo-3.1-generate-001': 'GERAEW_QUALITY', // backward compat
     // KIE API (Veo 3.1)
     veo3_fast: 'VEO_FAST',
     veo3: 'VEO_MAX',
@@ -97,32 +90,22 @@ function getModelVariant(model: string | undefined | null): string | null {
 }
 
 /**
- * Normaliza nomes legados de modelos para os slugs atuais do banco (tabela ai_models).
- * Necessário porque alguns DTOs ainda aceitam nomes antigos do Vertex AI.
+ * Os endpoints legados de vídeo (/text-to-video, /image-to-video,
+ * /video-with-references) aceitavam os modelos que rodavam na Vertex. A Vertex
+ * saiu do produto: esses endpoints continuam existindo (API/MCP), mas agora
+ * encaminham para o Veo 3.1 do KIE, e os nomes antigos viram o modelo KIE
+ * equivalente.
  */
-function normalizeVideoModelSlug(model: string): string {
-  const LEGACY_SLUG_MAP: Record<string, string> = {
-    'veo-3.1-fast-generate-001': 'geraew-fast',
-    'veo-3.1-generate-001': 'geraew-quality',
+function toKieVeoModel(model: string | undefined | null): 'veo3' | 'veo3_fast' {
+  const LEGACY_TO_KIE: Record<string, 'veo3' | 'veo3_fast'> = {
+    'geraew-fast': 'veo3_fast',
+    'veo-3.1-fast-generate-001': 'veo3_fast',
+    'geraew-quality': 'veo3',
+    'veo-3.1-generate-001': 'veo3',
+    veo3_fast: 'veo3_fast',
+    veo3: 'veo3',
   };
-  return LEGACY_SLUG_MAP[model] ?? model;
-}
-
-/**
- * Para modelos GeraEW (GERAEW_FAST / GERAEW_QUALITY), a resolução 4K
- * é gerada internamente como 1080p no provider, mas cobrada como 4K.
- * O registro no banco mantém RES_4K para exibição no frontend.
- */
-function effectiveVideoResolution(
-  resolution: Resolution,
-  modelVariant: string | null,
-): Resolution {
-  const isGeraew =
-    modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
-  if (isGeraew && resolution === Resolution.RES_4K) {
-    return Resolution.RES_1080P;
-  }
-  return resolution;
+  return (model && LEGACY_TO_KIE[model]) || 'veo3';
 }
 import { GenerationProcessor } from './queue/generation.processor';
 import {
@@ -273,6 +256,13 @@ export class GenerationsService {
     modelVariant: string | null,
     resolution: Resolution,
   ): Promise<UnlimitedEligibility> {
+    if (!this.unlimitedService.isEnabled()) {
+      throw new ForbiddenException({
+        code: 'UNLIMITED_DISABLED',
+        message: 'O modo ilimitado foi descontinuado. Gere normalmente usando seus créditos.',
+      });
+    }
+
     if (!modelVariant) {
       throw new BadRequestException({
         code: 'UNLIMITED_MODEL_NOT_ALLOWED',
@@ -876,450 +866,83 @@ export class GenerationsService {
     };
   }
 
-  // ─── Text to Video ────────────────────────────────────────
+  // ─── Veo 3.1 — endpoints legados (encaminham pro KIE) ─────
+  // Rodavam na Vertex (Geraew Provider). A Vertex saiu do produto: as rotas
+  // seguem existindo para clientes de API/MCP, mas viram as chamadas KIE
+  // equivalentes. Duração (sempre 8s), sample_count (sempre 1), negative_prompt
+  // e generate_audio (sempre com áudio) não existem no Veo do KIE e são ignorados.
 
   async generateTextToVideo(
     userId: string,
     dto: GenerateVideoTextToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
-    const type = GenerationType.TEXT_TO_VIDEO;
-    const hasAudio = dto.generate_audio ?? true;
-
-    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
-
-    const modelVariant = dto.model_variant ?? getModelVariant(dto.model);
-    const isUnlimited = dto.unlimited === true;
-
-    await this.modelsService.assertActiveBySlug(
-      normalizeVideoModelSlug(dto.model),
-      AiModelType.VIDEO,
-    );
-
-    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(
-      dto.resolution,
-      modelVariant,
-    );
-
-    await this.checkConcurrentLimit(userId);
-
-    let eligibility: UnlimitedEligibility | undefined;
-    let creditsRequired = 0;
-    let isFreeGeneration = false;
-
-    if (isUnlimited) {
-      eligibility = await this.reserveUnlimitedOrThrow(
-        userId,
-        modelVariant,
-        dto.resolution,
-      );
-    } else {
-      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-      isFreeGeneration = veoAccess === 'free_generation';
-      creditsRequired = isFreeGeneration
-        ? 0
-        : await this.plansService.calculateGenerationCost(
-            type,
-            dto.resolution,
-            dto.duration_seconds,
-            hasAudio,
-            sampleCount,
-            modelVariant,
-          );
-      if (!isFreeGeneration) {
-        await this.ensureSufficientBalance(userId, creditsRequired);
-      }
-    }
-
-    const generation = await this.prisma.generation.create({
-      data: {
-        userId,
-        type,
-        status: GenerationStatus.PROCESSING,
-        prompt: dto.prompt,
-        negativePrompt: dto.negative_prompt,
-        modelUsed: dto.model,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        hasAudio,
-        aspectRatio: dto.aspect_ratio,
-        quantity: sampleCount,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
-      },
-    });
-
-    if (!isUnlimited) {
-      if (isFreeGeneration) {
-        await this.creditsService.consumeFreeGeneration(
-          userId,
-          generation.id,
-          FreeGenerationType.GERAEW_FAST,
-        );
-      } else {
-        await this.debitCredits(
-          userId,
-          creditsRequired,
-          generation.id,
-          type,
-          dto.resolution,
-        );
-      }
-    }
-
-    const jobData: TextToVideoJobData = {
-      generationId: generation.id,
-      userId,
-      creditsConsumed: creditsRequired,
-      usedFreeGeneration: isFreeGeneration,
+    this.rejectUnlimitedVideo(dto.unlimited);
+    return this.generateTextToVideoKie(userId, {
       prompt: dto.prompt,
-      model: dto.model,
-      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-      durationSeconds: dto.duration_seconds,
-      aspectRatio: dto.aspect_ratio,
-      generateAudio: hasAudio,
-      sampleCount,
-      negativePrompt: dto.negative_prompt,
-    };
-
-    if (isUnlimited) {
-      await this.enqueueUnlimitedJob(eligibility!, {
-        userId,
-        generationId: generation.id,
-        modelVariant: modelVariant!,
-        resolution: dto.resolution,
-        jobName: GenerationJobName.TEXT_TO_VIDEO,
-        jobData,
-      });
-    } else {
-      await this.generationQueue.add(GenerationJobName.TEXT_TO_VIDEO, jobData);
-    }
-
-    return {
-      id: generation.id,
-      status: GenerationStatus.PROCESSING,
-      creditsConsumed: creditsRequired,
-    };
+      model: toKieVeoModel(dto.model),
+      resolution: dto.resolution,
+      aspect_ratio: dto.aspect_ratio,
+    });
   }
-
-  // ─── Image to Video ───────────────────────────────────────
 
   async generateImageToVideo(
     userId: string,
     dto: GenerateVideoImageToVideoDto,
   ): Promise<CreateGenerationResponseDto> {
-    const type = GenerationType.IMAGE_TO_VIDEO;
-    const model = dto.model ?? 'veo-3.1-generate-001';
-    const hasAudio = dto.generate_audio ?? true;
-
-    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
-
-    const modelVariant = dto.model_variant ?? getModelVariant(model);
-    const isUnlimited = dto.unlimited === true;
-
-    await this.modelsService.assertActiveBySlug(
-      normalizeVideoModelSlug(model),
-      AiModelType.VIDEO,
-    );
-
-    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(
-      dto.resolution,
-      modelVariant,
-    );
-
-    await this.checkConcurrentLimit(userId);
-
-    let eligibility: UnlimitedEligibility | undefined;
-    let creditsRequired = 0;
-    let isFreeGeneration = false;
-
-    if (isUnlimited) {
-      eligibility = await this.reserveUnlimitedOrThrow(
-        userId,
-        modelVariant,
-        dto.resolution,
-      );
-    } else {
-      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-      isFreeGeneration = veoAccess === 'free_generation';
-      creditsRequired = isFreeGeneration
-        ? 0
-        : await this.plansService.calculateGenerationCost(
-            type,
-            dto.resolution,
-            dto.duration_seconds,
-            hasAudio,
-            sampleCount,
-            modelVariant,
-          );
-      if (!isFreeGeneration) {
-        await this.ensureSufficientBalance(userId, creditsRequired);
-      }
-    }
-
-    const generation = await this.prisma.generation.create({
-      data: {
-        userId,
-        type,
-        status: GenerationStatus.PROCESSING,
-        prompt: dto.prompt,
-        negativePrompt: dto.negative_prompt,
-        modelUsed: model,
-        resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        hasAudio,
-        aspectRatio: dto.aspect_ratio,
-        quantity: sampleCount,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
-      },
-    });
-
-    const firstFrameUrl = await this.uploadBase64Image(
-      dto.first_frame,
-      dto.first_frame_mime_type ?? 'image/jpeg',
-      generation.id,
-    );
-    const inputImageData: Array<{
-      generationId: string;
-      role: GenerationImageRole;
-      mimeType: string;
-      order: number;
-      url: string;
-    }> = [
-      {
-        generationId: generation.id,
-        role: GenerationImageRole.FIRST_FRAME,
-        mimeType: dto.first_frame_mime_type ?? 'image/jpeg',
-        order: 0,
-        url: firstFrameUrl,
-      },
-    ];
-    if (dto.last_frame) {
-      const lastFrameUrl = await this.uploadBase64Image(
-        dto.last_frame,
-        dto.last_frame_mime_type ?? 'image/jpeg',
-        generation.id,
-      );
-      inputImageData.push({
-        generationId: generation.id,
-        role: GenerationImageRole.LAST_FRAME,
-        mimeType: dto.last_frame_mime_type ?? 'image/jpeg',
-        order: 1,
-        url: lastFrameUrl,
-      });
-    }
-    await this.prisma.generationInputImage.createMany({ data: inputImageData });
-
-    if (!isUnlimited) {
-      if (isFreeGeneration) {
-        await this.creditsService.consumeFreeGeneration(
-          userId,
-          generation.id,
-          FreeGenerationType.GERAEW_FAST,
-        );
-      } else {
-        await this.debitCredits(
-          userId,
-          creditsRequired,
-          generation.id,
-          type,
-          dto.resolution,
-        );
-      }
-    }
-
-    const jobData: ImageToVideoJobData = {
-      generationId: generation.id,
-      userId,
-      creditsConsumed: creditsRequired,
-      usedFreeGeneration: isFreeGeneration,
+    this.rejectUnlimitedVideo(dto.unlimited);
+    return this.generateImageToVideoKie(userId, {
       prompt: dto.prompt,
-      model: dto.model ?? model,
-      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-      durationSeconds: dto.duration_seconds,
-      aspectRatio: dto.aspect_ratio,
-      generateAudio: hasAudio,
-      sampleCount,
-      negativePrompt: dto.negative_prompt,
-      resolvedModel: model,
-    };
-
-    if (isUnlimited) {
-      await this.enqueueUnlimitedJob(eligibility!, {
-        userId,
-        generationId: generation.id,
-        modelVariant: modelVariant!,
-        resolution: dto.resolution,
-        jobName: GenerationJobName.IMAGE_TO_VIDEO,
-        jobData,
-      });
-    } else {
-      await this.generationQueue.add(GenerationJobName.IMAGE_TO_VIDEO, jobData);
-    }
-
-    return {
-      id: generation.id,
-      status: GenerationStatus.PROCESSING,
-      creditsConsumed: creditsRequired,
-    };
+      model: toKieVeoModel(dto.model),
+      resolution: dto.resolution,
+      aspect_ratio: dto.aspect_ratio,
+      first_frame: dto.first_frame,
+      first_frame_mime_type: dto.first_frame_mime_type,
+      last_frame: dto.last_frame,
+      last_frame_mime_type: dto.last_frame_mime_type,
+    });
   }
-
-  // ─── Video with References ────────────────────────────────
 
   async generateVideoWithReferences(
     userId: string,
     dto: GenerateVideoWithReferencesDto,
   ): Promise<CreateGenerationResponseDto> {
-    const type = GenerationType.REFERENCE_VIDEO;
-    const model = dto.model ?? 'veo-3.1-generate-001';
-    const hasAudio = dto.generate_audio ?? true;
+    this.rejectUnlimitedVideo(dto.unlimited);
+    const references = dto.reference_images ?? [];
 
-    const sampleCount = dto.unlimited === true ? 1 : (dto.sample_count ?? 1);
-
-    const modelVariant = dto.model_variant ?? getModelVariant(model);
-    const isUnlimited = dto.unlimited === true;
-
-    await this.modelsService.assertActiveBySlug(
-      normalizeVideoModelSlug(model),
-      AiModelType.VIDEO,
-    );
-
-    // GeraEW models: 4K is generated as 1080p internally, but charged at 4K
-    const providerResolution = effectiveVideoResolution(
-      dto.resolution,
-      modelVariant,
-    );
-
-    await this.checkConcurrentLimit(userId);
-
-    let eligibility: UnlimitedEligibility | undefined;
-    let creditsRequired = 0;
-    let isFreeGeneration = false;
-
-    if (isUnlimited) {
-      eligibility = await this.reserveUnlimitedOrThrow(
-        userId,
-        modelVariant,
-        dto.resolution,
-      );
-    } else {
-      const veoAccess = await this.checkVeoAccess(userId, modelVariant);
-      isFreeGeneration = veoAccess === 'free_generation';
-      creditsRequired = isFreeGeneration
-        ? 0
-        : await this.plansService.calculateGenerationCost(
-            type,
-            dto.resolution,
-            dto.duration_seconds,
-            hasAudio,
-            sampleCount,
-            modelVariant,
-          );
-      if (!isFreeGeneration) {
-        await this.ensureSufficientBalance(userId, creditsRequired);
-      }
-    }
-
-    const generation = await this.prisma.generation.create({
-      data: {
-        userId,
-        type,
-        status: GenerationStatus.PROCESSING,
+    if (references.length === 0) {
+      return this.generateTextToVideoKie(userId, {
         prompt: dto.prompt,
-        negativePrompt: dto.negative_prompt,
-        modelUsed: model,
+        model: toKieVeoModel(dto.model),
         resolution: dto.resolution,
-        durationSeconds: dto.duration_seconds,
-        hasAudio,
-        aspectRatio: dto.aspect_ratio,
-        quantity: sampleCount,
-        creditsConsumed: creditsRequired,
-        usedFreeGeneration: isFreeGeneration,
-        ...(isUnlimited ? { parameters: { unlimited: true } } : {}),
-      },
-    });
-
-    if (dto.reference_images?.length) {
-      const uploadedUrls = await Promise.all(
-        dto.reference_images.map((ref) =>
-          this.uploadBase64Image(
-            ref.base64,
-            ref.mime_type ?? 'image/jpeg',
-            generation.id,
-          ),
-        ),
-      );
-      await this.prisma.generationInputImage.createMany({
-        data: dto.reference_images.map((ref, i) => ({
-          generationId: generation.id,
-          role: GenerationImageRole.REFERENCE,
-          mimeType: ref.mime_type ?? 'image/jpeg',
-          order: i,
-          referenceType: ref.reference_type,
-          url: uploadedUrls[i],
-        })),
+        aspect_ratio: dto.aspect_ratio,
       });
     }
 
-    if (!isUnlimited) {
-      if (isFreeGeneration) {
-        await this.creditsService.consumeFreeGeneration(
-          userId,
-          generation.id,
-          FreeGenerationType.GERAEW_FAST,
-        );
-      } else {
-        await this.debitCredits(
-          userId,
-          creditsRequired,
-          generation.id,
-          type,
-          dto.resolution,
-        );
-      }
+    if (references.length > 3) {
+      throw new BadRequestException(
+        'O Veo 3.1 aceita no máximo 3 imagens de referência.',
+      );
     }
 
-    const jobData: ReferenceVideoJobData = {
-      generationId: generation.id,
-      userId,
-      creditsConsumed: creditsRequired,
-      usedFreeGeneration: isFreeGeneration,
+    return this.generateReferenceToVideoKie(userId, {
       prompt: dto.prompt,
-      model: dto.model ?? model,
-      resolution: providerResolution, // GeraEW 4K → 1080p for actual generation
-      durationSeconds: dto.duration_seconds,
-      aspectRatio: dto.aspect_ratio,
-      generateAudio: hasAudio,
-      sampleCount,
-      negativePrompt: dto.negative_prompt,
-      resolvedModel: model,
-    };
+      resolution: dto.resolution,
+      aspect_ratio: dto.aspect_ratio,
+      reference_images: references.map((ref) => ref.base64),
+      reference_images_mime_types: references.map(
+        (ref) => ref.mime_type ?? 'image/jpeg',
+      ),
+    });
+  }
 
-    if (isUnlimited) {
-      await this.enqueueUnlimitedJob(eligibility!, {
-        userId,
-        generationId: generation.id,
-        modelVariant: modelVariant!,
-        resolution: dto.resolution,
-        jobName: GenerationJobName.REFERENCE_VIDEO,
-        jobData,
+  /** O modo ilimitado de vídeo só existia nos modelos da Vertex. */
+  private rejectUnlimitedVideo(unlimited: boolean | undefined): void {
+    if (unlimited === true) {
+      throw new ForbiddenException({
+        code: 'UNLIMITED_DISABLED',
+        message: 'O modo ilimitado foi descontinuado. Gere normalmente usando seus créditos.',
       });
-    } else {
-      await this.generationQueue.add(
-        GenerationJobName.REFERENCE_VIDEO,
-        jobData,
-      );
     }
-
-    return {
-      id: generation.id,
-      status: GenerationStatus.PROCESSING,
-      creditsConsumed: creditsRequired,
-    };
   }
 
   // ─── Motion Control (Kling 2.6) ───────────────────────────
@@ -1715,13 +1338,16 @@ CRITICAL REQUIREMENTS:
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.TEXT_TO_VIDEO;
     const model = dto.model ?? 'veo3_fast';
-    const hasAudio = dto.generate_audio ?? true;
+    // O Veo do KIE sempre gera com áudio — só existe preço com áudio.
+    const hasAudio = true;
 
-    const modelVariant = dto.model_variant ?? getModelVariant(model);
+    // Variante (preço) sempre derivada do modelo no servidor; o model_variant
+    // vindo do cliente é ignorado para não permitir escolher o preço.
+    const modelVariant = getModelVariant(model);
 
     await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -1801,13 +1427,15 @@ CRITICAL REQUIREMENTS:
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.IMAGE_TO_VIDEO;
     const model = dto.model ?? 'veo3_fast';
-    const hasAudio = dto.generate_audio ?? true;
+    // O Veo do KIE sempre gera com áudio — só existe preço com áudio.
+    const hasAudio = true;
 
-    const modelVariant = dto.model_variant ?? getModelVariant(model);
+    // Variante (preço) sempre derivada do modelo no servidor.
+    const modelVariant = getModelVariant(model);
 
     await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -1931,13 +1559,16 @@ CRITICAL REQUIREMENTS:
   ): Promise<CreateGenerationResponseDto> {
     const type = GenerationType.IMAGE_TO_VIDEO;
     const model = 'veo3_fast'; // REFERENCE_2_VIDEO only supports veo3_fast
-    const hasAudio = dto.generate_audio ?? true;
+    // O Veo do KIE sempre gera com áudio — só existe preço com áudio.
+    const hasAudio = true;
 
-    const modelVariant = dto.model_variant ?? 'VEO_FAST';
+    // Sempre gera em veo3_fast, então sempre cobra VEO_FAST — antes o cliente
+    // mandava VEO_MAX ao escolher "Quality" e pagava 1800 por um vídeo Fast.
+    const modelVariant = 'VEO_FAST';
 
     await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
-    const veoAccess = await this.checkVeoAccess(userId, modelVariant, 'kie');
+    const veoAccess = await this.checkVeoAccess(userId, modelVariant);
     const isFreeGeneration = veoAccess === 'free_generation';
 
     const creditsRequired = isFreeGeneration
@@ -2259,7 +1890,7 @@ CRITICAL REQUIREMENTS:
         hasAudio: false,
         aspectRatio: dto.aspect_ratio,
         creditsConsumed: creditsRequired,
-        parameters: { provider: 'vertex', hasVideoInput },
+        parameters: { provider: 'kie', hasVideoInput },
       },
     });
 
@@ -2717,18 +2348,11 @@ CRITICAL REQUIREMENTS:
   private async checkVeoAccess(
     userId: string,
     modelVariant: string | null,
-    provider: 'geraew' | 'kie' = 'geraew',
   ): Promise<'paid' | 'free_generation'> {
-    const isGeraew =
-      modelVariant === 'GERAEW_FAST' || modelVariant === 'GERAEW_QUALITY';
-    const isVeo = modelVariant === 'VEO_FAST' || modelVariant === 'VEO_MAX';
-
-    if (!isGeraew && !isVeo) {
-      return 'paid';
-    }
-
-    // Free generations agora cobrem apenas GERAEW_FAST (não GERAEW_QUALITY)
-    if (provider === 'geraew' && modelVariant === 'GERAEW_FAST') {
+    // Gerações grátis de vídeo cobrem só o Veo 3.1 Fast (KIE). O tipo segue
+    // chamado GERAEW_FAST no banco por compatibilidade — era o Veo Fast da
+    // Vertex antes de a Vertex sair do produto.
+    if (modelVariant === 'VEO_FAST') {
       const hasFree = await this.creditsService.hasFreeGeneration(
         userId,
         FreeGenerationType.GERAEW_FAST,

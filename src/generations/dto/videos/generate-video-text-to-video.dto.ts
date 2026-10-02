@@ -19,12 +19,14 @@ export class GenerateVideoTextToVideoDto {
   prompt: string;
 
   @ApiProperty({
-    description: 'Modelo do Vertex AI',
-    default: 'veo-3.1-generate-001',
-    example: 'veo-3.1-generate-001',
+    description:
+      'Modelo Veo 3.1 (roda no KIE). veo3_fast = Veo 3.1 Fast, veo3 = Veo 3.1 Quality. ' +
+      'Os nomes antigos (geraew-*, veo-3.1-*) continuam aceitos e são convertidos.',
+    default: 'veo3',
+    example: 'veo3_fast',
   })
   @IsString()
-  @IsIn(['veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'geraew-fast', 'geraew-quality'])
+  @IsIn(['veo3', 'veo3_fast', 'veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'geraew-fast', 'geraew-quality'])
   model: string;
 
   @ApiProperty({ enum: Resolution })

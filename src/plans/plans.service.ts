@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { GenerationType, Resolution } from '@prisma/client';
+import { BillingInterval, GenerationType, Resolution } from '@prisma/client';
 
 /**
  * Maps plan slugs to env var names for Stripe price IDs.
@@ -269,28 +269,48 @@ export class PlansService {
   }
 
   /**
-   * Resolve o PlanPrice para a moeda do usuário. Fallback: USD.
+   * Resolve o PlanPrice para a moeda do usuário e o ciclo pedido.
+   * Fallback: USD no mesmo ciclo.
    */
   async resolvePlanPrice(
     planId: string,
     userCurrency: string,
+    interval: BillingInterval = 'MONTHLY',
   ): Promise<{ currency: string; priceCents: number; stripePriceId: string }> {
     const currency = userCurrency.toUpperCase();
     const primary = await this.prisma.planPrice.findUnique({
-      where: { planId_currency: { planId, currency } },
+      where: { planId_currency_interval: { planId, currency, interval } },
     });
     if (primary?.isActive) return primary;
 
     if (currency !== 'USD') {
       const usd = await this.prisma.planPrice.findUnique({
-        where: { planId_currency: { planId, currency: 'USD' } },
+        where: { planId_currency_interval: { planId, currency: 'USD', interval } },
       });
       if (usd?.isActive) return usd;
     }
 
     throw new NotFoundException(
-      `Preço não configurado para plano ${planId} em ${currency} ou USD`,
+      interval === 'YEARLY'
+        ? `Plano anual não disponível para o plano ${planId} em ${currency} ou USD`
+        : `Preço não configurado para plano ${planId} em ${currency} ou USD`,
     );
+  }
+
+  /**
+   * Preço anual para exibição, ou null quando o plano não tem anual na moeda
+   * (nem em USD). Nunca lança — usado na listagem pública de planos.
+   */
+  async findAnnualPrice(
+    planId: string,
+    userCurrency: string,
+  ): Promise<{ currency: string; priceCents: number } | null> {
+    try {
+      const resolved = await this.resolvePlanPrice(planId, userCurrency, 'YEARLY');
+      return { currency: resolved.currency, priceCents: resolved.priceCents };
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { PaymentsService } from '../payments.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../email/email.service';
+import { AsaasSubscriptionsService } from '../asaas-subscriptions.service';
+import { StripeService } from '../stripe.service';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -49,6 +51,8 @@ const mockSubscription = {
   cancelAtPeriodEnd: false,
   paymentRetryCount: 0,
   scheduledPlanId: null,
+  billingInterval: 'MONTHLY',
+  scheduledBillingInterval: null,
   plan: mockPlanStarter,
 };
 
@@ -125,6 +129,7 @@ const createMockPrisma = () => {
     subscription: {
       ...tx.subscription,
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
     payment: {
       ...tx.payment,
@@ -134,6 +139,10 @@ const createMockPrisma = () => {
     },
     creditBalance: {
       ...tx.creditBalance,
+    },
+    // Sem campanha de recuperação aberta por padrão
+    paymentRecoveryCampaign: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
     user: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -161,7 +170,16 @@ describe('PaymentsService', () => {
           useValue: {
             sendCreditPurchaseEmail: jest.fn(),
             sendSubscriptionEmail: jest.fn(),
+            sendPaymentFailedEmail: jest.fn(),
           },
+        },
+        {
+          provide: AsaasSubscriptionsService,
+          useValue: { cancelAuthorization: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: StripeService,
+          useValue: { cancelSubscriptionImmediately: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
@@ -597,6 +615,7 @@ describe('PaymentsService', () => {
             updateMany: jest.fn(),
           },
           creditTransaction: { create: jest.fn() },
+          affiliateEarning: { deleteMany: jest.fn() },
         };
         await fn(tx);
         return tx;
@@ -606,6 +625,181 @@ describe('PaymentsService', () => {
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       // O safe deduction garante que min(5000, 2000) = 2000 é usado
+    });
+  });
+  // ══════════════════════════════════════════════════════════════════
+  // PLANO ANUAL — período anual, créditos mensais
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('plano anual', () => {
+    // Meio-dia em 31/01: o +1 mês tem que cair em 28/02 (sem "transbordar")
+    const NOW = new Date(2026, 0, 31, 12, 0, 0);
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('processSubscriptionPayment YEARLY: período de 1 ano, créditos por 1 mês', async () => {
+      mockPrisma.plan.findUnique.mockResolvedValue(mockPlanPro);
+
+      await service.processSubscriptionPayment(
+        'user-1',
+        'pro',
+        'sub_year_1',
+        86304,
+        'pi_year_1',
+        'brl',
+        undefined,
+        'YEARLY',
+        8990,
+      );
+
+      const tx = mockPrisma.__tx;
+      const subData = tx.subscription.create.mock.calls[0][0].data;
+      expect(subData.billingInterval).toBe('YEARLY');
+      expect(subData.currentPeriodStart).toEqual(NOW);
+      expect(subData.currentPeriodEnd).toEqual(new Date(2027, 0, 31, 12, 0, 0));
+
+      const balance = tx.creditBalance.upsert.mock.calls[0][0];
+      expect(balance.update.planCreditsRemaining).toBe(mockPlanPro.creditsPerMonth);
+      expect(balance.update.periodEnd).toEqual(new Date(2026, 1, 28, 12, 0, 0));
+
+      const payment = tx.payment.create.mock.calls[0][0].data;
+      expect(payment.metadata).toEqual({ billingInterval: 'YEARLY', upgradeCreditCents: 8990 });
+    });
+
+    it('processSubscriptionPayment sem ciclo continua mensal', async () => {
+      mockPrisma.plan.findUnique.mockResolvedValue(mockPlanStarter);
+
+      await service.processSubscriptionPayment(
+        'user-1',
+        'starter',
+        'sub_m_1',
+        2990,
+        'pi_m_1',
+        'brl',
+      );
+
+      const tx = mockPrisma.__tx;
+      const subData = tx.subscription.create.mock.calls[0][0].data;
+      expect(subData.billingInterval).toBe('MONTHLY');
+      expect(subData.currentPeriodEnd).toEqual(new Date(2026, 1, 28, 12, 0, 0));
+      expect(tx.creditBalance.upsert.mock.calls[0][0].update.periodEnd).toEqual(
+        subData.currentPeriodEnd,
+      );
+    });
+
+    it('renovação anual: mantém YEARLY e o ciclo de créditos é de 1 mês', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        ...mockSubscription,
+        billingInterval: 'YEARLY',
+        plan: mockPlanPro,
+      });
+      const periodStart = new Date('2026-04-01T00:00:00Z');
+      const periodEnd = new Date('2027-04-01T00:00:00Z');
+
+      await service.handleSubscriptionRenewal(
+        'sub_stripe_123',
+        periodStart,
+        periodEnd,
+        86304,
+        'in_year_2',
+        'brl',
+      );
+
+      const tx = mockPrisma.__tx;
+      const subUpdate = tx.subscription.update.mock.calls[0][0].data;
+      expect(subUpdate.billingInterval).toBe('YEARLY');
+      expect(subUpdate.currentPeriodEnd).toEqual(periodEnd);
+      expect(subUpdate.scheduledBillingInterval).toBeNull();
+
+      const balance = tx.creditBalance.upsert.mock.calls[0][0].update;
+      expect(balance.periodStart).toEqual(periodStart);
+      expect(balance.periodEnd.getTime()).toBeLessThan(periodEnd.getTime());
+      expect(balance.periodEnd.getMonth()).toBe((periodStart.getMonth() + 1) % 12);
+
+      expect(tx.creditTransaction.create.mock.calls[0][0].data.description).toContain(
+        'Renovação anual',
+      );
+    });
+
+    it('renovação aplica plano + ciclo agendados (anual Pro → mensal Starter)', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        ...mockSubscription,
+        planId: 'plan-pro',
+        plan: mockPlanPro,
+        billingInterval: 'YEARLY',
+        scheduledPlanId: 'plan-starter',
+        scheduledBillingInterval: 'MONTHLY',
+      });
+      mockPrisma.plan.findUnique.mockResolvedValue(mockPlanStarter);
+      const periodStart = new Date('2027-01-31T12:00:00Z');
+      const periodEnd = new Date('2027-02-28T12:00:00Z');
+
+      await service.handleSubscriptionRenewal(
+        'sub_stripe_123',
+        periodStart,
+        periodEnd,
+        2990,
+        'in_switch_1',
+        'brl',
+      );
+
+      const subUpdate = mockPrisma.__tx.subscription.update.mock.calls[0][0].data;
+      expect(subUpdate).toEqual(
+        expect.objectContaining({
+          planId: 'plan-starter',
+          scheduledPlanId: null,
+          billingInterval: 'MONTHLY',
+          scheduledBillingInterval: null,
+        }),
+      );
+      const balance = mockPrisma.__tx.creditBalance.upsert.mock.calls[0][0].update;
+      expect(balance.planCreditsRemaining).toBe(mockPlanStarter.creditsPerMonth);
+      expect(balance.periodEnd).toEqual(periodEnd);
+    });
+
+    it('renovação usa o período cobrado pelo Stripe quando diverge do esperado', async () => {
+      // Banco acha que é mensal, mas o Stripe cobrou 1 ano
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSubscription);
+      const periodStart = new Date('2026-04-01T00:00:00Z');
+      const periodEnd = new Date('2027-04-01T00:00:00Z');
+
+      await service.handleSubscriptionRenewal(
+        'sub_stripe_123',
+        periodStart,
+        periodEnd,
+        28704,
+        'in_div_1',
+        'brl',
+      );
+
+      const subUpdate = mockPrisma.__tx.subscription.update.mock.calls[0][0].data;
+      expect(subUpdate.billingInterval).toBe('YEARLY');
+    });
+
+    it('activatePixAutoSubscription anual: período de 1 ano, créditos por 1 mês', async () => {
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        ...mockSubscription,
+        status: 'TRIALING',
+        billingInterval: 'YEARLY',
+        paymentMethod: 'pix_auto_asaas',
+        plan: mockPlanPro,
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+
+      await service.activatePixAutoSubscription('sub-1');
+
+      const tx = mockPrisma.__tx;
+      const activation = tx.subscription.update.mock.calls[0][0].data;
+      expect(activation.status).toBe('ACTIVE');
+      expect(activation.currentPeriodEnd).toEqual(new Date(2027, 0, 31, 12, 0, 0));
+      expect(tx.creditBalance.upsert.mock.calls[0][0].update.periodEnd).toEqual(
+        new Date(2026, 1, 28, 12, 0, 0),
+      );
     });
   });
 });

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
-import { GenerationResult } from './geraew.provider';
+import { GenerationResult } from './generation-result';
 
 export interface WanAnimateReplaceInput {
   id: string;

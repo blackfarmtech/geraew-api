@@ -12,8 +12,8 @@ import {
   UPLOAD_WIDGET_HTML,
 } from './upload-widget';
 import type { GenerateImageDto } from '../generations/dto/generate-image.dto';
-import type { GenerateVideoTextToVideoDto } from '../generations/dto/videos/generate-video-text-to-video.dto';
-import type { GenerateVideoImageToVideoDto } from '../generations/dto/videos/generate-video-image-to-video.dto';
+import type { GenerateVeoKieTextToVideoDto } from '../generations/dto/videos/generate-veo-kie-text-to-video.dto';
+import type { GenerateVeoKieImageToVideoDto } from '../generations/dto/videos/generate-veo-kie-image-to-video.dto';
 import type { GenerateFaceSwapDto } from '../generations/dto/generate-face-swap.dto';
 import type { GenerateMotionControlDto } from '../generations/dto/videos/generate-motion-control.dto';
 import type { UpscaleImageDto } from '../generations/dto/upscale-image.dto';
@@ -63,8 +63,8 @@ const MODEL_VARIANTS: Record<string, string> = {
   'Nano Banana Pro': 'NBP',
   'GPT Image 2': 'GPT_IMAGE_2',
   'Geraew Unlocked': 'SEM_CENSURA',
-  'geraew-fast': 'GERAEW_FAST',
-  'geraew-quality': 'GERAEW_QUALITY',
+  'Veo 3.1 Fast': 'VEO_FAST',
+  'Veo 3.1 Quality': 'VEO_MAX',
 };
 
 // Cost-preflight operation → the GenerationType its pricing is keyed on.
@@ -629,22 +629,15 @@ export class McpServerFactory {
       {
         title: 'Generate Video from Text',
         description:
-          'Generate a video from a text prompt (Veo). Video jobs take minutes; default wait=false — poll with geraew_get_generation.',
+          'Generate an 8-second video with audio from a text prompt (Veo 3.1). model: veo3_fast = Veo 3.1 Fast, veo3 = Veo 3.1 Quality. Video jobs take minutes; default wait=false — poll with geraew_get_generation.',
         inputSchema: {
           prompt: z.string().min(1),
           model: z
-            .enum([
-              'veo-3.1-generate-001',
-              'veo-3.1-fast-generate-001',
-              'geraew-fast',
-              'geraew-quality',
-            ])
-            .default('veo-3.1-fast-generate-001'),
+            .enum(['veo3_fast', 'veo3'])
+            .default('veo3_fast')
+            .describe('veo3_fast = Veo 3.1 Fast, veo3 = Veo 3.1 Quality.'),
           resolution: z.enum(['720p', '1080p', '4k']).default('1080p'),
-          duration_seconds: z.number().int().min(1).max(60).default(8),
           aspect_ratio: z.enum(['16:9', '9:16']).default('16:9'),
-          generate_audio: z.boolean().default(true),
-          negative_prompt: z.string().optional(),
           wait: z.boolean().default(false),
           max_wait_seconds: z.number().int().min(10).max(600).optional(),
         },
@@ -652,16 +645,13 @@ export class McpServerFactory {
       },
       async (p) => {
         try {
-          const dto = {
+          const dto: GenerateVeoKieTextToVideoDto = {
             prompt: p.prompt,
             model: p.model,
             resolution: VIDEO_RES[p.resolution],
-            duration_seconds: p.duration_seconds,
             aspect_ratio: p.aspect_ratio,
-            generate_audio: p.generate_audio,
-            ...(p.negative_prompt ? { negative_prompt: p.negative_prompt } : {}),
-          } as GenerateVideoTextToVideoDto;
-          const created = await this.generations.generateTextToVideo(userId, dto);
+          };
+          const created = await this.generations.generateTextToVideoKie(userId, dto);
           if (!p.wait) return this.result({ id: created.id, status: created.status });
           const gen = await this.waitFor(
             userId,
@@ -681,22 +671,15 @@ export class McpServerFactory {
       {
         title: 'Generate Video from Image',
         description:
-          'Animate a still image (given by URL) into a video (Veo). Default wait=false — poll with geraew_get_generation.',
+          'Animate a still image (given by URL) into an 8-second video with audio (Veo 3.1). model: veo3_fast = Veo 3.1 Fast, veo3 = Veo 3.1 Quality. Default wait=false — poll with geraew_get_generation.',
         inputSchema: {
           prompt: z.string().min(1),
           image_url: z.string().url().describe('Public URL of the starting image.'),
           model: z
-            .enum([
-              'veo-3.1-generate-001',
-              'veo-3.1-fast-generate-001',
-              'geraew-fast',
-              'geraew-quality',
-            ])
-            .default('veo-3.1-fast-generate-001'),
+            .enum(['veo3_fast', 'veo3'])
+            .default('veo3_fast')
+            .describe('veo3_fast = Veo 3.1 Fast, veo3 = Veo 3.1 Quality.'),
           resolution: z.enum(['720p', '1080p', '4k']).default('1080p'),
-          duration_seconds: z.number().int().min(1).max(60).default(8),
-          generate_audio: z.boolean().default(true),
-          negative_prompt: z.string().optional(),
           wait: z.boolean().default(false),
           max_wait_seconds: z.number().int().min(10).max(600).optional(),
         },
@@ -705,17 +688,14 @@ export class McpServerFactory {
       async (p) => {
         try {
           const { base64, mime } = await this.fetchToBase64(p.image_url);
-          const dto = {
+          const dto: GenerateVeoKieImageToVideoDto = {
             prompt: p.prompt,
             model: p.model,
             resolution: VIDEO_RES[p.resolution],
-            duration_seconds: p.duration_seconds,
-            generate_audio: p.generate_audio,
             first_frame: base64,
             first_frame_mime_type: mime,
-            ...(p.negative_prompt ? { negative_prompt: p.negative_prompt } : {}),
-          } as GenerateVideoImageToVideoDto;
-          const created = await this.generations.generateImageToVideo(userId, dto);
+          };
+          const created = await this.generations.generateImageToVideoKie(userId, dto);
           if (!p.wait) return this.result({ id: created.id, status: created.status });
           const gen = await this.waitFor(
             userId,
@@ -1031,8 +1011,8 @@ export class McpServerFactory {
               'Nano Banana Pro',
               'GPT Image 2',
               'Geraew Unlocked',
-              'geraew-fast',
-              'geraew-quality',
+              'Veo 3.1 Fast',
+              'Veo 3.1 Quality',
             ])
             .optional()
             .describe(
@@ -1048,7 +1028,7 @@ export class McpServerFactory {
           generate_audio: z
             .boolean()
             .default(false)
-            .describe('For video: audio increases the cost.'),
+            .describe('For video: audio increases the cost. Veo 3.1 is always priced with audio.'),
           count: z
             .number()
             .int()
@@ -1070,7 +1050,8 @@ export class McpServerFactory {
             ESTIMATE_TYPE[p.operation],
             ALL_RES[p.resolution],
             p.duration_seconds,
-            p.generate_audio,
+            // O Veo 3.1 (KIE) sempre gera com áudio — só existe preço com áudio.
+            p.model?.startsWith('Veo 3.1') ? true : p.generate_audio,
             p.count ?? 1,
             p.model ? MODEL_VARIANTS[p.model] : undefined,
           );

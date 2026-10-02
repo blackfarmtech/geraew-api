@@ -13,7 +13,6 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CreditsModule } from '../credits/credits.module';
 import { PlansModule } from '../plans/plans.module';
 import { UploadsModule } from '../uploads/uploads.module';
-import { GeraewProvider } from './providers/geraew.provider';
 import { NanoBananaProvider } from './providers/nano-banana.provider';
 import { WanProvider } from './providers/wan.provider';
 import { FaceSwapProvider } from './providers/face-swap.provider';
@@ -63,7 +62,6 @@ import { VoicesModule } from '../voices/voices.module';
     GenerationEventsService,
     GenerationProcessor,
     UnlimitedProcessor,
-    GeraewProvider,
     NanoBananaProvider,
     WanProvider,
     FaceSwapProvider,

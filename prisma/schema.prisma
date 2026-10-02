@@ -129,17 +129,19 @@ model Plan {
 }
 
 model PlanPrice {
-  id            String   @id @default(cuid())
-  planId        String   @map("plan_id")
+  id            String          @id @default(cuid())
+  planId        String          @map("plan_id")
   currency      String
-  priceCents    Int      @map("price_cents")
-  stripePriceId String   @map("stripe_price_id")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  plan          Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  priceCents    Int             @map("price_cents")
+  stripePriceId String          @map("stripe_price_id")
+  isActive      Boolean         @default(true) @map("is_active")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  /// Ciclo de cobrança deste preço (MONTHLY = mensal, YEARLY = anual com desconto).
+  interval      BillingInterval @default(MONTHLY)
+  plan          Plan            @relation(fields: [planId], references: [id], onDelete: Cascade)
 
-  @@unique([planId, currency])
+  @@unique([planId, currency, interval])
   @@index([currency])
   @@map("plan_prices")
 }
@@ -211,6 +213,11 @@ model Subscription {
   asaasSubscriptionId      String?                  @map("asaas_subscription_id")
   asaasAuthorizationId     String?                  @map("asaas_authorization_id")
   asaasAuthorizationStatus String?                  @map("asaas_authorization_status")
+  /// Ciclo de cobrança. No YEARLY o período (current_period_*) é anual, mas os
+  /// créditos do plano renovam todo mês (credit_balances.period_*).
+  billingInterval          BillingInterval          @default(MONTHLY) @map("billing_interval")
+  /// Ciclo que passa a valer junto com scheduled_plan_id na próxima renovação.
+  scheduledBillingInterval BillingInterval?         @map("scheduled_billing_interval")
   recoveryCampaigns        PaymentRecoveryCampaign?
   payments                 Payment[]
   plan                     Plan                     @relation("currentPlan", fields: [planId], references: [id])
@@ -1122,6 +1129,11 @@ enum SubscriptionStatus {
   CANCELED
   PAST_DUE
   TRIALING
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
 }
 
 enum GenerationType {

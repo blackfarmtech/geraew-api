@@ -3,12 +3,13 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BillingInterval, Prisma } from '@prisma/client';
 import { WebhookLogsService } from '../../webhook-logs/webhook-logs.service';
 import { PaymentsService } from '../payments.service';
 import { StripeService } from '../stripe.service';
 import { ConversionsService } from '../../marketing/conversions.service';
 import Stripe from 'stripe';
+import { parseBillingInterval } from '../../plans/billing-interval';
 
 @Injectable()
 export class StripeWebhookService {
@@ -140,6 +141,18 @@ export class StripeWebhookService {
         return;
       }
 
+      // Ciclo: metadata da sessão (checkouts novos) → price no Stripe
+      // (sessões criadas antes do anual existir) → mensal.
+      let billingInterval: BillingInterval | null = metadata.billingInterval
+        ? parseBillingInterval(metadata.billingInterval)
+        : null;
+      if (!billingInterval) {
+        billingInterval = await this.stripeService
+          .getSubscriptionInterval(stripeSubscriptionId)
+          .catch(() => null);
+      }
+      const upgradeCreditCents = Number(metadata.upgradeCreditCents) || undefined;
+
       const created = await this.paymentsService.processSubscriptionPayment(
         userId,
         planSlug,
@@ -148,6 +161,8 @@ export class StripeWebhookService {
         session.payment_intent as string ?? session.id,
         this.requireCurrency(session.currency, `session ${session.id}`),
         metadata.referredByCode,
+        billingInterval ?? 'MONTHLY',
+        upgradeCreditCents,
       );
 
       // Purchase → UTMfy + Meta CAPI. orderId = session.id (mesmo id que o Pixel

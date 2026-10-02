@@ -838,11 +838,19 @@ export class AdminService {
       totalRevenueResult,
       apiCostRows,
     ] = await Promise.all([
-      // MRR: sum of active subscription plan prices
+      // MRR: sum of active subscription plan prices. Assinatura anual entra
+      // com 1/12 do preço anual (BRL; sem preço anual cadastrado, 80% do mensal).
       this.prisma.$queryRaw<[{ mrr_cents: number }]>`
-        SELECT COALESCE(SUM(p.price_cents), 0)::int AS mrr_cents
+        SELECT COALESCE(SUM(
+          CASE WHEN s.billing_interval = 'YEARLY'
+            THEN COALESCE(pp.price_cents, ROUND(p.price_cents * 12 * 0.8)) / 12.0
+            ELSE p.price_cents
+          END
+        ), 0)::int AS mrr_cents
         FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id
+        LEFT JOIN plan_prices pp
+          ON pp.plan_id = p.id AND pp.currency = 'BRL' AND pp."interval" = 'YEARLY'
         WHERE s.status = 'ACTIVE'
       `,
 

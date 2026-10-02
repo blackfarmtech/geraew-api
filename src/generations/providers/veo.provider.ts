@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
-import { GenerationResult } from './geraew.provider';
+import { GenerationResult } from './generation-result';
 
 // ─── Model mapping ─────────────────────────────────────────
 
+// Chaves = slugs que o service envia (veo3 / veo3_fast). Antes o mapa só tinha
+// os nomes da Vertex, então "veo3" caía no fallback e o Veo 3.1 Quality era
+// gerado como veo3_fast (cobrando o preço do Quality).
 const MODEL_MAP: Record<string, string> = {
-  'veo-3.1-fast-generate-001': 'veo3_fast',
-  'veo-3.1-generate-001': 'veo3',
+  veo3: 'veo3',
+  veo3_fast: 'veo3_fast',
 };
 
 const RESOLUTION_MAP: Record<string, string> = {

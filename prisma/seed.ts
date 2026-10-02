@@ -1,10 +1,13 @@
-import { PrismaClient, Plan, CreditPackage } from '@prisma/client';
+import { Prisma, PrismaClient, Plan, CreditPackage } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { annualPriceFromMonthly } from '../src/plans/billing-interval';
 
 const prisma = new PrismaClient();
 
-// Modelos liberados em modo ilimitado por plano.
-// modelVariant + resolutions válidos. Atualize aqui ao mudar a oferta dos planos.
+// Modo ilimitado DESCONTINUADO: os planos são semeados com unlimitedPriority/
+// unlimitedModels nulos (ver upserts abaixo). Mantido só como referência da
+// última oferta, caso o recurso volte (exige também UNLIMITED_ENABLED=true).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const UNLIMITED_MODELS = {
   creator: [
     { modelVariant: 'GERAEW_FAST', resolutions: ['RES_720P'] },
@@ -101,12 +104,12 @@ async function main() {
     { slug: 'free', update: { name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, isActive: true, sortOrder: 0 }, create: { slug: 'free', name: 'Free', priceCents: 0, creditsPerMonth: 0, maxConcurrentGenerations: 1, hasWatermark: false, galleryRetentionDays: 7, hasApiAccess: false, sortOrder: 0 } },
     { slug: 'ultra-basic', update: { name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic }, create: { slug: 'ultra-basic', name: 'Ultra Basic', priceCents: 1290, creditsPerMonth: 700, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 1, stripePriceId: STRIPE.planUltraBasic } },
     { slug: 'basic', update: { name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 3, stripePriceId: STRIPE.planBasic }, create: { slug: 'basic', name: 'Basic', priceCents: 5990, creditsPerMonth: 7000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 3, stripePriceId: STRIPE.planBasic } },
-    { slug: 'advanced', update: { name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, isActive: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced }, create: { slug: 'advanced', name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: 2, unlimitedModels: UNLIMITED_MODELS.advanced } },
+    { slug: 'advanced', update: { name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, isActive: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: null, unlimitedModels: Prisma.DbNull }, create: { slug: 'advanced', name: 'Advanced', priceCents: 24990, creditsPerMonth: 50000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 6, stripePriceId: STRIPE.planAdvanced, unlimitedPriority: null, unlimitedModels: Prisma.DbNull } },
     // ── Planos anteriores (mantidos como estavam) ──
     { slug: 'starter', update: { name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, isActive: true, sortOrder: 2, stripePriceId: STRIPE.planStarter }, create: { slug: 'starter', name: 'Starter', priceCents: 3990, creditsPerMonth: 4000, maxConcurrentGenerations: 2, hasWatermark: false, galleryRetentionDays: 90, hasApiAccess: false, sortOrder: 2, stripePriceId: STRIPE.planStarter } },
-    { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: 4, unlimitedModels: UNLIMITED_MODELS.creator } },
-    { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: 3, unlimitedModels: UNLIMITED_MODELS.pro } },
-    { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: 1, unlimitedModels: UNLIMITED_MODELS.studio } },
+    { slug: 'creator', update: { name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, isActive: true, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: null, unlimitedModels: Prisma.DbNull }, create: { slug: 'creator', name: 'Creator', priceCents: 8990, creditsPerMonth: 12000, maxConcurrentGenerations: 3, hasWatermark: false, galleryRetentionDays: 180, hasApiAccess: false, sortOrder: 4, stripePriceId: STRIPE.planCreator, unlimitedPriority: null, unlimitedModels: Prisma.DbNull } },
+    { slug: 'pro', update: { name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, isActive: true, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: null, unlimitedModels: Prisma.DbNull }, create: { slug: 'pro', name: 'Pro', priceCents: 17990, creditsPerMonth: 30000, maxConcurrentGenerations: 5, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: false, sortOrder: 5, stripePriceId: STRIPE.planPro, unlimitedPriority: null, unlimitedModels: Prisma.DbNull } },
+    { slug: 'studio', update: { name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, isActive: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: null, unlimitedModels: Prisma.DbNull }, create: { slug: 'studio', name: 'Studio', priceCents: 36990, creditsPerMonth: 80000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: 365, hasApiAccess: true, sortOrder: 7, stripePriceId: STRIPE.planStudio, unlimitedPriority: null, unlimitedModels: Prisma.DbNull } },
     // ── Legacy (Business — já estava inativo antes) ──
     { slug: 'business', update: { isActive: false, sortOrder: 99 }, create: { slug: 'business', name: 'Business', priceCents: 24990, creditsPerMonth: 10000, maxConcurrentGenerations: 10, hasWatermark: false, galleryRetentionDays: null as number | null, hasApiAccess: true, sortOrder: 99, isActive: false, stripePriceId: STRIPE.priceBusiness } },
   ];
@@ -167,11 +170,26 @@ async function main() {
     const plan = plansBySlug.get(pp.slug);
     if (!plan || !pp.stripePriceId) continue;
     await prisma.planPrice.upsert({
-      where: { planId_currency: { planId: plan.id, currency: pp.currency } },
+      where: { planId_currency_interval: { planId: plan.id, currency: pp.currency, interval: 'MONTHLY' } },
       update: { priceCents: pp.priceCents, stripePriceId: pp.stripePriceId, isActive: true },
-      create: { planId: plan.id, currency: pp.currency, priceCents: pp.priceCents, stripePriceId: pp.stripePriceId },
+      create: { planId: plan.id, currency: pp.currency, priceCents: pp.priceCents, stripePriceId: pp.stripePriceId, interval: 'MONTHLY' },
     });
     planPriceCount++;
+
+    // Plano anual (20% OFF): só quando o price anual do Stripe existe no env,
+    // ex. STRIPE_PRICE_PLAN_PRO_YEARLY / _YEARLY_USD / _YEARLY_EUR. Em produção
+    // use `npm run stripe:annual-prices` — ele cria os prices e estas linhas.
+    const yearlyEnv = `STRIPE_PRICE_PLAN_${pp.slug.toUpperCase().replace(/-/g, '')}_YEARLY${pp.currency === 'BRL' ? '' : `_${pp.currency}`}`;
+    const yearlyStripePriceId = process.env[yearlyEnv];
+    if (yearlyStripePriceId) {
+      const yearlyCents = annualPriceFromMonthly(pp.priceCents);
+      await prisma.planPrice.upsert({
+        where: { planId_currency_interval: { planId: plan.id, currency: pp.currency, interval: 'YEARLY' } },
+        update: { priceCents: yearlyCents, stripePriceId: yearlyStripePriceId, isActive: true },
+        create: { planId: plan.id, currency: pp.currency, priceCents: yearlyCents, stripePriceId: yearlyStripePriceId, interval: 'YEARLY' },
+      });
+      planPriceCount++;
+    }
   }
   console.log(`✅ Created ${planPriceCount} plan prices`);
 
@@ -418,14 +436,17 @@ async function main() {
   console.log('🎬 Creating AI video models...');
 
   const videoModels = [
-    { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'GERAEW' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0 },
+    // Vertex saiu do produto: o Veo 3.1 roda só pelo KIE (veo3 / veo3_fast), e
+    // os slugs geraew-* (Veo via Vertex) ficam desativados. `sync` força esses
+    // campos mesmo em bancos já semeados (o upsert não sobrescreve o resto).
+    { slug: 'gemini-omni-video', label: 'Gemini Omni', provider: 'KIE' as const, modelVariant: 'GEMINI_OMNI', sortOrder: 0, sync: { provider: 'KIE' as const } },
     { slug: 'bytedance-seedance-2-5', label: 'Seedance 2.5', provider: 'KIE' as const, modelVariant: 'SEEDANCE_2_5', sortOrder: 1 },
     { slug: 'bytedance-seedance-2', label: 'Seedance 2', provider: 'KIE' as const, modelVariant: 'SEEDANCE_2', sortOrder: 1 },
     { slug: 'grok-imagine', label: 'Grok Imagine', provider: 'KIE' as const, modelVariant: 'GROK_IMAGINE', sortOrder: 2 },
-    { slug: 'geraew-quality', label: 'Veo 3.1 Quality', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 3 },
-    { slug: 'geraew-fast', label: 'Veo 3.1 Fast', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 4 },
-    { slug: 'veo3', label: 'Geraew Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 5 },
-    { slug: 'veo3_fast', label: 'Geraew Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 6 },
+    { slug: 'veo3', label: 'Veo 3.1 Quality', provider: 'KIE' as const, modelVariant: 'VEO_MAX', sortOrder: 3, sync: { label: 'Veo 3.1 Quality', sortOrder: 3 } },
+    { slug: 'veo3_fast', label: 'Veo 3.1 Fast', provider: 'KIE' as const, modelVariant: 'VEO_FAST', sortOrder: 4, sync: { label: 'Veo 3.1 Fast', sortOrder: 4 } },
+    { slug: 'geraew-quality', label: 'Veo 3.1 Quality (Vertex — descontinuado)', provider: 'GERAEW' as const, modelVariant: 'GERAEW_QUALITY', sortOrder: 90, isActive: false, sync: { isActive: false, sortOrder: 90 } },
+    { slug: 'geraew-fast', label: 'Veo 3.1 Fast (Vertex — descontinuado)', provider: 'GERAEW' as const, modelVariant: 'GERAEW_FAST', sortOrder: 91, isActive: false, sync: { isActive: false, sortOrder: 91 } },
     {
       slug: 'avatar-video',
       label: 'Vídeo com avatar (HeyGen)',
@@ -443,9 +464,10 @@ async function main() {
   ];
 
   for (const model of videoModels) {
+    const { sync, isActive } = model as { sync?: Prisma.AiModelUpdateInput; isActive?: boolean };
     await prisma.aiModel.upsert({
       where: { slug: model.slug },
-      update: {}, // não sobrescrever se admin já togou
+      update: sync ?? {}, // não sobrescrever se admin já togou (exceto campos de `sync`)
       create: {
         slug: model.slug,
         label: model.label,
@@ -453,7 +475,7 @@ async function main() {
         modelVariant: model.modelVariant,
         sortOrder: model.sortOrder,
         type: 'VIDEO',
-        isActive: true,
+        isActive: isActive ?? true,
       },
     });
   }
@@ -467,7 +489,7 @@ async function main() {
 
   const imageModels = [
     { slug: 'seedream-5-lite', label: 'Seedream Lite', provider: 'KIE' as const, modelVariant: 'SEEDREAM_LITE', sortOrder: 0 },
-    { slug: 'sem-censura', label: 'Geraew Unlocked', provider: 'GERAEW' as const, modelVariant: 'SEM_CENSURA', sortOrder: 1 },
+    { slug: 'sem-censura', label: 'Geraew Unlocked', provider: 'KIE' as const, modelVariant: 'SEM_CENSURA', sortOrder: 1 }, // roda no Seedream (KIE)
   ];
 
   for (const model of imageModels) {

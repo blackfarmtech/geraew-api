@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from '../../uploads/uploads.service';
-import { GenerationResult } from './geraew.provider';
+import { GenerationResult } from './generation-result';
 import { ContentSafetyError } from '../errors/content-safety.error';
 
 // Códigos de fail retornados pela KIE que indicam moderação de conteúdo.

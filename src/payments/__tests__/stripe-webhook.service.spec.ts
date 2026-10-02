@@ -4,6 +4,7 @@ import { StripeWebhookService } from '../webhooks/stripe-webhook.service';
 import { WebhookLogsService } from '../../webhook-logs/webhook-logs.service';
 import { PaymentsService } from '../payments.service';
 import { StripeService } from '../stripe.service';
+import { ConversionsService } from '../../marketing/conversions.service';
 import Stripe from 'stripe';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ const mockCheckoutSession = (
     id: 'cs_test_123',
     subscription: 'sub_test_123',
     amount_total: 2990,
+    currency: 'brl',
     payment_intent: 'pi_test_123',
     metadata: {
       type: 'subscription',
@@ -44,6 +46,7 @@ const mockInvoice = (
     billing_reason: 'subscription_cycle',
     amount_paid: 2990,
     amount_due: 2990,
+    currency: 'brl',
     parent: {
       subscription_details: {
         subscription: 'sub_test_123',
@@ -86,6 +89,7 @@ const mockCharge = (
 
 const mockWebhookLogsService = {
   findByExternalId: jest.fn(),
+  findProcessedByExternalId: jest.fn().mockResolvedValue(null),
   create: jest.fn(),
   markProcessed: jest.fn(),
   markFailed: jest.fn(),
@@ -97,11 +101,21 @@ const mockPaymentsService = {
   handleSubscriptionRenewal: jest.fn(),
   handlePaymentFailed: jest.fn(),
   handleSubscriptionDeleted: jest.fn(),
+  handleSubscriptionUpdated: jest.fn(),
   handleRefund: jest.fn(),
+  findSubscriptionByExternalId: jest.fn().mockResolvedValue(null),
 };
 
 const mockStripeService = {
   constructWebhookEvent: jest.fn(),
+  cancelSubscriptionImmediately: jest.fn().mockResolvedValue(undefined),
+  retrieveInvoice: jest.fn(),
+  getSubscriptionInterval: jest.fn().mockResolvedValue(null),
+};
+
+const mockConversionsService = {
+  trackPurchase: jest.fn(),
+  trackInitiateCheckout: jest.fn(),
 };
 
 describe('StripeWebhookService', () => {
@@ -120,6 +134,7 @@ describe('StripeWebhookService', () => {
         { provide: WebhookLogsService, useValue: mockWebhookLogsService },
         { provide: PaymentsService, useValue: mockPaymentsService },
         { provide: StripeService, useValue: mockStripeService },
+        { provide: ConversionsService, useValue: mockConversionsService },
       ],
     }).compile();
 
@@ -177,8 +192,10 @@ describe('StripeWebhookService', () => {
 
       await service.handleWebhook(Buffer.from('{}'), 'valid-sig');
 
-      expect(mockWebhookLogsService.create).toHaveBeenCalled();
+      // Reaproveita o log existente (não cria outro) e reprocessa
+      expect(mockWebhookLogsService.create).not.toHaveBeenCalled();
       expect(mockPaymentsService.handleSubscriptionDeleted).toHaveBeenCalled();
+      expect(mockWebhookLogsService.markProcessed).toHaveBeenCalledWith('log-1');
     });
   });
 
@@ -198,6 +215,10 @@ describe('StripeWebhookService', () => {
         'sub_test_123',
         2990,
         'pi_test_123',
+        'brl',
+        undefined,
+        'MONTHLY',
+        undefined,
       );
       expect(mockWebhookLogsService.markProcessed).toHaveBeenCalledWith('log-1');
     });
@@ -217,7 +238,54 @@ describe('StripeWebhookService', () => {
         'sub_obj_123',
         2990,
         'pi_test_123',
+        'brl',
+        undefined,
+        'MONTHLY',
+        undefined,
       );
+    });
+
+    it('plano anual: repassa billingInterval e o crédito de upgrade da metadata', async () => {
+      const session = mockCheckoutSession({
+        amount_total: 77314,
+        metadata: {
+          type: 'subscription',
+          userId: 'user-1',
+          planSlug: 'pro',
+          billingInterval: 'YEARLY',
+          upgradeCreditCents: '8990',
+        },
+      });
+      mockStripeService.constructWebhookEvent.mockReturnValue(
+        makeEvent('checkout.session.completed', session),
+      );
+
+      await service.handleWebhook(Buffer.from('{}'), 'valid-sig');
+
+      expect(mockPaymentsService.processSubscriptionPayment).toHaveBeenCalledWith(
+        'user-1',
+        'pro',
+        'sub_test_123',
+        77314,
+        'pi_test_123',
+        'brl',
+        undefined,
+        'YEARLY',
+        8990,
+      );
+      expect(mockStripeService.getSubscriptionInterval).not.toHaveBeenCalled();
+    });
+
+    it('sessão sem billingInterval: usa o ciclo do price no Stripe', async () => {
+      mockStripeService.getSubscriptionInterval.mockResolvedValueOnce('YEARLY');
+      mockStripeService.constructWebhookEvent.mockReturnValue(
+        makeEvent('checkout.session.completed', mockCheckoutSession()),
+      );
+
+      await service.handleWebhook(Buffer.from('{}'), 'valid-sig');
+
+      expect(mockStripeService.getSubscriptionInterval).toHaveBeenCalledWith('sub_test_123');
+      expect(mockPaymentsService.processSubscriptionPayment.mock.calls[0][7]).toBe('YEARLY');
     });
 
     it('should not process when metadata is missing', async () => {
@@ -257,6 +325,8 @@ describe('StripeWebhookService', () => {
         'pkg-500',
         1790,
         'pi_credit_123',
+        'brl',
+        undefined,
       );
     });
 
@@ -289,6 +359,7 @@ describe('StripeWebhookService', () => {
         expect.any(Date),
         2990,
         'in_test_123',
+        'brl',
       );
 
       const [, periodStart, periodEnd] =
@@ -334,6 +405,7 @@ describe('StripeWebhookService', () => {
         'sub_test_123',
         8990,
         'in_test_123',
+        'brl',
       );
     });
 

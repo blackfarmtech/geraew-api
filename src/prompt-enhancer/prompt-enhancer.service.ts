@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { EnhanceInfluencerDto } from './dto/enhance-influencer.dto';
-import { GeraewChatClient, ChatPart } from './geraew-chat.client';
+import { LlmChatClient, ChatPart } from './llm-chat.client';
 
 /*
  * ─────────────────────────────────────────────────────────────────────────────
@@ -714,7 +714,7 @@ export class PromptEnhancerService {
 
   private static readonly MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5MB to stay safely under 5MB limit
 
-  constructor(private readonly chatClient: GeraewChatClient) {}
+  constructor(private readonly chatClient: LlmChatClient) {}
 
   private async compressImageForVision(
     base64Data: string,
@@ -783,15 +783,14 @@ export class PromptEnhancerService {
     const response = await this.chatClient.chat({
       caller: 'POST /prompt-enhancer/enhance',
       system_instruction: SYSTEM_PROMPT,
-      max_output_tokens: 1500,
-      temperature: 0.7,
+      effort: 'low',
       messages: [{ role: 'user', parts }],
     });
 
     const rawText = (response.text || '').trim();
 
     if (!rawText) {
-      this.logger.warn('Geraew chat returned empty response for prompt enhancement');
+      this.logger.warn('LLM chat returned empty response for prompt enhancement');
       return { prompt, negativePrompt: '' };
     }
 
@@ -808,7 +807,7 @@ export class PromptEnhancerService {
         negativePrompt: parsed.negativePrompt || '',
       };
     } catch {
-      this.logger.warn(`Geraew chat returned non-JSON response: ${cleaned}`);
+      this.logger.warn(`LLM chat returned non-JSON response: ${cleaned}`);
       // Fallback: use the raw text as prompt
       return { prompt: cleaned, negativePrompt: '' };
     }
@@ -816,9 +815,9 @@ export class PromptEnhancerService {
 
   // ─── Prompt Safety Refiner for Veo 3.1 ─────────────────────
 
-  private static readonly SAFETY_REFINER_SYSTEM_PROMPT = `# System Prompt — Agente Refinador de Prompts para Veo 3.1 (Vertex AI)
+  private static readonly SAFETY_REFINER_SYSTEM_PROMPT = `# System Prompt — Agente Refinador de Prompts para Veo 3.1
 
-Você é um agente especialista em refinar prompts de vídeo para o modelo Veo 3.1 da Google (Vertex AI). Sua única função é receber o prompt do usuário, preservar 100% da intenção criativa original, e devolver uma versão otimizada que passe pelos filtros de segurança da Vertex AI sem ser bloqueada.
+Você é um agente especialista em refinar prompts de vídeo para o modelo Veo 3.1 da Google. Sua única função é receber o prompt do usuário, preservar 100% da intenção criativa original, e devolver uma versão otimizada que passe pelos filtros de segurança do Veo 3.1 sem ser bloqueada.
 
 ---
 
@@ -958,15 +957,14 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     const response = await this.chatClient.chat({
       caller: 'safety-refiner (fila de geração)',
       system_instruction: PromptEnhancerService.SAFETY_REFINER_SYSTEM_PROMPT,
-      max_output_tokens: 1500,
-      temperature: 0.7,
+      effort: 'low',
       messages: [{ role: 'user', parts: [{ text: originalPrompt }] }],
     });
 
     const refinedPrompt = (response.text || '').trim();
 
     if (!refinedPrompt) {
-      this.logger.warn('[SAFETY REFINER] Empty response from Geraew chat');
+      this.logger.warn('[SAFETY REFINER] Empty response from LLM chat');
       return null;
     }
 
@@ -1017,28 +1015,27 @@ An original fictional character [DESCRIÇÃO DO PERSONAGEM].
     const response = await this.chatClient.chat({
       caller: 'POST /prompt-enhancer/enhance-influencer',
       system_instruction: systemPrompt,
-      max_output_tokens: 6000,
-      temperature: 1.0,
+      effort: 'medium',
       messages: [{ role: 'user', parts }],
     });
 
     let result = (response.text || '').trim();
 
     this.logger.log(
-      `[INFLUENCER] Raw Geraew chat response (finishReason=${response.finishReason ?? 'unknown'}, tokens=${response.usage?.candidatesTokenCount ?? '?'}): ${result}`,
+      `[INFLUENCER] Raw LLM chat response (stopReason=${response.stopReason ?? 'unknown'}, tokens=${response.usage?.outputTokens ?? '?'}): ${result}`,
     );
 
     if (!result) {
-      this.logger.warn('[INFLUENCER] Geraew chat returned empty response');
+      this.logger.warn('[INFLUENCER] LLM chat returned empty response');
       throw new Error('Failed to generate influencer prompt');
     }
 
-    if (response.finishReason === 'MAX_TOKENS') {
+    if (response.stopReason === 'max_tokens') {
       this.logger.warn(
-        `[INFLUENCER] Response truncated by max_output_tokens (candidatesTokenCount=${response.usage?.candidatesTokenCount ?? '?'})`,
+        `[INFLUENCER] Response truncated by max_tokens (outputTokens=${response.usage?.outputTokens ?? '?'})`,
       );
       throw new Error(
-        'AI agent response truncated — increase max_output_tokens or shorten the schema',
+        'AI agent response truncated — increase max_tokens or shorten the schema',
       );
     }
 

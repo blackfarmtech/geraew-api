@@ -42,6 +42,8 @@ const mockProfile: UserProfileResponseDto = {
     currentPeriodStart: now,
     currentPeriodEnd: now,
     cancelAtPeriodEnd: false,
+    billingInterval: 'MONTHLY',
+    scheduledBillingInterval: null,
   },
   profileCompleted: false,
   profileType: null,

@@ -4,6 +4,7 @@ import { PlansService } from './plans.service';
 import { PlanResponseDto } from './dto/plan-response.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { detectLocaleFromHeaders } from '../common/utils/locale.util';
+import { ANNUAL_DISCOUNT_PERCENT, annualDiscountPercent } from './billing-interval';
 
 @ApiTags('plans')
 @Controller('api/v1/plans')
@@ -42,6 +43,22 @@ export class PlansController {
           resolvedCurrency = currency;
         }
 
+        const annualPrice =
+          plan.slug !== 'free'
+            ? await this.plansService.findAnnualPrice(plan.id, currency)
+            : null;
+        const annual = annualPrice
+          ? {
+              priceCents: annualPrice.priceCents,
+              monthlyEquivalentCents: Math.round(annualPrice.priceCents / 12),
+              currency: annualPrice.currency,
+              discountPercent:
+                annualPrice.currency === resolvedCurrency
+                  ? annualDiscountPercent(annualPrice.priceCents, priceCents)
+                  : ANNUAL_DISCOUNT_PERCENT,
+            }
+          : null;
+
         return {
           id: plan.id,
           slug: plan.slug,
@@ -54,6 +71,7 @@ export class PlansController {
           hasWatermark: plan.hasWatermark,
           galleryRetentionDays: plan.galleryRetentionDays,
           hasApiAccess: plan.hasApiAccess,
+          annual,
         };
       }),
     );

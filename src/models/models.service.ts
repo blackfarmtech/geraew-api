@@ -120,26 +120,6 @@ export class ModelsService implements OnModuleInit {
     }
   }
 
-  async deactivateGeraewVideoModels(statusMessage: string): Promise<number> {
-    const result = await this.prisma.aiModel.updateMany({
-      where: {
-        provider: AiModelProvider.GERAEW,
-        type: AiModelType.VIDEO,
-        isActive: true,
-      },
-      data: { isActive: false, statusMessage },
-    });
-
-    if (result.count > 0) {
-      this.logger.warn(
-        `Auto-disabled ${result.count} GeraEW video model(s): ${statusMessage}`,
-      );
-      this.invalidateCache();
-    }
-
-    return result.count;
-  }
-
   async listVideoModels(): Promise<AiModel[]> {
     const now = Date.now();
     if (this.videoCache && this.videoCache.expiresAt > now) {

@@ -10,6 +10,7 @@ function build(opts: {
   authStatus?: string;
   mode?: string;
   createChargeImpl?: jest.Mock;
+  yearlyPlanPrice?: any;
 }) {
   const prisma = {
     subscription: {
@@ -19,6 +20,9 @@ function build(opts: {
     payment: {
       findFirst: jest.fn().mockResolvedValue(opts.existingPayment ?? null),
       create: jest.fn().mockResolvedValue({}),
+    },
+    planPrice: {
+      findUnique: jest.fn().mockResolvedValue(opts.yearlyPlanPrice ?? null),
     },
   };
 
@@ -49,6 +53,8 @@ function makeSub(overrides: Partial<any> = {}) {
   return {
     id: 'sub_1',
     userId: 'user_1',
+    planId: 'plan_starter',
+    billingInterval: 'MONTHLY',
     currentPeriodStart: new Date('2026-06-20T02:39:00Z'),
     currentPeriodEnd: new Date('2026-07-20T02:39:00Z'),
     asaasAuthorizationId: 'auth_1',
@@ -274,6 +280,78 @@ describe('PixAutoBillingService', () => {
       expect(summary.simuladas).toBe(1);
       expect(summary.criadas).toBe(0);
       expect(createRecurringCharge).not.toHaveBeenCalled();
+    });
+  });
+  describe('plano anual', () => {
+    const yearlySub = () =>
+      makeSub({
+        billingInterval: 'YEARLY',
+        currentPeriodStart: new Date('2025-07-20T02:39:00Z'),
+        currentPeriodEnd: new Date('2026-07-20T02:39:00Z'),
+      });
+
+    it('cobra o preço anual cadastrado em BRL', async () => {
+      const { service, prisma, createRecurringCharge } = build({
+        subscriptions: [yearlySub()],
+        yearlyPlanPrice: { priceCents: 38304, isActive: true },
+      });
+
+      const summary = await service.run(new Date('2026-07-08T06:00:00Z'));
+
+      expect(summary.criadas).toBe(1);
+      expect(prisma.planPrice.findUnique).toHaveBeenCalledWith({
+        where: {
+          planId_currency_interval: {
+            planId: 'plan_starter',
+            currency: 'BRL',
+            interval: 'YEARLY',
+          },
+        },
+      });
+      expect(createRecurringCharge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          valueCents: 38304,
+          dueDate: '2026-07-20',
+          description: 'Renovação anual Starter (Geraew)',
+        }),
+      );
+      expect(prisma.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ amountCents: 38304 }),
+        }),
+      );
+    });
+
+    it('sem preço anual cadastrado usa 12× o mensal com 20% OFF', async () => {
+      const { service, createRecurringCharge } = build({
+        subscriptions: [yearlySub()],
+      });
+
+      await service.run(new Date('2026-07-08T06:00:00Z'));
+
+      expect(createRecurringCharge).toHaveBeenCalledWith(
+        expect.objectContaining({ valueCents: 38304 }), // 3990 × 12 × 0,8
+      );
+    });
+
+    it('uma cobrança por ciclo anual: não cobra de novo se já existe no período', async () => {
+      const { service, createRecurringCharge } = build({
+        subscriptions: [yearlySub()],
+        existingPayment: { id: 'pay_ja_existe' },
+      });
+
+      const summary = await service.run(new Date('2026-07-08T06:00:00Z'));
+
+      expect(summary.puladas.ja_cobrado_no_ciclo).toBe(1);
+      expect(createRecurringCharge).not.toHaveBeenCalled();
+    });
+
+    it('mensal não consulta preço anual', async () => {
+      const { service, prisma } = build({ subscriptions: [makeSub()] });
+
+      await service.run(new Date('2026-07-08T06:00:00Z'));
+
+      expect(prisma.planPrice.findUnique).not.toHaveBeenCalled();
     });
   });
 });

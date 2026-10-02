@@ -65,6 +65,7 @@ export class SubscriptionsController {
       dto.planSlug,
       dto.currency,
       dto.recoveryPromoCode,
+      dto.billingInterval,
     );
   }
 
@@ -86,11 +87,13 @@ export class SubscriptionsController {
     qrCodeEncodedImage: string;
     expiresAt: string | null;
     status: string;
+    billingInterval: string;
   }> {
     return this.subscriptionsService.createPixAutoSubscription(
       userId,
       dto.planSlug,
       dto.taxId,
+      dto.billingInterval,
     );
   }
 
@@ -118,7 +121,10 @@ export class SubscriptionsController {
 
   @Patch('upgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Upgrade de plano — sempre redireciona para Stripe Checkout' })
+  @ApiOperation({
+    summary:
+      'Upgrade imediato (plano superior ou mensal → anual) — redireciona para Stripe Checkout',
+  })
   @ApiResponse({
     status: 200,
     description: 'URL de checkout retornada',
@@ -129,12 +135,20 @@ export class SubscriptionsController {
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
   ): Promise<{ checkoutUrl: string }> {
-    return this.subscriptionsService.upgrade(userId, dto.planSlug, dto.currency);
+    return this.subscriptionsService.upgrade(
+      userId,
+      dto.planSlug,
+      dto.currency,
+      dto.billingInterval,
+    );
   }
 
   @Patch('downgrade')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Downgrade de plano — agenda troca para próximo ciclo' })
+  @ApiOperation({
+    summary:
+      'Troca agendada para o próximo ciclo — downgrade ou anual → mensal (billingInterval)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Downgrade agendado com sucesso',
@@ -147,7 +161,11 @@ export class SubscriptionsController {
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSubscriptionDto,
   ): Promise<SubscriptionResponseDto> {
-    return this.subscriptionsService.downgrade(userId, dto.planSlug);
+    return this.subscriptionsService.downgrade(
+      userId,
+      dto.planSlug,
+      dto.billingInterval,
+    );
   }
 
   @Post('cancel')

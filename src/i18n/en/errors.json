@@ -25,7 +25,10 @@
     "CANNOT_PAUSE_FREE": "Cannot pause the Free plan",
     "NO_SCHEDULED_DOWNGRADE": "No scheduled downgrade found",
     "NO_CANCEL_PENDING": "No active subscription with pending cancellation",
-    "PLAN_NOT_FOUND": "Plan not found"
+    "PLAN_NOT_FOUND": "Plan not found",
+    "CHANGE_ONLY_AT_RENEWAL": "This plan change only takes effect at renewal. Schedule it with the downgrade option.",
+    "ANNUAL_NO_DISCOUNT_OFFER": "Discount and pause offers don't apply to the annual plan.",
+    "ANNUAL_CANNOT_PAUSE": "The annual plan can't be paused."
   },
   "generations": {
     "MAX_CONCURRENT_REACHED": "Concurrent generations limit reached",

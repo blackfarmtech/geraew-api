@@ -1,5 +1,7 @@
 import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { BillingInterval } from '@prisma/client';
+import { BILLING_INTERVALS } from '../../plans/billing-interval';
 
 export class CreateSubscriptionDto {
   @ApiProperty({ example: 'starter' })
@@ -23,4 +25,13 @@ export class CreateSubscriptionDto {
   @IsString()
   @IsIn(['RECOVERY20'])
   recoveryPromoCode?: string;
+
+  /**
+   * Ciclo de cobrança. No create o default é MONTHLY; no upgrade/downgrade o
+   * default é o ciclo da assinatura atual (clientes antigos seguem funcionando).
+   */
+  @ApiPropertyOptional({ enum: BILLING_INTERVALS, example: 'YEARLY' })
+  @IsOptional()
+  @IsIn(BILLING_INTERVALS)
+  billingInterval?: BillingInterval;
 }

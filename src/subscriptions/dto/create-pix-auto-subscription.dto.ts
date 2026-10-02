@@ -1,5 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { BillingInterval } from '@prisma/client';
+import { BILLING_INTERVALS } from '../../plans/billing-interval';
 
 export class CreatePixAutoSubscriptionDto {
   @ApiProperty({ description: 'Slug do plano (ex: starter, pro)' })
@@ -18,4 +20,12 @@ export class CreatePixAutoSubscriptionDto {
     message: 'taxId deve conter 11 (CPF) ou 14 (CNPJ) dígitos numéricos',
   })
   taxId?: string;
+
+  @ApiPropertyOptional({
+    enum: BILLING_INTERVALS,
+    description: 'Ciclo de cobrança do PIX Automático (default MONTHLY)',
+  })
+  @IsOptional()
+  @IsIn(BILLING_INTERVALS)
+  billingInterval?: BillingInterval;
 }

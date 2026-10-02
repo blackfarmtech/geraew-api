@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
-import { GeraewChatClient } from '../prompt-enhancer/geraew-chat.client';
+import { LlmChatClient } from '../prompt-enhancer/llm-chat.client';
 import { BrandsController } from './brands.controller';
 import { BrandsService } from './brands.service';
 import { VisualAnalyzerService } from './visual-analyzer.service';
@@ -8,7 +8,7 @@ import { VisualAnalyzerService } from './visual-analyzer.service';
 @Module({
   imports: [PrismaModule],
   controllers: [BrandsController],
-  providers: [BrandsService, VisualAnalyzerService, GeraewChatClient],
+  providers: [BrandsService, VisualAnalyzerService, LlmChatClient],
   exports: [BrandsService, VisualAnalyzerService],
 })
 export class BrandsModule {}

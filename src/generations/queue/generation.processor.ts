@@ -4,7 +4,6 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreditsService } from '../../credits/credits.service';
 import { UploadsService } from '../../uploads/uploads.service';
-import { GeraewProvider } from '../providers/geraew.provider';
 import {
   NanoBananaProvider,
   mapGeminiToNanoBanana,
@@ -26,7 +25,6 @@ import { containsNsfwContent } from '../utils/nsfw-blocklist';
 import {
   GenerationStatus,
   GenerationType,
-  GenerationImageRole,
   Resolution,
 } from '@prisma/client';
 import {
@@ -34,9 +32,6 @@ import {
   GenerationJobName,
   ImageJobData,
   ImageNanoBananaJobData,
-  TextToVideoJobData,
-  ImageToVideoJobData,
-  ReferenceVideoJobData,
   MotionControlJobData,
   VirtualTryOnJobData,
   FaceSwapJobData,
@@ -62,7 +57,6 @@ export class GenerationProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly creditsService: CreditsService,
     private readonly uploadsService: UploadsService,
-    private readonly geraewProvider: GeraewProvider,
     private readonly nanoBananaProvider: NanoBananaProvider,
     private readonly wanProvider: WanProvider,
     private readonly faceSwapProvider: FaceSwapProvider,
@@ -100,12 +94,15 @@ export class GenerationProcessor extends WorkerHost {
         return this.processImageWithFallback(data as ImageJobData);
       case GenerationJobName.IMAGE_NANO_BANANA:
         return this.processNanoBanana(data as ImageNanoBananaJobData);
+      // Jobs do Veo via Vertex: não são mais enfileirados (os endpoints legados
+      // agora usam o KIE). Um job antigo que ainda esteja na fila falha e o
+      // onFailed estorna os créditos.
       case GenerationJobName.TEXT_TO_VIDEO:
-        return this.processTextToVideo(data as TextToVideoJobData);
       case GenerationJobName.IMAGE_TO_VIDEO:
-        return this.processImageToVideo(data as ImageToVideoJobData);
       case GenerationJobName.REFERENCE_VIDEO:
-        return this.processReferenceVideo(data as ReferenceVideoJobData);
+        throw new Error(
+          'Veo via Vertex foi descontinuado — gere novamente com o Veo 3.1.',
+        );
       case GenerationJobName.MOTION_CONTROL:
         return this.processMotionControl(data as MotionControlJobData);
       case GenerationJobName.VIRTUAL_TRY_ON:
@@ -289,36 +286,7 @@ export class GenerationProcessor extends WorkerHost {
       return;
     }
 
-    const images = data.hasInputImages
-      ? await this.loadInputImagesAsBase64(data.generationId)
-      : undefined;
-
-    try {
-      const result = await this.geraewProvider.generateImage({
-        id: data.generationId,
-        prompt: data.prompt,
-        model: data.model,
-        resolution: data.resolution,
-        aspectRatio: data.aspectRatio,
-        mimeType: data.mimeType,
-        images,
-      });
-
-      await this.completeGeneration(data.generationId, result, startTime);
-    } catch (error) {
-      if (this.isSafetyRelatedError(error)) {
-        const result = await this.fallbackToSeedream(
-          data.generationId,
-          data.prompt,
-          data.aspectRatio,
-          error,
-          'processImage:geraew',
-        );
-        await this.completeGeneration(data.generationId, result, startTime);
-        return;
-      }
-      throw error;
-    }
+    await this.generateGeminiImageViaKie(data, startTime, 'processImage');
   }
 
   private async processImageWithFallback(data: ImageJobData): Promise<void> {
@@ -391,98 +359,68 @@ export class GenerationProcessor extends WorkerHost {
       return;
     }
 
-    const images = data.hasInputImages
-      ? await this.loadInputImagesAsBase64(data.generationId)
-      : undefined;
+    await this.generateGeminiImageViaKie(
+      data,
+      startTime,
+      'processImageWithFallback',
+    );
+  }
 
+  /**
+   * Modelos Gemini / Nano Banana vão direto pro Nano Banana do KIE. Antes
+   * tentavam a Vertex (Geraew Provider) primeiro e usavam o KIE só como
+   * fallback; a Vertex saiu do produto. Conteúdo bloqueado cai pro Seedream,
+   * como já acontecia.
+   */
+  private async generateGeminiImageViaKie(
+    data: {
+      generationId: string;
+      prompt: string;
+      model: string;
+      resolution: string;
+      aspectRatio?: string;
+      mimeType?: string;
+      hasInputImages?: boolean;
+    },
+    startTime: number,
+    context: string,
+  ): Promise<void> {
+    const imageUrls =
+      data.hasInputImages === false
+        ? []
+        : await this.loadInputImageUrls(data.generationId);
+
+    const nanoBananaModel = mapGeminiToNanoBanana(data.model);
     try {
-      const result = await this.geraewProvider.generateImage({
+      const result = await this.nanoBananaProvider.generateImage({
         id: data.generationId,
+        model: nanoBananaModel,
         prompt: data.prompt,
-        model: data.model,
         resolution: data.resolution,
         aspectRatio: data.aspectRatio,
-        mimeType: data.mimeType,
-        images,
+        outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
+        imageUrls: imageUrls.length ? imageUrls : undefined,
       });
 
       await this.completeGeneration(
         data.generationId,
         result,
         startTime,
-        'geraew',
+        nanoBananaModel,
       );
-    } catch (geraewError) {
-      if (this.isSafetyRelatedError(geraewError)) {
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
         const result = await this.fallbackToSeedream(
           data.generationId,
           data.prompt,
           data.aspectRatio,
-          geraewError,
-          'processImageWithFallback:geraew',
+          error,
+          `${context}:nano-banana`,
         );
         await this.completeGeneration(data.generationId, result, startTime);
         return;
       }
-
-      this.logger.warn(
-        `Geraew failed for ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
-      );
-
-      // Check if CRON already marked this generation as FAILED — skip KIE to avoid paying for nothing
-      const preCheck = await this.prisma.generation.findUnique({
-        where: { id: data.generationId },
-        select: { status: true },
-      });
-      if (
-        preCheck?.status === GenerationStatus.FAILED ||
-        preCheck?.status === GenerationStatus.COMPLETED
-      ) {
-        this.logger.warn(
-          `Generation ${data.generationId} already ${preCheck.status} before Nano Banana fallback — aborting to save KIE costs`,
-        );
-        return;
-      }
-
-      const inputImages = await this.prisma.generationInputImage.findMany({
-        where: { generationId: data.generationId },
-      });
-      const imageUrls = inputImages
-        .map((img) => img.url)
-        .filter(Boolean) as string[];
-
-      const nanaBananaModel = mapGeminiToNanoBanana(data.model);
-      try {
-        const result = await this.nanoBananaProvider.generateImage({
-          id: data.generationId,
-          model: nanaBananaModel,
-          prompt: data.prompt,
-          resolution: data.resolution,
-          aspectRatio: data.aspectRatio,
-          outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
-          imageUrls: imageUrls.length ? imageUrls : undefined,
-        });
-
-        await this.completeGeneration(
-          data.generationId,
-          result,
-          startTime,
-          nanaBananaModel,
-        );
-      } catch (nanoBananaError) {
-        if (this.isSafetyRelatedError(nanoBananaError)) {
-          const result = await this.fallbackToSeedream(
-            data.generationId,
-            data.prompt,
-            data.aspectRatio,
-            nanoBananaError,
-            'processImageWithFallback:nano-banana',
-          );
-          await this.completeGeneration(data.generationId, result, startTime);
-          return;
-        }
-        throw nanoBananaError;
-      }
+      throw error;
     }
   }
 
@@ -523,174 +461,6 @@ export class GenerationProcessor extends WorkerHost {
     }
   }
 
-  private async processTextToVideo(data: TextToVideoJobData): Promise<void> {
-    const startTime = Date.now();
-    await this.markProcessingStarted(data.generationId);
-
-    this.logger.log(
-      `[TEXT_TO_VIDEO] ${data.generationId} model=${data.model} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
-    );
-
-    const buildInput = (prompt: string) => ({
-      id: data.generationId,
-      prompt,
-      model: data.model,
-      resolution: data.resolution,
-      durationSeconds: data.durationSeconds,
-      aspectRatio: data.aspectRatio,
-      generateAudio: data.generateAudio,
-      sampleCount: data.sampleCount,
-      negativePrompt: data.negativePrompt,
-    });
-
-    try {
-      const result = await this.geraewProvider.generateTextToVideo(
-        buildInput(data.prompt),
-      );
-      await this.completeGeneration(data.generationId, result, startTime);
-    } catch (error) {
-      if (this.isSafetyRelatedError(error)) {
-        const retryResult = await this.retryWithRefinedPrompt(
-          data.generationId,
-          data.prompt,
-          (refined) => this.geraewProvider.generateTextToVideo(buildInput(refined)),
-        );
-        if (retryResult) {
-          await this.completeGeneration(data.generationId, retryResult, startTime);
-          return;
-        }
-      }
-      throw error;
-    }
-  }
-
-  private async processImageToVideo(data: ImageToVideoJobData): Promise<void> {
-    const startTime = Date.now();
-    await this.markProcessingStarted(data.generationId);
-
-    this.logger.log(
-      `[IMAGE_TO_VIDEO] ${data.generationId} model=${data.resolvedModel} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
-    );
-
-    const inputImages = await this.prisma.generationInputImage.findMany({
-      where: { generationId: data.generationId },
-      orderBy: { order: 'asc' },
-    });
-
-    const firstFrameImg = inputImages.find(
-      (img) => img.role === GenerationImageRole.FIRST_FRAME,
-    );
-    const lastFrameImg = inputImages.find(
-      (img) => img.role === GenerationImageRole.LAST_FRAME,
-    );
-
-    if (!firstFrameImg?.url) {
-      throw new Error('First frame image not found for image-to-video');
-    }
-
-    const firstFrameBase64 = await this.downloadToBase64(firstFrameImg.url);
-    const lastFrameBase64 = lastFrameImg?.url
-      ? await this.downloadToBase64(lastFrameImg.url)
-      : undefined;
-
-    const buildInput = (prompt: string) => ({
-      id: data.generationId,
-      prompt,
-      model: data.resolvedModel,
-      resolution: data.resolution,
-      durationSeconds: data.durationSeconds,
-      aspectRatio: data.aspectRatio,
-      generateAudio: data.generateAudio,
-      sampleCount: data.sampleCount,
-      negativePrompt: data.negativePrompt,
-      firstFrame: firstFrameBase64,
-      firstFrameMimeType: firstFrameImg.mimeType ?? 'image/jpeg',
-      lastFrame: lastFrameBase64,
-      lastFrameMimeType: lastFrameImg?.mimeType ?? undefined,
-    });
-
-    try {
-      const result = await this.geraewProvider.generateImageToVideo(
-        buildInput(data.prompt),
-      );
-      await this.completeGeneration(data.generationId, result, startTime);
-    } catch (error) {
-      if (this.isSafetyRelatedError(error)) {
-        const retryResult = await this.retryWithRefinedPrompt(
-          data.generationId,
-          data.prompt,
-          (refined) => this.geraewProvider.generateImageToVideo(buildInput(refined)),
-        );
-        if (retryResult) {
-          await this.completeGeneration(data.generationId, retryResult, startTime);
-          return;
-        }
-      }
-      throw error;
-    }
-  }
-
-  private async processReferenceVideo(
-    data: ReferenceVideoJobData,
-  ): Promise<void> {
-    const startTime = Date.now();
-    await this.markProcessingStarted(data.generationId);
-
-    this.logger.log(
-      `[REFERENCE_VIDEO] ${data.generationId} model=${data.resolvedModel} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} audio=${data.generateAudio} samples=${data.sampleCount} prompt="${data.prompt}"`,
-    );
-
-    const inputImages = await this.prisma.generationInputImage.findMany({
-      where: {
-        generationId: data.generationId,
-        role: GenerationImageRole.REFERENCE,
-      },
-      orderBy: { order: 'asc' },
-    });
-
-    const referenceImages = await Promise.all(
-      inputImages.map(async (img) => ({
-        base64: img.url ? await this.downloadToBase64(img.url) : '',
-        mimeType: img.mimeType ?? 'image/jpeg',
-        referenceType: (img.referenceType ?? 'asset') as 'asset' | 'style',
-      })),
-    );
-
-    const buildInput = (prompt: string) => ({
-      id: data.generationId,
-      prompt,
-      model: data.resolvedModel,
-      resolution: data.resolution,
-      durationSeconds: data.durationSeconds,
-      aspectRatio: data.aspectRatio,
-      generateAudio: data.generateAudio,
-      sampleCount: data.sampleCount,
-      negativePrompt: data.negativePrompt,
-      referenceImages,
-    });
-
-    try {
-      const result = await this.geraewProvider.generateVideoWithReferences(
-        buildInput(data.prompt),
-      );
-      await this.completeGeneration(data.generationId, result, startTime);
-    } catch (error) {
-      if (this.isSafetyRelatedError(error)) {
-        const retryResult = await this.retryWithRefinedPrompt(
-          data.generationId,
-          data.prompt,
-          (refined) =>
-            this.geraewProvider.generateVideoWithReferences(buildInput(refined)),
-        );
-        if (retryResult) {
-          await this.completeGeneration(data.generationId, retryResult, startTime);
-          return;
-        }
-      }
-      throw error;
-    }
-  }
-
   private async processMotionControl(
     data: MotionControlJobData,
   ): Promise<void> {
@@ -719,97 +489,11 @@ export class GenerationProcessor extends WorkerHost {
       `[VIRTUAL_TRY_ON] ${data.generationId} model=${data.model} resolution=${data.resolution} aspectRatio=${data.aspectRatio}`,
     );
 
-    const images = await this.loadInputImagesAsBase64(data.generationId);
-
-    try {
-      const result = await this.geraewProvider.generateImage({
-        id: data.generationId,
-        prompt: data.prompt,
-        model: data.model,
-        resolution: data.resolution,
-        aspectRatio: data.aspectRatio,
-        mimeType: data.mimeType,
-        images,
-      });
-
-      await this.completeGeneration(
-        data.generationId,
-        result,
-        startTime,
-        'geraew',
-      );
-    } catch (geraewError) {
-      if (this.isSafetyRelatedError(geraewError)) {
-        const result = await this.fallbackToSeedream(
-          data.generationId,
-          data.prompt,
-          data.aspectRatio,
-          geraewError,
-          'processVirtualTryOn:geraew',
-        );
-        await this.completeGeneration(data.generationId, result, startTime);
-        return;
-      }
-
-      this.logger.warn(
-        `Geraew failed for virtual try-on ${data.generationId}, falling back to Nano Banana: ${(geraewError as Error).message}`,
-      );
-
-      const preCheck = await this.prisma.generation.findUnique({
-        where: { id: data.generationId },
-        select: { status: true },
-      });
-      if (
-        preCheck?.status === GenerationStatus.FAILED ||
-        preCheck?.status === GenerationStatus.COMPLETED
-      ) {
-        this.logger.warn(
-          `Generation ${data.generationId} already ${preCheck.status} before Nano Banana fallback — aborting to save KIE costs`,
-        );
-        return;
-      }
-
-      const inputImages = await this.prisma.generationInputImage.findMany({
-        where: { generationId: data.generationId },
-        orderBy: { order: 'asc' },
-      });
-      const imageUrls = inputImages
-        .map((img) => img.url)
-        .filter(Boolean) as string[];
-
-      const nanoBananaModel = mapGeminiToNanoBanana(data.model);
-      try {
-        const result = await this.nanoBananaProvider.generateImage({
-          id: data.generationId,
-          model: nanoBananaModel,
-          prompt: data.prompt,
-          resolution: data.resolution,
-          aspectRatio: data.aspectRatio,
-          outputFormat: data.mimeType === 'image/jpeg' ? 'jpg' : 'png',
-          imageUrls: imageUrls.length ? imageUrls : undefined,
-        });
-
-        await this.completeGeneration(
-          data.generationId,
-          result,
-          startTime,
-          nanoBananaModel,
-        );
-      } catch (nanoBananaError) {
-        if (this.isSafetyRelatedError(nanoBananaError)) {
-          const result = await this.fallbackToSeedream(
-            data.generationId,
-            data.prompt,
-            data.aspectRatio,
-            nanoBananaError,
-            'processVirtualTryOn:nano-banana',
-          );
-          await this.completeGeneration(data.generationId, result, startTime);
-          return;
-        }
-        throw nanoBananaError;
-      }
-    }
+    await this.generateGeminiImageViaKie(
+      { ...data, hasInputImages: true },
+      startTime,
+      'processVirtualTryOn',
+    );
   }
 
   private async processFaceSwap(data: FaceSwapJobData): Promise<void> {
@@ -1008,18 +692,7 @@ export class GenerationProcessor extends WorkerHost {
       `[OMNI_VIDEO] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} images=${data.imageUrls?.length ?? 0} videos=${data.videoList?.length ?? 0} hasVideo=${data.hasVideoInput} prompt="${data.prompt}"`,
     );
 
-    // Primário: Vertex (Geraew Provider → /api/video/generate-omni), inputs por URL.
-    const buildVertexInput = (prompt: string) => ({
-      id: data.generationId,
-      prompt,
-      model: 'gemini-omni-video',
-      aspectRatio: data.aspectRatio,
-      imageUrls: data.imageUrls,
-      videoUrls: data.videoList?.map((clip) => clip.url),
-    });
-
-    // Fallback: KIE (mesmas URLs já hospedadas).
-    const buildKieInput = (prompt: string) => ({
+    const buildInput = (prompt: string) => ({
       id: data.generationId,
       prompt,
       imageUrls: data.imageUrls,
@@ -1030,51 +703,23 @@ export class GenerationProcessor extends WorkerHost {
     });
 
     try {
-      const result = await this.geraewProvider.generateOmniVideo(
-        buildVertexInput(data.prompt),
+      const result = await this.geminiOmniVideoProvider.generateOmniVideo(
+        buildInput(data.prompt),
       );
       await this.completeGeneration(data.generationId, result, startTime);
-      return;
-    } catch (vertexError) {
-      // Conteúdo bloqueado: refina o prompt na própria Vertex — não cai pro KIE,
-      // que rejeitaria igual e gastaria uma geração à toa.
-      if (this.isSafetyRelatedError(vertexError)) {
+    } catch (error) {
+      if (this.isSafetyRelatedError(error)) {
         const retryResult = await this.retryWithRefinedPrompt(
           data.generationId,
           data.prompt,
-          (refined) => this.geraewProvider.generateOmniVideo(buildVertexInput(refined)),
+          (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildInput(refined)),
         );
         if (retryResult) {
           await this.completeGeneration(data.generationId, retryResult, startTime);
           return;
         }
-        throw vertexError;
       }
-
-      // Falha de infra/erro da Vertex → fallback pra KIE.
-      this.logger.warn(
-        `[OMNI_VIDEO] ${data.generationId} Vertex falhou (${(vertexError as Error).message}) — caindo pro KIE`,
-      );
-
-      try {
-        const result = await this.geminiOmniVideoProvider.generateOmniVideo(
-          buildKieInput(data.prompt),
-        );
-        await this.completeGeneration(data.generationId, result, startTime);
-      } catch (kieError) {
-        if (this.isSafetyRelatedError(kieError)) {
-          const retryResult = await this.retryWithRefinedPrompt(
-            data.generationId,
-            data.prompt,
-            (refined) => this.geminiOmniVideoProvider.generateOmniVideo(buildKieInput(refined)),
-          );
-          if (retryResult) {
-            await this.completeGeneration(data.generationId, retryResult, startTime);
-            return;
-          }
-        }
-        throw kieError;
-      }
+      throw error;
     }
   }
 
@@ -1632,31 +1277,14 @@ export class GenerationProcessor extends WorkerHost {
       });
   }
 
-  private async loadInputImagesAsBase64(
-    generationId: string,
-  ): Promise<Array<{ base64: string; mimeType: string }>> {
+  private async loadInputImageUrls(generationId: string): Promise<string[]> {
     const inputImages = await this.prisma.generationInputImage.findMany({
       where: { generationId },
       orderBy: { order: 'asc' },
     });
-
-    return Promise.all(
-      inputImages
-        .filter((img) => img.url)
-        .map(async (img) => ({
-          base64: await this.downloadToBase64(img.url!),
-          mimeType: img.mimeType ?? 'image/png',
-        })),
-    );
-  }
-
-  private async downloadToBase64(url: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to download from S3: ${response.status}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    return buffer.toString('base64');
+    return inputImages
+      .map((img) => img.url)
+      .filter((url): url is string => !!url);
   }
 
   /**

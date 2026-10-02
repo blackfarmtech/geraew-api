@@ -1,5 +1,5 @@
 /**
- * Thrown when Veo / Vertex AI blocks a generation due to content safety filters.
+ * Thrown when a provider (Veo, Grok, Seedance...) blocks a generation due to content safety filters.
  *
  * Support codes mapping:
  * 58061214 / 17301594 — Child
@@ -24,7 +24,7 @@ export class ContentSafetyError extends Error {
     this.supportCode = supportCode;
   }
 
-  /** Known Vertex AI safety support codes */
+  /** Known Google (Veo/Gemini) safety support codes */
   static readonly SAFETY_CODES = new Set([
     '58061214', '17301594', // Child
     '29310472', '15236754', // Celebrity

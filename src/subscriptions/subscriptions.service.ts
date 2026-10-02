@@ -19,8 +19,16 @@ import { PaymentsService } from '../payments/payments.service';
 import { CreditsService } from '../credits/credits.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { t } from '../common/i18n/t';
-
-const PLAN_ORDER = ['free', 'ultra-basic', 'starter', 'basic', 'creator', 'pro', 'advanced', 'studio'];
+import { BillingInterval } from '@prisma/client';
+import {
+  addBillingInterval,
+  annualPriceFromMonthly,
+} from '../plans/billing-interval';
+import {
+  PLAN_ORDER,
+  classifyPlanChange,
+  proratedUnusedCents,
+} from './plan-change';
 
 @Injectable()
 export class SubscriptionsService {
@@ -105,6 +113,7 @@ export class SubscriptionsService {
     planSlug: string,
     currencyOverride?: string,
     recoveryPromoCode?: string,
+    billingInterval: BillingInterval = 'MONTHLY',
   ): Promise<{ checkoutUrl: string }> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
 
@@ -163,6 +172,7 @@ export class SubscriptionsService {
       undefined,
       currencyOverride,
       recoveryPromoCode,
+      billingInterval,
     );
     return { checkoutUrl };
   }
@@ -171,6 +181,7 @@ export class SubscriptionsService {
     userId: string,
     planSlug: string,
     currencyOverride?: string,
+    billingInterval?: BillingInterval,
   ): Promise<{ checkoutUrl: string }> {
     const current = await this.prisma.subscription.findFirst({
       where: {
@@ -182,45 +193,34 @@ export class SubscriptionsService {
     });
 
     const newPlan = await this.plansService.findPlanBySlug(planSlug);
+    // Sem ciclo explícito, mantém o da assinatura atual (front antigo).
+    const targetInterval: BillingInterval =
+      billingInterval ?? current?.billingInterval ?? 'MONTHLY';
     let discountAmountCents = 0;
 
     if (current) {
-      const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
-      const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
+      const kind = classifyPlanChange(
+        { slug: current.plan.slug, interval: current.billingInterval },
+        { slug: newPlan.slug, interval: targetInterval },
+      );
 
-      if (currentIdx === -1 || newIdx === -1) {
-        throw new BadRequestException(
-          `Plano desconhecido na ordem de upgrade: ${current.plan.slug} → ${newPlan.slug}`,
-        );
-      }
-
-      if (newIdx === currentIdx) {
+      if (kind === 'same') {
         throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
       }
 
-      // Desconto = valor real que o usuario esta pagando no plano atual
-      // Se tem desconto de retencao ativo, usar o valor com desconto (nao o preco cheio)
-      if (newIdx > currentIdx && current.plan.slug !== 'free') {
-        let actualPriceCents = current.plan.priceCents;
+      if (kind === 'scheduled') {
+        throw new BadRequestException(
+          t('errors.subscriptions.CHANGE_ONLY_AT_RENEWAL'),
+        );
+      }
 
-        if (current.externalSubscriptionId) {
-          const discount = await this.stripeService.getSubscriptionDiscount(
-            current.externalSubscriptionId,
-          ).catch(() => null);
-
-          if (discount?.percentOff && discount.remainingMonths && discount.remainingMonths > 0) {
-            actualPriceCents = Math.round(
-              current.plan.priceCents * (1 - discount.percentOff / 100),
-            );
-          } else if (discount?.amountOffCents && discount.remainingMonths && discount.remainingMonths > 0) {
-            actualPriceCents = Math.max(
-              0,
-              current.plan.priceCents - discount.amountOffCents,
-            );
-          }
-        }
-
-        discountAmountCents = actualPriceCents;
+      // Crédito = o que o usuário já pagou e ainda não usou do período atual.
+      // TRIALING (PIX ainda não pago) não gera crédito.
+      if (current.plan.slug !== 'free' && current.status === 'ACTIVE') {
+        discountAmountCents = await this.computeUpgradeCreditCents(
+          current,
+          currencyOverride ?? (await this.getUserCurrency(userId)),
+        );
       }
     }
 
@@ -228,13 +228,97 @@ export class SubscriptionsService {
     // A sub antiga NÃO é cancelada aqui — só será cancelada no webhook
     // checkout.session.completed, evitando que o usuário fique sem plano se desistir.
     const oldExternalSubscriptionId = current?.externalSubscriptionId ?? undefined;
-    const checkoutUrl = await this.buildCheckoutForPlan(userId, planSlug, discountAmountCents, oldExternalSubscriptionId, currencyOverride);
+    const checkoutUrl = await this.buildCheckoutForPlan(
+      userId,
+      planSlug,
+      discountAmountCents,
+      oldExternalSubscriptionId,
+      currencyOverride,
+      undefined,
+      targetInterval,
+    );
     return { checkoutUrl };
+  }
+
+  /**
+   * Quanto do período atual já pago vira desconto no upgrade.
+   *
+   * - Mensal: o valor do mês (com desconto de retenção ativo, se houver) —
+   *   regra que já existia antes do anual.
+   * - Anual: o valor cheio do ano pago (pagamento + crédito de upgrade que
+   *   tenha sido abatido nele), limitado ao preço de tabela do anual, e
+   *   proporcional ao tempo que ainda falta.
+   */
+  private async computeUpgradeCreditCents(
+    current: {
+      id: string;
+      planId: string;
+      billingInterval: BillingInterval;
+      currentPeriodStart: Date;
+      currentPeriodEnd: Date;
+      externalSubscriptionId: string | null;
+      plan: { priceCents: number };
+    },
+    currency: string,
+  ): Promise<number> {
+    if (current.billingInterval === 'YEARLY') {
+      const listPriceCents = await this.plansService
+        .resolvePlanPrice(current.planId, currency, 'YEARLY')
+        .then((p) => p.priceCents)
+        .catch(() => annualPriceFromMonthly(current.plan.priceCents));
+
+      const lastPayment = await this.prisma.payment.findFirst({
+        where: {
+          subscriptionId: current.id,
+          type: 'SUBSCRIPTION',
+          status: 'COMPLETED',
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { amountCents: true, metadata: true },
+      });
+
+      const priorCredit = Number(
+        (lastPayment?.metadata as Record<string, unknown> | null)
+          ?.upgradeCreditCents ?? 0,
+      ) || 0;
+      const periodValueCents = lastPayment
+        ? Math.min(lastPayment.amountCents + priorCredit, listPriceCents)
+        : listPriceCents;
+
+      return proratedUnusedCents(
+        periodValueCents,
+        current.currentPeriodStart,
+        current.currentPeriodEnd,
+      );
+    }
+
+    // Mensal — se tem desconto de retenção ativo, usa o valor com desconto.
+    let actualPriceCents = current.plan.priceCents;
+
+    if (current.externalSubscriptionId) {
+      const discount = await this.stripeService.getSubscriptionDiscount(
+        current.externalSubscriptionId,
+      ).catch(() => null);
+
+      if (discount?.percentOff && discount.remainingMonths && discount.remainingMonths > 0) {
+        actualPriceCents = Math.round(
+          current.plan.priceCents * (1 - discount.percentOff / 100),
+        );
+      } else if (discount?.amountOffCents && discount.remainingMonths && discount.remainingMonths > 0) {
+        actualPriceCents = Math.max(
+          0,
+          current.plan.priceCents - discount.amountOffCents,
+        );
+      }
+    }
+
+    return actualPriceCents;
   }
 
   async downgrade(
     userId: string,
     planSlug: string,
+    billingInterval?: BillingInterval,
   ): Promise<SubscriptionResponseDto> {
     const current = await this.prisma.subscription.findFirst({
       where: {
@@ -249,21 +333,19 @@ export class SubscriptionsService {
     }
 
     const newPlan = await this.plansService.findPlanBySlug(planSlug);
+    const targetInterval: BillingInterval =
+      billingInterval ?? current.billingInterval;
 
-    const currentIdx = PLAN_ORDER.indexOf(current.plan.slug);
-    const newIdx = PLAN_ORDER.indexOf(newPlan.slug);
+    const kind = classifyPlanChange(
+      { slug: current.plan.slug, interval: current.billingInterval },
+      { slug: newPlan.slug, interval: newPlan.slug === 'free' ? current.billingInterval : targetInterval },
+    );
 
-    if (currentIdx === -1 || newIdx === -1) {
-      throw new BadRequestException(
-        `Plano desconhecido na ordem de downgrade: ${current.plan.slug} → ${newPlan.slug}`,
-      );
-    }
-
-    if (newIdx === currentIdx) {
+    if (kind === 'same') {
       throw new BadRequestException(t('errors.subscriptions.SAME_PLAN'));
     }
 
-    if (newIdx > currentIdx) {
+    if (kind === 'upgrade') {
       throw new BadRequestException(
         `O plano "${newPlan.slug}" não é inferior ao atual. Use upgrade.`,
       );
@@ -281,32 +363,80 @@ export class SubscriptionsService {
         data: {
           cancelAtPeriodEnd: true,
           scheduledPlanId: newPlan.id,
+          scheduledBillingInterval: null,
         },
         include: { plan: true, scheduledPlan: true },
       });
       return this.toResponseDto(subscription);
     }
 
-    // Downgrade para plano pago inferior: atualizar price no Stripe (sem proration)
+    // Troca agendada para plano pago: vale na próxima renovação, sem cobrança agora.
     if (!current.externalSubscriptionId) {
       throw new BadRequestException(t('errors.subscriptions.NO_STRIPE_LINK'));
     }
 
     const userCurrency = await this.getUserCurrency(userId);
-    const resolvedNew = await this.plansService.resolvePlanPrice(newPlan.id, userCurrency);
-
-    await this.stripeService.scheduleSubscriptionPlanChange(
-      current.externalSubscriptionId,
-      resolvedNew.stripePriceId,
+    const resolvedNew = await this.plansService.resolvePlanPrice(
+      newPlan.id,
+      userCurrency,
+      targetInterval,
     );
+
+    if (targetInterval !== current.billingInterval) {
+      // Mudança de ciclo (anual ↔ mensal): só via schedule, senão o Stripe
+      // reinicia o ciclo e cobra na hora.
+      await this.stripeService.scheduleSubscriptionChangeAtPeriodEnd(
+        current.externalSubscriptionId,
+        resolvedNew.stripePriceId,
+        targetInterval,
+      );
+    } else {
+      // Mesmo ciclo: troca o price sem proration (regra que já existia).
+      await this.stripeService.scheduleSubscriptionPlanChange(
+        current.externalSubscriptionId,
+        resolvedNew.stripePriceId,
+      );
+    }
 
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
-      data: { scheduledPlanId: newPlan.id },
+      data: {
+        scheduledPlanId: newPlan.id,
+        scheduledBillingInterval: targetInterval,
+      },
       include: { plan: true, scheduledPlan: true },
     });
 
     return this.toResponseDto(subscription);
+  }
+
+  /**
+   * Desfaz no Stripe uma troca agendada: solta o schedule (troca de ciclo) ou,
+   * se não houver schedule, volta o price para o do plano/ciclo atual.
+   */
+  private async revertScheduledStripeChange(current: {
+    userId: string;
+    planId: string;
+    billingInterval: BillingInterval;
+    externalSubscriptionId: string | null;
+  }): Promise<void> {
+    if (!current.externalSubscriptionId) return;
+
+    const released = await this.stripeService.releaseSubscriptionSchedule(
+      current.externalSubscriptionId,
+    );
+    if (released) return;
+
+    const userCurrency = await this.getUserCurrency(current.userId);
+    const resolved = await this.plansService.resolvePlanPrice(
+      current.planId,
+      userCurrency,
+      current.billingInterval,
+    );
+    await this.stripeService.scheduleSubscriptionPlanChange(
+      current.externalSubscriptionId,
+      resolved.stripePriceId,
+    );
   }
 
   async cancel(userId: string): Promise<SubscriptionResponseDto> {
@@ -326,14 +456,9 @@ export class SubscriptionsService {
       throw new BadRequestException(t('errors.subscriptions.ALREADY_CANCELED'));
     }
 
-    // If a paid downgrade was pending, revert the Stripe price before canceling
+    // If a paid downgrade was pending, revert it in Stripe before canceling
     if (current.scheduledPlanId && current.externalSubscriptionId) {
-      const userCurrency = await this.getUserCurrency(userId);
-      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
-      await this.stripeService.scheduleSubscriptionPlanChange(
-        current.externalSubscriptionId,
-        resolved.stripePriceId,
-      );
+      await this.revertScheduledStripeChange(current);
     }
 
     // Cancelar no Stripe (cancel_at_period_end)
@@ -345,7 +470,11 @@ export class SubscriptionsService {
 
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
-      data: { cancelAtPeriodEnd: true, scheduledPlanId: null },
+      data: {
+        cancelAtPeriodEnd: true,
+        scheduledPlanId: null,
+        scheduledBillingInterval: null,
+      },
       include: { plan: true, scheduledPlan: true },
     });
 
@@ -371,6 +500,10 @@ export class SubscriptionsService {
 
     if (current.plan.slug === 'free') {
       throw new BadRequestException(t('errors.subscriptions.CANNOT_PAUSE_FREE'));
+    }
+
+    if (current.billingInterval === 'YEARLY') {
+      throw new BadRequestException(t('errors.subscriptions.ANNUAL_CANNOT_PAUSE'));
     }
 
     const resumesAt = new Date();
@@ -416,20 +549,16 @@ export class SubscriptionsService {
       );
     }
 
-    // If downgrade to a paid plan, revert the Stripe price back to the current plan
+    // If downgrade to a paid plan, undo it in Stripe (schedule or price swap)
     if (!current.cancelAtPeriodEnd && current.externalSubscriptionId) {
-      const userCurrency = await this.getUserCurrency(userId);
-      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
-      await this.stripeService.scheduleSubscriptionPlanChange(
-        current.externalSubscriptionId,
-        resolved.stripePriceId,
-      );
+      await this.revertScheduledStripeChange(current);
     }
 
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
       data: {
         scheduledPlanId: null,
+        scheduledBillingInterval: null,
         cancelAtPeriodEnd: false,
       },
       include: { plan: true, scheduledPlan: true },
@@ -461,19 +590,18 @@ export class SubscriptionsService {
       );
     }
 
-    // If there was a pending downgrade, revert Stripe price back to current plan
+    // If there was a pending downgrade, undo it in Stripe
     if (current.scheduledPlanId && current.externalSubscriptionId) {
-      const userCurrency = await this.getUserCurrency(userId);
-      const resolved = await this.plansService.resolvePlanPrice(current.plan.id, userCurrency);
-      await this.stripeService.scheduleSubscriptionPlanChange(
-        current.externalSubscriptionId,
-        resolved.stripePriceId,
-      );
+      await this.revertScheduledStripeChange(current);
     }
 
     const subscription = await this.prisma.subscription.update({
       where: { id: current.id },
-      data: { cancelAtPeriodEnd: false, scheduledPlanId: null },
+      data: {
+        cancelAtPeriodEnd: false,
+        scheduledPlanId: null,
+        scheduledBillingInterval: null,
+      },
       include: { plan: true, scheduledPlan: true },
     });
 
@@ -511,6 +639,17 @@ export class SubscriptionsService {
     if (current.pausedUntil) {
       throw new BadRequestException(
         'Nao e possivel aceitar oferta em assinatura pausada.',
+      );
+    }
+
+    // No anual, cupom "N meses" pegaria a fatura do ano inteiro e pausa não faz
+    // sentido num período já pago. Só as ofertas de créditos bônus valem.
+    if (
+      current.billingInterval === 'YEARLY' &&
+      !['not_using', 'quality', 'competitor'].includes(reason)
+    ) {
+      throw new BadRequestException(
+        t('errors.subscriptions.ANNUAL_NO_DISCOUNT_OFFER'),
       );
     }
 
@@ -652,6 +791,7 @@ export class SubscriptionsService {
     userId: string,
     planSlug: string,
     taxId?: string,
+    billingInterval: BillingInterval = 'MONTHLY',
   ): Promise<{
     authorizationId: string;
     qrCodePayload: string;
@@ -661,6 +801,7 @@ export class SubscriptionsService {
     isUpgrade: boolean;
     immediateValueCents: number;
     recurringValueCents: number;
+    billingInterval: BillingInterval;
   }> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
 
@@ -669,6 +810,13 @@ export class SubscriptionsService {
         'Não é possível criar assinatura para o plano Free',
       );
     }
+
+    // Antes de mexer em qualquer coisa: o plano precisa ter preço no ciclo pedido.
+    const resolved = await this.plansService.resolvePlanPrice(
+      plan.id,
+      'BRL',
+      billingInterval,
+    );
 
     const existing = await this.prisma.subscription.findFirst({
       where: {
@@ -683,32 +831,24 @@ export class SubscriptionsService {
     let immediateValueCents: number | undefined;
 
     if (existing) {
-      const currentIdx = PLAN_ORDER.indexOf(existing.plan.slug);
-      const newIdx = PLAN_ORDER.indexOf(plan.slug);
-
       // Caso 1: TRIALING PIX Auto abandonada → limpa e segue criando nova
       const isStalePixAuto =
         existing.status === 'TRIALING' &&
         existing.paymentMethod === 'pix_auto_asaas' &&
         existing.asaasAuthorizationStatus !== 'ACTIVE';
 
-      // Caso 2: ACTIVE PIX Auto pra plano superior → upgrade na mesma trilha PIX
-      const isPixAutoUpgrade =
+      // Casos 2 e 3: ACTIVE (PIX ou cartão) indo para um plano/ciclo que vale
+      // na hora — mesma matriz do cartão (inclui mensal → anual).
+      // O plano antigo continua ativo até a nova autorização virar ACTIVE;
+      // activatePixAutoSubscription cancela o antigo (PIX ou Stripe).
+      const isImmediateUpgrade =
         existing.status === 'ACTIVE' &&
-        existing.paymentMethod === 'pix_auto_asaas' &&
-        currentIdx !== -1 &&
-        newIdx !== -1 &&
-        newIdx > currentIdx;
-
-      // Caso 3: ACTIVE Stripe (cartão) pra plano superior → migração card→PIX
-      // O Stripe continua ativo até a nova autorização PIX virar ACTIVE.
-      // No momento da ativação, activatePixAutoSubscription cancela o Stripe.
-      const isStripeToPixUpgrade =
-        existing.status === 'ACTIVE' &&
-        existing.paymentMethod !== 'pix_auto_asaas' &&
-        currentIdx !== -1 &&
-        newIdx !== -1 &&
-        newIdx > currentIdx;
+        PLAN_ORDER.includes(existing.plan.slug) &&
+        PLAN_ORDER.includes(plan.slug) &&
+        classifyPlanChange(
+          { slug: existing.plan.slug, interval: existing.billingInterval },
+          { slug: plan.slug, interval: billingInterval },
+        ) === 'upgrade';
 
       if (isStalePixAuto) {
         if (existing.asaasAuthorizationId) {
@@ -730,17 +870,17 @@ export class SubscriptionsService {
         this.logger.log(
           `Limpou subscription TRIALING abandonada ${existing.id} pra criar nova PIX Auto`,
         );
-      } else if (isPixAutoUpgrade || isStripeToPixUpgrade) {
-        // Diferença CHEIA: paga (novo - atual) agora. NÃO cancela a antiga aqui —
-        // só na hora que a nova autorização for ativada (em activatePixAutoSubscription).
+      } else if (isImmediateUpgrade) {
+        // Paga agora: (preço do novo ciclo) − (crédito do período atual).
+        // NÃO cancela a antiga aqui — só quando a nova autorização for ativada.
         // Isso preserva o acesso do user se ele abandonar o QR Code.
-        const newPrice = await this.plansService.resolvePlanPrice(plan.id, 'BRL');
-        const diffCents = newPrice.priceCents - existing.plan.priceCents;
-        immediateValueCents = Math.max(diffCents, 100);
+        const creditCents = await this.computeUpgradeCreditCents(existing, 'BRL');
+        immediateValueCents = Math.max(resolved.priceCents - creditCents, 100);
         isUpgrade = true;
-        const kind = isStripeToPixUpgrade ? 'card→PIX' : 'PIX→PIX';
+        const kind =
+          existing.paymentMethod === 'pix_auto_asaas' ? 'PIX→PIX' : 'card→PIX';
         this.logger.log(
-          `Upgrade ${kind} iniciado ${existing.plan.slug} → ${plan.slug}: diff=R$ ${(immediateValueCents / 100).toFixed(2)}, recorrente=R$ ${(newPrice.priceCents / 100).toFixed(2)}. Antiga (${existing.id}) preservada até autorização da nova.`,
+          `Upgrade ${kind} iniciado ${existing.plan.slug}/${existing.billingInterval} → ${plan.slug}/${billingInterval}: agora=R$ ${(immediateValueCents / 100).toFixed(2)}, recorrente=R$ ${(resolved.priceCents / 100).toFixed(2)}. Antiga (${existing.id}) preservada até autorização da nova.`,
         );
       } else if (existing.paymentMethod !== 'pix_auto_asaas') {
         // Bloqueia: mesmo plano via cartão OU downgrade card→PIX
@@ -772,8 +912,6 @@ export class SubscriptionsService {
       );
     }
 
-    const resolved = await this.plansService.resolvePlanPrice(plan.id, 'BRL');
-
     const customerId = await this.asaasService.getOrCreateCustomer(
       userId,
       user.name,
@@ -781,24 +919,33 @@ export class SubscriptionsService {
       cpfCnpj,
     );
 
+    const isYearly = billingInterval === 'YEARLY';
+
     // contractId: identificador único do contrato (max 35 chars).
-    // Geraew + 8 chars do userId + slug do plano (ex: geraew-cmcvabcd-ultra-basic).
-    const contractId = `geraew-${userId.slice(-8)}-${plan.slug}`.slice(0, 35);
+    // Geraew + 8 chars do userId + slug do plano (+ "-a" no anual, para não
+    // colidir com um contrato mensal do mesmo plano).
+    // Ex: geraew-cmcvabcd-ultra-basic / geraew-cmcvabcd-pro-a
+    const contractId = `geraew-${userId.slice(-8)}-${plan.slug}${isYearly ? '-a' : ''}`.slice(0, 35);
 
     const authorization: AsaasPixAutoAuthorization =
       await this.asaasSubscriptionsService.createAuthorization({
         customerId,
         valueCents: resolved.priceCents,
+        frequency: isYearly ? 'ANNUALLY' : 'MONTHLY',
         ...(immediateValueCents ? { immediateValueCents } : {}),
-        description: `Geraew ${plan.name}`,
-        externalReference: JSON.stringify({ userId, planSlug, isUpgrade }),
+        description: `Geraew ${plan.name}${isYearly ? ' anual' : ''}`,
+        externalReference: JSON.stringify({
+          userId,
+          planSlug,
+          isUpgrade,
+          billingInterval,
+        }),
         contractId,
       });
 
     // Cria subscription local em TRIALING aguardando autorização ser ACTIVE.
     const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const periodEnd = addBillingInterval(now, billingInterval);
 
     await this.prisma.subscription.create({
       data: {
@@ -811,11 +958,12 @@ export class SubscriptionsService {
         paymentMethod: 'pix_auto_asaas',
         asaasAuthorizationId: authorization.id,
         asaasAuthorizationStatus: authorization.status,
+        billingInterval,
       },
     });
 
     this.logger.log(
-      `Created PIX Auto authorization ${authorization.id} for user ${userId}, plan ${planSlug}`,
+      `Created PIX Auto authorization ${authorization.id} for user ${userId}, plan ${planSlug} (${billingInterval})`,
     );
 
     return {
@@ -827,6 +975,7 @@ export class SubscriptionsService {
       isUpgrade,
       immediateValueCents: immediateValueCents ?? resolved.priceCents,
       recurringValueCents: resolved.priceCents,
+      billingInterval,
     };
   }
 
@@ -919,6 +1068,7 @@ export class SubscriptionsService {
     oldExternalSubscriptionId?: string,
     currencyOverride?: string,
     recoveryPromoCode?: string,
+    billingInterval: BillingInterval = 'MONTHLY',
   ): Promise<string> {
     const plan = await this.plansService.findPlanBySlug(planSlug);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -926,7 +1076,11 @@ export class SubscriptionsService {
       select: { email: true, name: true, referredByCode: true, currency: true },
     });
     const targetCurrency = currencyOverride ?? user.currency;
-    const resolved = await this.plansService.resolvePlanPrice(plan.id, targetCurrency);
+    const resolved = await this.plansService.resolvePlanPrice(
+      plan.id,
+      targetCurrency,
+      billingInterval,
+    );
     const customerId = await this.stripeService.getOrCreateCustomer(
       userId,
       user.email,
@@ -944,6 +1098,7 @@ export class SubscriptionsService {
       oldExternalSubscriptionId,
       user.referredByCode ?? undefined,
       recoveryPromoCode,
+      billingInterval,
     );
   }
 
@@ -960,6 +1115,8 @@ export class SubscriptionsService {
       paymentRetryCount: subscription.paymentRetryCount,
       pausedUntil: subscription.pausedUntil ?? null,
       retentionOfferAcceptedAt: subscription.retentionOfferAcceptedAt ?? null,
+      billingInterval: subscription.billingInterval ?? 'MONTHLY',
+      scheduledBillingInterval: subscription.scheduledBillingInterval ?? null,
       createdAt: subscription.createdAt,
       plan: {
         id: subscription.plan.id,

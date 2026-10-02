@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConversionsService } from '../marketing/conversions.service';
 import Stripe from 'stripe';
+import type { BillingInterval } from '@prisma/client';
 
 @Injectable()
 export class StripeService {
@@ -74,6 +75,7 @@ export class StripeService {
     oldExternalSubscriptionId?: string,
     referredByCode?: string,
     recoveryPromoCode?: string,
+    billingInterval: BillingInterval = 'MONTHLY',
   ): Promise<string> {
     const stripeCurrency = currency.toLowerCase();
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
@@ -128,7 +130,10 @@ export class StripeService {
         userId,
         planSlug,
         type: 'subscription',
-        ...(couponId ? { upgradeCouponId: couponId } : {}),
+        billingInterval,
+        ...(couponId
+          ? { upgradeCouponId: couponId, upgradeCreditCents: String(discountAmountCents) }
+          : {}),
         ...(recoveryPromotionCodeId
           ? { recoveryPromotionCodeId, recoveryPromoCode: recoveryPromoCode! }
           : {}),
@@ -142,6 +147,7 @@ export class StripeService {
         metadata: {
           userId,
           planSlug,
+          billingInterval,
           ...(referredByCode ? { referredByCode } : {}),
         },
       },
@@ -161,7 +167,10 @@ export class StripeService {
       provider: 'stripe',
       paymentMethod: 'credit_card',
       productId: planSlug,
-      productName: `Assinatura ${planSlug}`,
+      productName:
+        billingInterval === 'YEARLY'
+          ? `Assinatura ${planSlug} (anual)`
+          : `Assinatura ${planSlug}`,
     });
 
     return session.url!;
@@ -358,6 +367,9 @@ export class StripeService {
     externalSubscriptionId: string,
     newStripePriceId: string,
   ): Promise<void> {
+    // Subscription presa a um schedule (troca de ciclo agendada) não aceita
+    // update direto de items — solta o schedule antes.
+    await this.releaseSubscriptionSchedule(externalSubscriptionId);
     const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
     const itemId = sub.items.data[0]?.id;
 
@@ -377,9 +389,124 @@ export class StripeService {
   }
 
   /**
+   * Agenda a troca de price para o FIM do período atual, sem cobrar nada agora.
+   * Necessário quando o ciclo muda (anual ↔ mensal): um update direto no
+   * price com outro intervalo reinicia o ciclo e fatura na hora. Usa um
+   * Subscription Schedule com 2 fases (atual até o fim do período → novo
+   * price) e end_behavior=release, então depois da 1ª cobrança nova a
+   * subscription volta a ser uma subscription comum.
+   */
+  async scheduleSubscriptionChangeAtPeriodEnd(
+    externalSubscriptionId: string,
+    newStripePriceId: string,
+    newInterval: BillingInterval,
+  ): Promise<string> {
+    const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
+    let scheduleId =
+      typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id;
+
+    if (!scheduleId) {
+      const created = await this.stripe.subscriptionSchedules.create({
+        from_subscription: externalSubscriptionId,
+      });
+      scheduleId = created.id;
+    }
+
+    const schedule = await this.stripe.subscriptionSchedules.retrieve(scheduleId);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const currentPhase =
+      schedule.phases.find((p) => p.start_date <= nowSec && p.end_date > nowSec) ??
+      schedule.phases[0];
+
+    if (!currentPhase) {
+      throw new Error(`Schedule ${scheduleId} sem fase atual`);
+    }
+
+    await this.stripe.subscriptionSchedules.update(scheduleId, {
+      end_behavior: 'release',
+      proration_behavior: 'none',
+      phases: [
+        {
+          items: currentPhase.items.map((item) => ({
+            price: typeof item.price === 'string' ? item.price : item.price.id,
+            quantity: item.quantity ?? 1,
+          })),
+          ...(currentPhase.discounts?.length
+            ? {
+                discounts: currentPhase.discounts.map((d) =>
+                  d.discount
+                    ? { discount: typeof d.discount === 'string' ? d.discount : d.discount.id }
+                    : d.promotion_code
+                      ? {
+                          promotion_code:
+                            typeof d.promotion_code === 'string'
+                              ? d.promotion_code
+                              : d.promotion_code.id,
+                        }
+                      : {
+                          coupon:
+                            typeof d.coupon === 'string' ? d.coupon : d.coupon?.id,
+                        },
+                ),
+              }
+            : {}),
+          start_date: currentPhase.start_date,
+          end_date: currentPhase.end_date,
+        },
+        {
+          items: [{ price: newStripePriceId, quantity: 1 }],
+          duration: {
+            interval: newInterval === 'YEARLY' ? 'year' : 'month',
+            interval_count: 1,
+          },
+          proration_behavior: 'none',
+        },
+      ],
+    });
+
+    this.logger.log(
+      `Scheduled ${externalSubscriptionId} → price ${newStripePriceId} (${newInterval}) at period end via schedule ${scheduleId}`,
+    );
+
+    return scheduleId;
+  }
+
+  /**
+   * Solta o Subscription Schedule (se houver), desfazendo uma troca de ciclo
+   * agendada — a subscription segue no price atual. Retorna true se havia
+   * schedule.
+   */
+  async releaseSubscriptionSchedule(
+    externalSubscriptionId: string,
+  ): Promise<boolean> {
+    const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
+    const scheduleId =
+      typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id;
+    if (!scheduleId) return false;
+
+    await this.stripe.subscriptionSchedules.release(scheduleId);
+    this.logger.log(
+      `Released schedule ${scheduleId} of subscription ${externalSubscriptionId}`,
+    );
+    return true;
+  }
+
+  /** Ciclo (mensal/anual) do price atual da subscription no Stripe. */
+  async getSubscriptionInterval(
+    externalSubscriptionId: string,
+  ): Promise<BillingInterval | null> {
+    const sub = await this.stripe.subscriptions.retrieve(externalSubscriptionId);
+    const interval = sub.items.data[0]?.price?.recurring?.interval;
+    if (interval === 'year') return 'YEARLY';
+    if (interval === 'month') return 'MONTHLY';
+    return null;
+  }
+
+  /**
    * Cancela subscription no Stripe ao final do período.
    */
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
+    await this.releaseSubscriptionSchedule(externalSubscriptionId);
     await this.stripe.subscriptions.update(externalSubscriptionId, {
       cancel_at_period_end: true,
     });
@@ -393,6 +520,11 @@ export class StripeService {
    * Cancela subscription no Stripe imediatamente (usado no upgrade após checkout concluído).
    */
   async cancelSubscriptionImmediately(externalSubscriptionId: string): Promise<void> {
+    await this.releaseSubscriptionSchedule(externalSubscriptionId).catch((err) => {
+      this.logger.warn(
+        `Failed to release schedule of ${externalSubscriptionId} before cancel: ${err instanceof Error ? err.message : err}`,
+      );
+    });
     await this.stripe.subscriptions.cancel(externalSubscriptionId);
 
     this.logger.log(

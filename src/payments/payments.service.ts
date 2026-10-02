@@ -1,10 +1,21 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { FreeGenerationType, PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+import {
+  BillingInterval,
+  FreeGenerationType,
+  PaymentStatus,
+  PaymentType,
+  Prisma,
+} from '@prisma/client';
 import { EmailService } from '../email/email.service';
 import { AsaasSubscriptionsService } from './asaas-subscriptions.service';
 import { StripeService } from './stripe.service';
 import { normalizeCurrency, stripeFeeCents } from '../common/utils/currency.util';
+import {
+  addBillingInterval,
+  creditCycleEnd,
+  inferIntervalFromPeriod,
+} from '../plans/billing-interval';
 
 const ULTRA_BASIC_WELCOME_FREE_GENERATIONS = 2;
 
@@ -81,6 +92,8 @@ export class PaymentsService {
     externalPaymentId: string,
     currency: string,
     referredByCode?: string,
+    billingInterval: BillingInterval = 'MONTHLY',
+    upgradeCreditCents?: number,
   ): Promise<boolean> {
     const plan = await this.prisma.plan.findUnique({
       where: { slug: planSlug },
@@ -90,9 +103,11 @@ export class PaymentsService {
       throw new NotFoundException(`Plano "${planSlug}" não encontrado`);
     }
 
+    // Período da assinatura segue o ciclo (1 mês ou 1 ano); os créditos do
+    // plano sempre valem por 1 mês — no anual o cron renova mês a mês.
     const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const periodEnd = addBillingInterval(now, billingInterval);
+    const creditsEnd = creditCycleEnd(now, periodEnd);
 
     const created = await this.prisma.$transaction(async (tx) => {
       // Idempotência: check DENTRO da transaction para evitar race condition
@@ -128,6 +143,7 @@ export class PaymentsService {
           currentPeriodEnd: periodEnd,
           paymentProvider: 'stripe',
           externalSubscriptionId: stripeSubscriptionId,
+          billingInterval,
         },
       });
 
@@ -140,13 +156,13 @@ export class PaymentsService {
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd: periodEnd,
+          periodEnd: creditsEnd,
         },
         update: {
           planCreditsRemaining: plan.creditsPerMonth,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd: periodEnd,
+          periodEnd: creditsEnd,
         },
       });
 
@@ -161,6 +177,13 @@ export class PaymentsService {
           provider: 'stripe',
           externalPaymentId,
           subscriptionId: subscription.id,
+          // upgradeCreditCents: quanto do período anterior foi abatido neste
+          // pagamento. Somado ao valor pago, dá o valor cheio do período —
+          // base do crédito proporcional num próximo upgrade.
+          metadata: {
+            billingInterval,
+            ...(upgradeCreditCents ? { upgradeCreditCents } : {}),
+          },
         },
       });
 
@@ -170,7 +193,10 @@ export class PaymentsService {
           type: 'SUBSCRIPTION_RENEWAL',
           amount: plan.creditsPerMonth,
           source: 'plan',
-          description: `Assinatura criada — plano ${plan.name}`,
+          description:
+            billingInterval === 'YEARLY'
+              ? `Assinatura anual criada — plano ${plan.name}`
+              : `Assinatura criada — plano ${plan.name}`,
           paymentId: payment.id,
         },
       });
@@ -388,8 +414,8 @@ export class PaymentsService {
     }
 
     const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const periodEnd = addBillingInterval(now, subscription.billingInterval);
+    const creditsEnd = creditCycleEnd(now, periodEnd);
 
     await this.prisma.$transaction(async (tx) => {
       // Cancela a antiga (se for upgrade)
@@ -423,13 +449,13 @@ export class PaymentsService {
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd,
+          periodEnd: creditsEnd,
         },
         update: {
           planCreditsRemaining: subscription.plan.creditsPerMonth,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd,
+          periodEnd: creditsEnd,
         },
       });
 
@@ -511,8 +537,21 @@ export class PaymentsService {
       }
     }
 
+    // Ciclo após a renovação: o agendado (ex.: anual → mensal) ou o atual. O
+    // período cobrado pelo Stripe é a fonte da verdade — se divergir, vale ele.
+    const expectedInterval =
+      subscription.scheduledBillingInterval ?? subscription.billingInterval;
+    const chargedInterval = inferIntervalFromPeriod(periodStart, periodEnd);
+    if (chargedInterval !== expectedInterval) {
+      this.logger.warn(
+        `Subscription ${subscription.id}: esperado ${expectedInterval}, mas o Stripe cobrou período ${chargedInterval} — usando ${chargedInterval}`,
+      );
+    }
+    const activeInterval = chargedInterval;
+    const creditsEnd = creditCycleEnd(periodStart, periodEnd);
+
     await this.prisma.$transaction(async (tx) => {
-      // Atualizar período da subscription (e aplicar plano agendado se houver)
+      // Atualizar período da subscription (e aplicar plano/ciclo agendado se houver)
       await tx.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -520,6 +559,8 @@ export class PaymentsService {
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           paymentRetryCount: 0,
+          billingInterval: activeInterval,
+          scheduledBillingInterval: null,
           ...(hasScheduledPlan && {
             planId: activePlan.id,
             scheduledPlanId: null,
@@ -527,7 +568,8 @@ export class PaymentsService {
         },
       });
 
-      // Resetar créditos do plano (usa o plano ativo, que pode ser o novo após downgrade)
+      // Resetar créditos do plano (usa o plano ativo, que pode ser o novo após downgrade).
+      // No anual o ciclo de créditos é de 1 mês; o cron renova os meses seguintes.
       await tx.creditBalance.upsert({
         where: { userId: subscription.userId },
         create: {
@@ -536,13 +578,13 @@ export class PaymentsService {
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart,
-          periodEnd,
+          periodEnd: creditsEnd,
         },
         update: {
           planCreditsRemaining: activePlan.creditsPerMonth,
           planCreditsUsed: 0,
           periodStart,
-          periodEnd,
+          periodEnd: creditsEnd,
         },
       });
 
@@ -567,7 +609,9 @@ export class PaymentsService {
           source: 'plan',
           description: hasScheduledPlan
             ? `Downgrade aplicado — plano ${activePlan.name}`
-            : `Renovação mensal — plano ${activePlan.name}`,
+            : activeInterval === 'YEARLY'
+              ? `Renovação anual — plano ${activePlan.name}`
+              : `Renovação mensal — plano ${activePlan.name}`,
           paymentId: payment.id,
         },
       });

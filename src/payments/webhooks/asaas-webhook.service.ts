@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../email/email.service';
 import { ConversionsService } from '../../marketing/conversions.service';
 import { decodeAsaasReference } from '../external-reference.util';
+import { addBillingInterval, creditCycleEnd } from '../../plans/billing-interval';
 
 interface AsaasWebhookEnvelope {
   event?: string;
@@ -291,7 +292,7 @@ export class AsaasWebhookService {
   }
 
   /**
-   * Renovação de subscription: avança o período mensal e reseta créditos.
+   * Renovação de subscription: avança o período (mensal ou anual) e reseta créditos.
    * A primeira cobrança (que vem junto com a autorização) também passa por aqui —
    * idempotência cuida de não duplicar a ativação.
    */
@@ -312,9 +313,11 @@ export class AsaasWebhookService {
       return;
     }
 
+    // Período segue o ciclo da assinatura (1 mês ou 1 ano); créditos valem
+    // 1 mês — no anual o cron AnnualCreditRefreshService renova mês a mês.
     const now = new Date();
-    const newPeriodEnd = new Date(now);
-    newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1);
+    const newPeriodEnd = addBillingInterval(now, subscription.billingInterval);
+    const creditsEnd = creditCycleEnd(now, newPeriodEnd);
 
     const created = await this.prisma.$transaction(async (tx) => {
       // Idempotência: se já existe payment com esse externalPaymentId, skip
@@ -372,13 +375,13 @@ export class AsaasWebhookService {
           bonusCreditsRemaining: 0,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd: newPeriodEnd,
+          periodEnd: creditsEnd,
         },
         update: {
           planCreditsRemaining: subscription.plan.creditsPerMonth,
           planCreditsUsed: 0,
           periodStart: now,
-          periodEnd: newPeriodEnd,
+          periodEnd: creditsEnd,
         },
       });
 
@@ -388,7 +391,10 @@ export class AsaasWebhookService {
           type: 'SUBSCRIPTION_RENEWAL',
           amount: subscription.plan.creditsPerMonth,
           source: 'plan',
-          description: `Renovação ${subscription.plan.name} (PIX Auto)`,
+          description:
+            subscription.billingInterval === 'YEARLY'
+              ? `Renovação anual ${subscription.plan.name} (PIX Auto)`
+              : `Renovação ${subscription.plan.name} (PIX Auto)`,
         },
       });
 

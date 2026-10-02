@@ -26,10 +26,14 @@ export interface AsaasPixAutoAuthorization {
   expiresAt: string | null;
 }
 
+export type AsaasPixAutoFrequency = 'MONTHLY' | 'ANNUALLY';
+
 interface CreateAuthorizationInput {
   customerId: string;
-  /** Valor da cobrança recorrente mensal (em centavos) */
+  /** Valor de cada cobrança recorrente (mensal ou anual), em centavos */
   valueCents: number;
+  /** Periodicidade da recorrência. Default MONTHLY. */
+  frequency?: AsaasPixAutoFrequency;
   /**
    * Valor cobrado AGORA na primeira cobrança imediata (em centavos).
    * Em upgrades pro-rateados é diferente de valueCents — cobramos só a diferença.
@@ -102,7 +106,8 @@ export class AsaasSubscriptionsService {
 
   /**
    * Cria autorização de PIX Automático com QR Code imediato.
-   * O QR já inclui a primeira cobrança + autorização da recorrência mensal.
+   * O QR já inclui a primeira cobrança + autorização da recorrência (mensal
+   * ou anual, conforme `frequency`).
    *
    * Shape ASAAS:
    * - customerId, contractId (max 35), frequency, startDate, value, description (max 35)
@@ -125,7 +130,7 @@ export class AsaasSubscriptionsService {
       {
         customerId: input.customerId,
         contractId: input.contractId.slice(0, 35),
-        frequency: 'MONTHLY',
+        frequency: input.frequency ?? 'MONTHLY',
         startDate: today,
         value: valueReais,
         description,

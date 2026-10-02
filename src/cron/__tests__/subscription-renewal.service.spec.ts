@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubscriptionRenewalService } from '../subscription-renewal.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CronLoggerService } from '../cron-logger.service';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ describe('SubscriptionRenewalService', () => {
       providers: [
         SubscriptionRenewalService,
         { provide: PrismaService, useValue: mockPrisma },
+        // wrap só executa o job (sem gravar cron_executions)
+        { provide: CronLoggerService, useValue: { wrap: jest.fn((_o: any, fn: any) => fn()) } },
       ],
     }).compile();
 

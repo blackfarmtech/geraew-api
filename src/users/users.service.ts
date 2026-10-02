@@ -79,6 +79,8 @@ export class UsersService {
           currentPeriodStart: activeSubscription.currentPeriodStart,
           currentPeriodEnd: activeSubscription.currentPeriodEnd,
           cancelAtPeriodEnd: activeSubscription.cancelAtPeriodEnd,
+          billingInterval: activeSubscription.billingInterval,
+          scheduledBillingInterval: activeSubscription.scheduledBillingInterval,
         }
         : null,
       profileCompleted: !!user.profileCompletedAt,

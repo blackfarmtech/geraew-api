@@ -41,4 +41,7 @@ export class SubscriptionResponseDto {
   @ApiPropertyOptional() pausedUntil?: Date | null;
   @ApiPropertyOptional() discount?: SubscriptionDiscountDto | null;
   @ApiPropertyOptional() retentionOfferAcceptedAt?: Date | null;
+  @ApiProperty({ enum: ['MONTHLY', 'YEARLY'] }) billingInterval: 'MONTHLY' | 'YEARLY';
+  @ApiPropertyOptional({ enum: ['MONTHLY', 'YEARLY'], nullable: true })
+  scheduledBillingInterval?: 'MONTHLY' | 'YEARLY' | null;
 }

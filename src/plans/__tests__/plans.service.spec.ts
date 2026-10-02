@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PlansService } from '../plans.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { GenerationType, Resolution } from '@prisma/client';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
@@ -70,7 +71,13 @@ const mockPrisma = {
     findMany: jest.fn(),
     findUnique: jest.fn(),
   },
+  planPrice: {
+    findUnique: jest.fn(),
+  },
 };
+
+// Sem override de price por env nos testes.
+const mockConfig = { get: jest.fn().mockReturnValue(undefined) };
 
 // ── Test Suite ───────────────────────────────────────────────────────
 
@@ -84,6 +91,7 @@ describe('PlansService', () => {
       providers: [
         PlansService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ConfigService, useValue: mockConfig },
       ],
     }).compile();
 
@@ -185,7 +193,8 @@ describe('PlansService', () => {
           generationType: 'TEXT_TO_IMAGE',
           resolution: '_1K',
           hasAudio: false,
-          modelVariant: null,
+          // Tipos de imagem sem variante caem no NB2 (todas as linhas de imagem têm variante).
+          modelVariant: 'NB2',
           isActive: true,
         },
       });
@@ -302,6 +311,84 @@ describe('PlansService', () => {
       await expect(service.findPackageById('invalid-id')).rejects.toThrow(
         'Pacote de créditos não encontrado',
       );
+    });
+  });
+  // ────────────────────── resolvePlanPrice (ciclo) ──────────────────────
+
+  describe('resolvePlanPrice', () => {
+    const yearlyBrl = {
+      planId: 'plan-1',
+      currency: 'BRL',
+      interval: 'YEARLY',
+      priceCents: 28704,
+      stripePriceId: 'price_y_brl',
+      isActive: true,
+    };
+
+    it('busca pelo ciclo MONTHLY por padrão', async () => {
+      mockPrisma.planPrice.findUnique.mockResolvedValue({
+        ...yearlyBrl,
+        interval: 'MONTHLY',
+        priceCents: 2990,
+        stripePriceId: 'price_m_brl',
+      });
+
+      const result = await service.resolvePlanPrice('plan-1', 'brl');
+
+      expect(result.stripePriceId).toBe('price_m_brl');
+      expect(mockPrisma.planPrice.findUnique).toHaveBeenCalledWith({
+        where: {
+          planId_currency_interval: { planId: 'plan-1', currency: 'BRL', interval: 'MONTHLY' },
+        },
+      });
+    });
+
+    it('resolve o preço anual quando pedido YEARLY', async () => {
+      mockPrisma.planPrice.findUnique.mockResolvedValue(yearlyBrl);
+
+      const result = await service.resolvePlanPrice('plan-1', 'BRL', 'YEARLY');
+
+      expect(result.priceCents).toBe(28704);
+      expect(mockPrisma.planPrice.findUnique).toHaveBeenCalledWith({
+        where: {
+          planId_currency_interval: { planId: 'plan-1', currency: 'BRL', interval: 'YEARLY' },
+        },
+      });
+    });
+
+    it('cai para USD no mesmo ciclo quando a moeda não tem preço', async () => {
+      mockPrisma.planPrice.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ ...yearlyBrl, currency: 'USD', stripePriceId: 'price_y_usd' });
+
+      const result = await service.resolvePlanPrice('plan-1', 'EUR', 'YEARLY');
+
+      expect(result.stripePriceId).toBe('price_y_usd');
+      expect(mockPrisma.planPrice.findUnique).toHaveBeenLastCalledWith({
+        where: {
+          planId_currency_interval: { planId: 'plan-1', currency: 'USD', interval: 'YEARLY' },
+        },
+      });
+    });
+
+    it('lança NotFound quando o plano não tem anual', async () => {
+      mockPrisma.planPrice.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resolvePlanPrice('plan-1', 'BRL', 'YEARLY'),
+      ).rejects.toThrow('Plano anual não disponível');
+    });
+
+    it('findAnnualPrice devolve null em vez de lançar', async () => {
+      mockPrisma.planPrice.findUnique.mockResolvedValue(null);
+
+      await expect(service.findAnnualPrice('plan-1', 'BRL')).resolves.toBeNull();
+    });
+
+    it('ignora preço inativo', async () => {
+      mockPrisma.planPrice.findUnique.mockResolvedValue({ ...yearlyBrl, isActive: false });
+
+      await expect(service.findAnnualPrice('plan-1', 'USD')).resolves.toBeNull();
     });
   });
 });

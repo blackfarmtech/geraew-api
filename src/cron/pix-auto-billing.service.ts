@@ -12,6 +12,8 @@ import {
   todayInBrasilia,
 } from '../common/utils/business-days.util';
 import { encodeAsaasReference } from '../payments/external-reference.util';
+import { annualPriceFromMonthly } from '../plans/billing-interval';
+import type { BillingInterval } from '@prisma/client';
 
 const SCHEDULE = '0 6 * * *'; // 06:00 UTC = 03:00 BRT, todo dia
 
@@ -221,10 +223,13 @@ export class PixAutoBillingService {
           continue;
         }
 
+        // Mensal: preço do plano. Anual: preço anual em BRL (PIX é só BRL).
+        const valueCents = await this.resolveChargeValueCents(sub);
+
         if (dryRun) {
           summary.simuladas++;
           this.logger.log(
-            `[DRY RUN] Criaria cobrança de R$ ${(sub.plan.priceCents / 100).toFixed(2)} ` +
+            `[DRY RUN] Criaria cobrança de R$ ${(valueCents / 100).toFixed(2)} ` +
               `para ${sub.user.email} (sub ${sub.id}), vencimento ${dueDate}`,
           );
           continue;
@@ -234,9 +239,12 @@ export class PixAutoBillingService {
           await this.asaasSubscriptionsService.createRecurringCharge({
             customerId: sub.user.asaasCustomerId,
             authorizationId: sub.asaasAuthorizationId,
-            valueCents: sub.plan.priceCents,
+            valueCents,
             dueDate,
-            description: `Renovação ${sub.plan.name} (Geraew)`,
+            description:
+              sub.billingInterval === 'YEARLY'
+                ? `Renovação anual ${sub.plan.name} (Geraew)`
+                : `Renovação ${sub.plan.name} (Geraew)`,
             externalReference: encodeAsaasReference({
               kind: 'subscription',
               subscriptionId: sub.id,
@@ -247,7 +255,7 @@ export class PixAutoBillingService {
           data: {
             userId: sub.userId,
             type: 'SUBSCRIPTION',
-            amountCents: sub.plan.priceCents,
+            amountCents: valueCents,
             currency: 'BRL',
             status: 'PENDING',
             provider: 'asaas',
@@ -283,6 +291,29 @@ export class PixAutoBillingService {
     );
 
     return summary;
+  }
+
+  /**
+   * Valor da próxima cobrança. Precisa bater com o `value` da autorização PIX
+   * Automático, que foi criada com o preço do ciclo (mensal ou anual).
+   */
+  private async resolveChargeValueCents(sub: {
+    planId: string;
+    billingInterval: BillingInterval;
+    plan: { priceCents: number };
+  }): Promise<number> {
+    if (sub.billingInterval !== 'YEARLY') return sub.plan.priceCents;
+
+    const yearly = await this.prisma.planPrice.findUnique({
+      where: {
+        planId_currency_interval: {
+          planId: sub.planId,
+          currency: 'BRL',
+          interval: 'YEARLY',
+        },
+      },
+    });
+    return yearly?.priceCents ?? annualPriceFromMonthly(sub.plan.priceCents);
   }
 
   /**

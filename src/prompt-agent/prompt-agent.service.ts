@@ -7,7 +7,7 @@ import {
 import { CreditsService } from '../credits/credits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditTransactionType } from '@prisma/client';
-import { GeraewChatClient, ChatPart } from '../prompt-enhancer/geraew-chat.client';
+import { LlmChatClient, ChatPart } from '../prompt-enhancer/llm-chat.client';
 
 const CREDIT_COST = 5;
 
@@ -111,7 +111,7 @@ export class PromptAgentService {
   constructor(
     private readonly creditsService: CreditsService,
     private readonly prisma: PrismaService,
-    private readonly chatClient: GeraewChatClient,
+    private readonly chatClient: LlmChatClient,
   ) {}
 
   async analyzeImage(userId: string, image: string) {
@@ -276,8 +276,7 @@ export class PromptAgentService {
     const res = await this.chatClient.chat({
       caller: 'POST /prompt-agent/analyze-image',
       system_instruction: SYSTEM_PROMPT,
-      max_output_tokens: 4096,
-      temperature: 0.2,
+      effort: 'medium',
       messages: [
         {
           role: 'user',

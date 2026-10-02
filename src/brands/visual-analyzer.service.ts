@@ -4,10 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import {
-  ChatPart,
-  GeraewChatClient,
-} from '../prompt-enhancer/geraew-chat.client';
+import { ChatPart, LlmChatClient } from '../prompt-enhancer/llm-chat.client';
 
 const SYSTEM_PROMPT = `Você é um Visual Brand Analyzer. Sua função é receber UMA OU MAIS imagens de referência (logo, fotos de produto, anúncios de exemplo, materiais de identidade visual) e devolver um JSON único que sintetize a identidade visual da marca + observações por imagem.
 
@@ -72,7 +69,7 @@ export interface VisualAnalysisResult {
 export class VisualAnalyzerService {
   private readonly logger = new Logger(VisualAnalyzerService.name);
 
-  constructor(private readonly chatClient: GeraewChatClient) {}
+  constructor(private readonly chatClient: LlmChatClient) {}
 
   async analyze(imageUrls: string[]): Promise<VisualAnalysisResult> {
     if (imageUrls.length === 0) {
@@ -129,8 +126,7 @@ export class VisualAnalyzerService {
     const res = await this.chatClient.chat({
       caller: 'POST /brands (visual-analyzer)',
       system_instruction: SYSTEM_PROMPT,
-      max_output_tokens: 4096,
-      temperature: 0.3,
+      effort: 'medium',
       messages: [
         {
           role: 'user',

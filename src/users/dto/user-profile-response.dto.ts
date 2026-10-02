@@ -23,6 +23,9 @@ export class SubscriptionInfoDto {
   @ApiProperty() currentPeriodStart: Date;
   @ApiProperty() currentPeriodEnd: Date;
   @ApiProperty() cancelAtPeriodEnd: boolean;
+  @ApiProperty({ enum: ['MONTHLY', 'YEARLY'] }) billingInterval: 'MONTHLY' | 'YEARLY';
+  @ApiPropertyOptional({ enum: ['MONTHLY', 'YEARLY'], nullable: true })
+  scheduledBillingInterval: 'MONTHLY' | 'YEARLY' | null;
 }
 
 export class UserProfileResponseDto {
