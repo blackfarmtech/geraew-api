@@ -214,18 +214,18 @@ export class PlansService {
     RES_1080P: 440,
   };
 
-  // Pricing Bytedance Seedance 2.5 — mesma estrutura do 2.0.
-  // TODO(preço): valores PROVISÓRIOS = cópia do Seedance 2.0. Confirmar o custo
-  // real do 'bytedance/seedance-2-5' na KIE e reancorar (~1408 cr/USD).
+  // Pricing Bytedance Seedance 2.5 — mesma âncora do 2.0 (~1408 cr/USD), arredondado
+  // pra cima em múltiplos de 5. Custo KIE (USD/s): 480p 0,14 | 720p 0,315 | 1080p 0,79
+  // sem vídeo; 480p 0,085 | 720p 0,19 | 1080p 0,475 com vídeo.
   private static readonly SEEDANCE_2_5_PRICING_NO_VIDEO: Record<string, number> = {
-    RES_480P:  130,
-    RES_720P:  290,
-    RES_1080P: 720,
+    RES_480P:   200,
+    RES_720P:   445,
+    RES_1080P: 1115,
   };
   private static readonly SEEDANCE_2_5_PRICING_WITH_VIDEO: Record<string, number> = {
-    RES_480P:   80,
-    RES_720P:  175,
-    RES_1080P: 440,
+    RES_480P:  120,
+    RES_720P:  270,
+    RES_1080P: 670,
   };
 
   private static calculateSeedanceCost(

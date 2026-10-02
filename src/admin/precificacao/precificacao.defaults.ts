@@ -75,6 +75,12 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '720p', unit: 'segundo', usd: 0.205 },
     { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '1080p', unit: 'segundo', usd: 0.51 },
     { group: 'video', model: 'Seedance 2', provider: 'KIE', variant: '4K', unit: 'segundo', usd: 1.04 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '480p', unit: 'segundo', usd: 0.14 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '720p', unit: 'segundo', usd: 0.315 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '1080p', unit: 'segundo', usd: 0.79 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '480p c/ vídeo', unit: 'segundo', usd: 0.085 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '720p c/ vídeo', unit: 'segundo', usd: 0.19 },
+    { group: 'video', model: 'Seedance 2.5', provider: 'KIE', variant: '1080p c/ vídeo', unit: 'segundo', usd: 0.475 },
     { group: 'video', model: 'Gemini Omni', provider: 'KIE', variant: '720p/1080p (8s)', unit: 'vídeo', usd: 0.75 },
     { group: 'video', model: 'Gemini Omni', provider: 'KIE', variant: '4K (8s)', unit: 'vídeo', usd: 1.35 },
 
@@ -110,7 +116,7 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 
   toolsByDelivery: [
     { delivery: 'Imagem', tools: ['Nano Banana 2', 'Nano Banana Pro', 'Seedream Lite (KIE)', 'Geraew Unlocked (Replicate/Seedream 4.5)'] },
-    { delivery: 'Vídeo', tools: ['Veo Fast (KIE)', 'Veo Quality (KIE)', 'Grok Imagine', 'Gemini Omni', 'Seedance 2'] },
+    { delivery: 'Vídeo', tools: ['Veo Fast (KIE)', 'Veo Quality (KIE)', 'Grok Imagine', 'Gemini Omni', 'Seedance 2', 'Seedance 2.5'] },
     { delivery: 'Motion Control', tools: ['Kling 2.6 (KIE)'] },
     { delivery: 'Avatar', tools: ['HeyGen (Avatar IV + Avatar V)'] },
     { delivery: 'Voz / Áudio', tools: ['Inworld 1.5 Max (TTS)', 'OmniVoice (clonagem)'] },
