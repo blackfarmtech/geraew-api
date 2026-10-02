@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Sse,
+  UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { Observable, interval, map, merge } from 'rxjs';
 import { CurrentUser } from '../common/decorators';
 import { AvatarsService } from './avatars.service';
 import { AvatarEventsService } from './avatar-events.service';
+import { AvatarsDisabledGuard } from './avatars-disabled.guard';
 import { CreateAvatarDto } from './dto/create-avatar.dto';
 import { GenerateAvatarVideoDto } from './dto/generate-avatar-video.dto';
 import {
@@ -26,6 +28,7 @@ import {
 
 @ApiTags('avatars')
 @ApiBearerAuth()
+@UseGuards(AvatarsDisabledGuard)
 @Controller('api/v1/avatars')
 export class AvatarsController {
   constructor(
