@@ -136,6 +136,8 @@ export interface OmniVideoJobData extends BaseJobData {
 }
 
 export interface SeedanceVideoJobData extends BaseJobData {
+  /** Model id na KIE ('bytedance/seedance-2' | 'bytedance/seedance-2-5'). Ausente em jobs antigos = seedance-2. */
+  kieModel?: string;
   prompt: string;
   resolution: string;
   durationSeconds: number;

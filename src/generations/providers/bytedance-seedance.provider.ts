@@ -14,6 +14,8 @@ const RESOLUTION_MAP: Record<string, string> = {
 
 export interface SeedanceVideoInput {
   id: string;
+  /** Model id na KIE. Default: 'bytedance/seedance-2'. */
+  kieModel?: string;
   prompt: string;
   referenceImageUrls?: string[];
   referenceVideoUrls?: string[];
@@ -70,13 +72,14 @@ export class BytedanceSeedanceProvider {
   }
 
   async generateVideo(input: SeedanceVideoInput): Promise<GenerationResult> {
+    const kieModel = input.kieModel ?? 'bytedance/seedance-2';
     const resolution = RESOLUTION_MAP[input.resolution] ?? '720p';
     const hasReferenceImages = (input.referenceImageUrls?.length ?? 0) > 0;
     const hasReferenceVideos = (input.referenceVideoUrls?.length ?? 0) > 0;
     const hasReferenceAudios = (input.referenceAudioUrls?.length ?? 0) > 0;
 
     this.logger.log(
-      `[SEEDANCE] resolution=${resolution} duration=${input.durationSeconds}s aspectRatio=${input.aspectRatio ?? '16:9'} refImages=${input.referenceImageUrls?.length ?? 0} refVideos=${input.referenceVideoUrls?.length ?? 0} refAudios=${input.referenceAudioUrls?.length ?? 0} audio=${input.generateAudio ?? false}`,
+      `[SEEDANCE] model=${kieModel} resolution=${resolution} duration=${input.durationSeconds}s aspectRatio=${input.aspectRatio ?? '16:9'} refImages=${input.referenceImageUrls?.length ?? 0} refVideos=${input.referenceVideoUrls?.length ?? 0} refAudios=${input.referenceAudioUrls?.length ?? 0} audio=${input.generateAudio ?? false}`,
     );
 
     const seedanceInput: Record<string, unknown> = {
@@ -101,7 +104,7 @@ export class BytedanceSeedanceProvider {
     }
 
     const body = {
-      model: 'bytedance/seedance-2',
+      model: kieModel,
       input: seedanceInput,
     };
 
@@ -123,7 +126,7 @@ export class BytedanceSeedanceProvider {
       throw new Error('Seedance returned no video results.');
     }
 
-    return { outputUrls, modelUsed: 'bytedance/seedance-2' };
+    return { outputUrls, modelUsed: kieModel };
   }
 
   private async submitTask(body: Record<string, unknown>): Promise<string> {

@@ -87,8 +87,9 @@ function getModelVariant(model: string | undefined | null): string | null {
     'grok-imagine': 'GROK_IMAGINE',
     // KIE API (Gemini Omni Video)
     'gemini-omni-video': 'GEMINI_OMNI',
-    // KIE API (Bytedance Seedance 2.0)
+    // KIE API (Bytedance Seedance 2.0 / 2.5)
     'bytedance-seedance-2': 'SEEDANCE_2',
+    'bytedance-seedance-2-5': 'SEEDANCE_2_5',
     // KIE API (Seedream Lite) — unificado: T2I se sem images, I2I se com images
     'seedream-5-lite': 'SEEDREAM_LITE',
   };
@@ -2326,14 +2327,37 @@ CRITICAL REQUIREMENTS:
     };
   }
 
-  // ─── Bytedance Seedance 2.0 ────────────────────────────────
+  // ─── Bytedance Seedance 2.0 / 2.5 ──────────────────────────
+
+  private static readonly SEEDANCE_VARIANTS: Record<
+    string,
+    { slug: string; kieModel: string; maxDuration: number; maxReferenceImages: number }
+  > = {
+    SEEDANCE_2: { slug: 'bytedance-seedance-2', kieModel: 'bytedance/seedance-2', maxDuration: 15, maxReferenceImages: 6 },
+    SEEDANCE_2_5: { slug: 'bytedance-seedance-2-5', kieModel: 'bytedance/seedance-2-5', maxDuration: 30, maxReferenceImages: 30 },
+  };
 
   async generateSeedanceVideo(
     userId: string,
     dto: GenerateSeedanceVideoDto,
   ): Promise<CreateGenerationResponseDto> {
-    const model = 'bytedance-seedance-2';
-    const modelVariant = dto.model_variant ?? getModelVariant(model);
+    const modelVariant = dto.model_variant ?? 'SEEDANCE_2';
+    const variant = GenerationsService.SEEDANCE_VARIANTS[modelVariant];
+    if (!variant) {
+      throw new BadRequestException(`model_variant inválido para Seedance: ${modelVariant}`);
+    }
+    const model = variant.slug;
+
+    if (dto.duration_seconds > variant.maxDuration) {
+      throw new BadRequestException(
+        `Duração máxima para ${modelVariant} é ${variant.maxDuration}s.`,
+      );
+    }
+    if ((dto.reference_images?.length ?? 0) > variant.maxReferenceImages) {
+      throw new BadRequestException(
+        `Máximo de ${variant.maxReferenceImages} imagens de referência para ${modelVariant}.`,
+      );
+    }
 
     await this.modelsService.assertActiveBySlug(model, AiModelType.VIDEO);
 
@@ -2431,6 +2455,7 @@ CRITICAL REQUIREMENTS:
 
     await this.generationQueue.add(GenerationJobName.SEEDANCE_VIDEO, {
       generationId: generation.id,
+      kieModel: variant.kieModel,
       userId,
       creditsConsumed: creditsRequired,
       prompt: dto.prompt,

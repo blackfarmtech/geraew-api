@@ -1085,11 +1085,12 @@ export class GenerationProcessor extends WorkerHost {
     await this.markProcessingStarted(data.generationId);
 
     this.logger.log(
-      `[SEEDANCE_VIDEO] ${data.generationId} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} refImages=${data.referenceImageUrls?.length ?? 0} refVideos=${data.referenceVideoUrls?.length ?? 0} refAudios=${data.referenceAudioUrls?.length ?? 0} audio=${data.generateAudio} prompt="${data.prompt}"`,
+      `[SEEDANCE_VIDEO] ${data.generationId} model=${data.kieModel ?? 'bytedance/seedance-2'} resolution=${data.resolution} duration=${data.durationSeconds}s aspectRatio=${data.aspectRatio} refImages=${data.referenceImageUrls?.length ?? 0} refVideos=${data.referenceVideoUrls?.length ?? 0} refAudios=${data.referenceAudioUrls?.length ?? 0} audio=${data.generateAudio} prompt="${data.prompt}"`,
     );
 
     const buildInput = (prompt: string) => ({
       id: data.generationId,
+      kieModel: data.kieModel,
       prompt,
       referenceImageUrls: data.referenceImageUrls,
       referenceVideoUrls: data.referenceVideoUrls,

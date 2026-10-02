@@ -70,14 +70,14 @@ export class GenerateSeedanceVideoDto {
   resolution: Resolution;
 
   @ApiProperty({
-    description: 'Duração do vídeo em segundos (4-15)',
+    description: 'Duração do vídeo em segundos (Seedance 2: 4-15; Seedance 2.5: 4-30)',
     minimum: 4,
-    maximum: 15,
+    maximum: 30,
   })
   @Type(() => Number)
   @IsNumber()
   @Min(4)
-  @Max(15)
+  @Max(30)
   duration_seconds: number;
 
   @ApiPropertyOptional({
@@ -99,12 +99,12 @@ export class GenerateSeedanceVideoDto {
   generate_audio?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Imagens de referência (multimodal reference-to-video). Máx 6.',
+    description: 'Imagens de referência (multimodal reference-to-video). Seedance 2: máx 6; Seedance 2.5: máx 30.',
     type: [SeedanceReferenceImageDto],
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(6)
+  @ArrayMaxSize(30)
   @ValidateNested({ each: true })
   @Type(() => SeedanceReferenceImageDto)
   reference_images?: SeedanceReferenceImageDto[];
@@ -128,9 +128,12 @@ export class GenerateSeedanceVideoDto {
   reference_audio?: SeedanceReferenceAudioDto;
 
   @ApiPropertyOptional({
-    description: 'Variante do modelo (SEEDANCE_2)',
+    description: 'Variante do modelo',
+    enum: ['SEEDANCE_2', 'SEEDANCE_2_5'],
+    default: 'SEEDANCE_2',
   })
   @IsOptional()
   @IsString()
+  @IsIn(['SEEDANCE_2', 'SEEDANCE_2_5'])
   model_variant?: string;
 }
