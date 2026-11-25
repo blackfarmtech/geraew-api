@@ -26,7 +26,8 @@ import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { ListGenerationsQueryDto } from './dto/list-generations-query.dto';
 import { ListUserTransactionsQueryDto } from './dto/list-user-transactions-query.dto';
 import { ListPromptTemplatesQueryDto } from './dto/list-prompt-templates-query.dto';
-import { AdjustCreditsDto } from './dto/adjust-credits.dto';
+import { AdjustCreditsDto, ZeroCreditsDto } from './dto/adjust-credits.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdjustFreeGenerationsDto } from './dto/adjust-free-generations.dto';
 import { ToggleUserStatusDto } from './dto/toggle-user-status.dto';
 import { ChangeUserPlanDto } from './dto/change-user-plan.dto';
@@ -155,9 +156,32 @@ export class AdminController {
   async adjustCredits(
     @Param('id') id: string,
     @Body() dto: AdjustCreditsDto,
+    @CurrentUser('email') adminEmail: string,
   ) {
-    await this.adminService.adjustCredits(id, dto.amount, dto.description);
-    return { success: true, message: 'Créditos ajustados com sucesso' };
+    const balance = await this.adminService.adjustCredits(
+      id,
+      dto.amount,
+      dto.description,
+      dto.source ?? 'bonus',
+      adminEmail,
+    );
+    return { success: true, message: 'Créditos ajustados com sucesso', ...balance };
+  }
+
+  @Post('users/:id/credits/zero')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: 'Zerar a franquia do plano e o bônus de um usuário' })
+  async zeroCredits(
+    @Param('id') id: string,
+    @Body() dto: ZeroCreditsDto,
+    @CurrentUser('email') adminEmail: string,
+  ) {
+    const result = await this.adminService.zeroCredits(
+      id,
+      dto.description,
+      adminEmail,
+    );
+    return { success: true, message: 'Créditos zerados', ...result };
   }
 
   @Patch('users/:id/free-generations')

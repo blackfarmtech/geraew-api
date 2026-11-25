@@ -22,7 +22,13 @@ import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 import { ModelsService } from '../models/models.service';
 import { UploadsService } from '../uploads/uploads.service';
+import type { CreditSource } from './dto/adjust-credits.dto';
 import { Logger } from '@nestjs/common';
+
+export interface AdminCreditBalance {
+  planCreditsRemaining: number;
+  bonusCreditsRemaining: number;
+}
 
 const PROMPT_THUMB_WIDTH = 400;
 const PROMPT_THUMB_HEIGHT = 500;
@@ -418,51 +424,155 @@ export class AdminService {
     };
   }
 
+  /**
+   * Ajuste manual de créditos no bônus (padrão) ou na franquia do plano.
+   *
+   * Trava a linha de saldo com FOR UPDATE, como o débito de geração faz, para
+   * não perder um débito que aconteça no mesmo instante. O saldo nunca fica
+   * negativo, e o histórico grava o que de fato mudou (remover 500 de quem tem
+   * 300 grava -300) e o e-mail de quem ajustou.
+   */
   async adjustCredits(
     userId: string,
     amount: number,
     description: string,
-  ): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
+    source: CreditSource = 'bonus',
+    adminEmail?: string,
+  ): Promise<AdminCreditBalance & { applied: number }> {
+    await this.ensureUserExists(userId);
 
-    await this.prisma.$transaction(async (tx) => {
-      const balance = await tx.creditBalance.findUnique({
-        where: { userId },
-      });
+    return this.prisma.$transaction(async (tx) => {
+      const balance = await this.lockCreditBalance(tx, userId);
+      const current = source === 'plan' ? balance.plan : balance.bonus;
+      const next = Math.max(0, current + amount);
+      const applied = next - current;
 
-      if (!balance) {
-        // Create balance if it doesn't exist
-        await tx.creditBalance.create({
+      const updated =
+        applied === 0
+          ? balance
+          : await this.writeCreditBalance(tx, userId, {
+              plan: source === 'plan' ? next : balance.plan,
+              bonus: source === 'bonus' ? next : balance.bonus,
+            });
+
+      if (applied !== 0) {
+        await tx.creditTransaction.create({
           data: {
             userId,
-            bonusCreditsRemaining: Math.max(0, amount),
-            planCreditsRemaining: 0,
-            planCreditsUsed: 0,
-          },
-        });
-      } else {
-        const newBonus = balance.bonusCreditsRemaining + amount;
-        await tx.creditBalance.update({
-          where: { userId },
-          data: {
-            bonusCreditsRemaining: Math.max(0, newBonus),
+            type: CreditTransactionType.ADMIN_ADJUSTMENT,
+            amount: applied,
+            source,
+            description,
+            metadata: { requestedAmount: amount, adminEmail: adminEmail ?? null },
           },
         });
       }
 
-      await tx.creditTransaction.create({
+      return {
+        planCreditsRemaining: updated.plan,
+        bonusCreditsRemaining: updated.bonus,
+        applied,
+      };
+    });
+  }
+
+  /**
+   * Zera de uma vez a franquia do plano e o bônus. Não mexe na assinatura nem
+   * no Stripe: o plano continua o mesmo até a renovação, só sem créditos.
+   */
+  async zeroCredits(
+    userId: string,
+    description: string,
+    adminEmail?: string,
+  ): Promise<AdminCreditBalance & { planRemoved: number; bonusRemoved: number }> {
+    await this.ensureUserExists(userId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const balance = await this.lockCreditBalance(tx, userId);
+
+      if (balance.plan > 0 || balance.bonus > 0) {
+        await this.writeCreditBalance(tx, userId, { plan: 0, bonus: 0 });
+      }
+
+      const metadata = { zeroed: true, adminEmail: adminEmail ?? null };
+      for (const [source, removed] of [
+        ['plan', balance.plan],
+        ['bonus', balance.bonus],
+      ] as const) {
+        if (removed > 0) {
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: CreditTransactionType.ADMIN_ADJUSTMENT,
+              amount: -removed,
+              source,
+              description,
+              metadata,
+            },
+          });
+        }
+      }
+
+      return {
+        planCreditsRemaining: 0,
+        bonusCreditsRemaining: 0,
+        planRemoved: balance.plan,
+        bonusRemoved: balance.bonus,
+      };
+    });
+  }
+
+  private async ensureUserExists(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+  }
+
+  /** Lê o saldo travando a linha; cria a linha zerada se ainda não existir. */
+  private async lockCreditBalance(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<{ plan: number; bonus: number }> {
+    const [row] = await tx.$queryRaw<
+      { plan_credits_remaining: number; bonus_credits_remaining: number }[]
+    >`SELECT plan_credits_remaining, bonus_credits_remaining
+        FROM credit_balances WHERE user_id = ${userId} FOR UPDATE`;
+
+    if (!row) {
+      await tx.creditBalance.create({
         data: {
           userId,
-          type: CreditTransactionType.ADMIN_ADJUSTMENT,
-          amount,
-          source: 'bonus',
-          description,
+          planCreditsRemaining: 0,
+          bonusCreditsRemaining: 0,
+          planCreditsUsed: 0,
         },
       });
+      return { plan: 0, bonus: 0 };
+    }
+
+    return {
+      plan: row.plan_credits_remaining,
+      bonus: row.bonus_credits_remaining,
+    };
+  }
+
+  private async writeCreditBalance(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    next: { plan: number; bonus: number },
+  ): Promise<{ plan: number; bonus: number }> {
+    await tx.creditBalance.update({
+      where: { userId },
+      data: {
+        planCreditsRemaining: next.plan,
+        bonusCreditsRemaining: next.bonus,
+      },
     });
+    return next;
   }
 
   async adjustFreeGenerations(
