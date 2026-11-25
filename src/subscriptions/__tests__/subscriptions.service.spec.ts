@@ -136,8 +136,27 @@ const PLANS_BY_ID: Record<string, any> = {
   'plan-studio': mockPlanStudio,
 };
 
+// Mensalidade em dólar dos planos de teste (o preço em reais é o priceCents).
+const USD_MONTHLY_CENTS: Record<string, number> = {
+  'plan-starter': 990,
+  'plan-pro': 3990,
+  'plan-studio': 7990,
+};
+
 const mockPlansService = {
   findPlanBySlug: jest.fn(),
+  findPlanPriceCents: jest.fn(
+    async (planId: string, currency: string, interval: string = 'MONTHLY') => {
+      const monthly =
+        currency.toUpperCase() === 'BRL'
+          ? PLANS_BY_ID[planId]?.priceCents
+          : currency.toUpperCase() === 'USD'
+            ? USD_MONTHLY_CENTS[planId]
+            : undefined;
+      if (monthly == null) return null;
+      return interval === 'YEARLY' ? annualPriceFromMonthly(monthly) : monthly;
+    },
+  ),
   resolvePlanPrice: jest.fn(
     async (planId: string, _currency?: string, interval: string = 'MONTHLY') => {
       const plan = PLANS_BY_ID[planId];
@@ -1569,6 +1588,152 @@ describe('SubscriptionsService', () => {
 
       expect(result!.billingInterval).toBe('YEARLY');
       expect(result!.scheduledBillingInterval).toBe('MONTHLY');
+    });
+  });
+
+  // O crédito do upgrade vira cupom na moeda do checkout. Antes ele saía do
+  // preço em reais (plan.priceCents) e virava cupom em dólar: quem assinava em
+  // dólar subia degrau por degrau até o Studio sem pagar nada.
+  describe('upgrade: crédito na moeda do checkout', () => {
+    const usdPrice = async (
+      planId: string,
+      _currency?: string,
+      interval: string = 'MONTHLY',
+    ) => {
+      const monthly = USD_MONTHLY_CENTS[planId] ?? 0;
+      return {
+        currency: 'USD',
+        priceCents:
+          interval === 'YEARLY' ? annualPriceFromMonthly(monthly) : monthly,
+        stripePriceId: `${PLANS_BY_ID[planId]?.stripePriceId}_usd`,
+      };
+    };
+    // upgrade() resolve o preço novo uma vez e buildCheckoutForPlan() outra.
+    const checkoutInUsd = () =>
+      mockPlansService.resolvePlanPrice
+        .mockImplementationOnce(usdPrice)
+        .mockImplementationOnce(usdPrice);
+
+    beforeEach(() => {
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+        ...mockUser,
+        currency: 'USD',
+      });
+      mockStripeService.getOrCreateCustomer.mockResolvedValue('cus_123');
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue(null);
+      mockStripeService.createSubscriptionCheckout.mockResolvedValue(
+        'https://checkout.stripe.com/upgrade',
+      );
+    });
+
+    it('assinatura em dólar: crédito é a mensalidade em dólar do plano atual, não o preço em reais', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanStarter),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      checkoutInUsd();
+
+      await service.upgrade('user-1', 'pro');
+
+      const args = mockStripeService.createSubscriptionCheckout.mock.calls[0];
+      expect(args[3]).toBe(3990); // Pro em dólar
+      expect(args[6]).toBe('USD');
+      expect(args[7]).toBe(990); // Starter em dólar, e não 2990 (reais)
+      expect(mockPlansService.findPlanPriceCents).toHaveBeenCalledWith(
+        'plan-starter',
+        'USD',
+        'MONTHLY',
+      );
+    });
+
+    it('subir para o Studio em dólar cobra a diferença, não sai de graça', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanPro),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanStudio);
+      checkoutInUsd();
+
+      await service.upgrade('user-1', 'studio');
+
+      const args = mockStripeService.createSubscriptionCheckout.mock.calls[0];
+      expect(args[3]).toBe(7990);
+      expect(args[7]).toBe(3990);
+      expect(args[3] - args[7]).toBe(4000); // paga US$ 40,00 na hora
+    });
+
+    it('crédito igual ou maior que o preço novo recusa o upgrade em vez de dar o plano', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanStarter),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      checkoutInUsd();
+      mockPlansService.findPlanPriceCents.mockResolvedValueOnce(3990);
+
+      await expect(service.upgrade('user-1', 'pro')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockStripeService.createSubscriptionCheckout).not.toHaveBeenCalled();
+    });
+
+    it('sem preço do plano atual na moeda do checkout, não há crédito', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanStarter),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      checkoutInUsd();
+      mockPlansService.findPlanPriceCents.mockResolvedValueOnce(null);
+
+      await service.upgrade('user-1', 'pro');
+
+      const args = mockStripeService.createSubscriptionCheckout.mock.calls[0];
+      expect(args[3]).toBe(3990);
+      expect(args[7]).toBeUndefined();
+    });
+
+    it('desconto de retenção incide sobre a mensalidade na moeda do checkout', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanStarter),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      checkoutInUsd();
+      mockStripeService.getSubscriptionDiscount.mockResolvedValue({
+        percentOff: 15,
+        amountOffCents: null,
+        durationMonths: 2,
+        remainingMonths: 1,
+      });
+
+      await service.upgrade('user-1', 'pro');
+
+      // 990 × 0,85 = 841,5 → 842
+      expect(mockStripeService.createSubscriptionCheckout.mock.calls[0][7]).toBe(842);
+    });
+
+    it('anual: pagamento em outra moeda não vira crédito; vale o preço de tabela na moeda do checkout', async () => {
+      const start = new Date();
+      const end = new Date(start.getTime() + 365 * 86_400_000);
+      mockPrisma.subscription.findFirst.mockResolvedValue(
+        buildSubscription(mockPlanStarter, {
+          billingInterval: 'YEARLY',
+          currentPeriodStart: start,
+          currentPeriodEnd: end,
+        }),
+      );
+      mockPlansService.findPlanBySlug.mockResolvedValue(mockPlanPro);
+      checkoutInUsd();
+      // Pagou o anual em reais: 28704 centavos de real não podem virar dólar.
+      mockPrisma.payment.findFirst.mockResolvedValue({
+        amountCents: annualPriceFromMonthly(mockPlanStarter.priceCents),
+        currency: 'BRL',
+        metadata: null,
+      });
+
+      await service.upgrade('user-1', 'pro', undefined, 'YEARLY');
+
+      const yearlyStarterUsd = annualPriceFromMonthly(990);
+      const credit = mockStripeService.createSubscriptionCheckout.mock.calls[0][7];
+      expect(credit).toBeLessThanOrEqual(yearlyStarterUsd);
+      expect(credit).toBeGreaterThan(yearlyStarterUsd - 50); // quase o ano todo
     });
   });
 });

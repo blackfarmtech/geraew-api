@@ -298,6 +298,29 @@ export class PlansService {
   }
 
   /**
+   * Preço de tabela do plano exatamente nesta moeda e ciclo. Sem fallback para
+   * USD e sem exigir `isActive`: quem já assina continua pagando esse preço
+   * mesmo depois que ele sai de venda. Null quando não existe preço na moeda.
+   */
+  async findPlanPriceCents(
+    planId: string,
+    currency: string,
+    interval: BillingInterval = 'MONTHLY',
+  ): Promise<number | null> {
+    const price = await this.prisma.planPrice.findUnique({
+      where: {
+        planId_currency_interval: {
+          planId,
+          currency: currency.toUpperCase(),
+          interval,
+        },
+      },
+      select: { priceCents: true },
+    });
+    return price?.priceCents ?? null;
+  }
+
+  /**
    * Preço anual para exibição, ou null quando o plano não tem anual na moeda
    * (nem em USD). Nunca lança — usado na listagem pública de planos.
    */

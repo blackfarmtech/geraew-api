@@ -20,10 +20,7 @@ import { CreditsService } from '../credits/credits.service';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { t } from '../common/i18n/t';
 import { BillingInterval } from '@prisma/client';
-import {
-  addBillingInterval,
-  annualPriceFromMonthly,
-} from '../plans/billing-interval';
+import { addBillingInterval } from '../plans/billing-interval';
 import {
   PLAN_ORDER,
   classifyPlanChange,
@@ -196,6 +193,15 @@ export class SubscriptionsService {
     // Sem ciclo explícito, mantém o da assinatura atual (front antigo).
     const targetInterval: BillingInterval =
       billingInterval ?? current?.billingInterval ?? 'MONTHLY';
+    // A moeda em que o checkout vai cobrar. O crédito do upgrade vira cupom
+    // nessa moeda, então precisa ser calculado nela também: antes ele saía do
+    // preço em reais e virava cupom em dólar, e quem assinava em dólar subia
+    // de plano de graça (US$ 249,90 de desconto no Studio de US$ 79,90).
+    const newPrice = await this.plansService.resolvePlanPrice(
+      newPlan.id,
+      currencyOverride ?? (await this.getUserCurrency(userId)),
+      targetInterval,
+    );
     let discountAmountCents = 0;
 
     if (current) {
@@ -217,10 +223,22 @@ export class SubscriptionsService {
       // Crédito = o que o usuário já pagou e ainda não usou do período atual.
       // TRIALING (PIX ainda não pago) não gera crédito.
       if (current.plan.slug !== 'free' && current.status === 'ACTIVE') {
-        discountAmountCents = await this.computeUpgradeCreditCents(
+        const creditCents = await this.computeUpgradeCreditCents(
           current,
-          currencyOverride ?? (await this.getUserCurrency(userId)),
+          newPrice.currency,
         );
+        // Upgrade nunca sai de graça. Com PLAN_ORDER subindo de preço nas duas
+        // moedas, o crédito fica sempre abaixo do preço novo; se não ficar, é
+        // dado errado e o upgrade para aqui em vez de virar cupom de 100%.
+        if (creditCents >= newPrice.priceCents) {
+          this.logger.error(
+            `Upgrade recusado: crédito ${creditCents} >= preço ${newPrice.priceCents} ${newPrice.currency} (usuário ${userId}, ${current.plan.slug} -> ${newPlan.slug})`,
+          );
+          throw new BadRequestException(
+            'Não foi possível calcular o valor do upgrade. Fale com o suporte.',
+          );
+        }
+        discountAmountCents = creditCents;
       }
     }
 
@@ -233,7 +251,7 @@ export class SubscriptionsService {
       planSlug,
       discountAmountCents,
       oldExternalSubscriptionId,
-      currencyOverride,
+      newPrice.currency,
       undefined,
       targetInterval,
     );
@@ -248,6 +266,10 @@ export class SubscriptionsService {
    * - Anual: o valor cheio do ano pago (pagamento + crédito de upgrade que
    *   tenha sido abatido nele), limitado ao preço de tabela do anual, e
    *   proporcional ao tempo que ainda falta.
+   *
+   * Todo valor sai na `currency` do checkout do plano novo, que é a moeda do
+   * cupom. `plan.priceCents` é o preço em reais e nunca entra na conta: sem
+   * preço do plano atual nessa moeda, o crédito é zero.
    */
   private async computeUpgradeCreditCents(
     current: {
@@ -257,15 +279,15 @@ export class SubscriptionsService {
       currentPeriodStart: Date;
       currentPeriodEnd: Date;
       externalSubscriptionId: string | null;
-      plan: { priceCents: number };
     },
     currency: string,
   ): Promise<number> {
     if (current.billingInterval === 'YEARLY') {
-      const listPriceCents = await this.plansService
-        .resolvePlanPrice(current.planId, currency, 'YEARLY')
-        .then((p) => p.priceCents)
-        .catch(() => annualPriceFromMonthly(current.plan.priceCents));
+      const listPriceCents = await this.plansService.findPlanPriceCents(
+        current.planId,
+        currency,
+        'YEARLY',
+      );
 
       const lastPayment = await this.prisma.payment.findFirst({
         where: {
@@ -274,16 +296,26 @@ export class SubscriptionsService {
           status: 'COMPLETED',
         },
         orderBy: { createdAt: 'desc' },
-        select: { amountCents: true, metadata: true },
+        select: { amountCents: true, currency: true, metadata: true },
       });
+      // Pagamento em outra moeda não serve de base: só o preço de tabela.
+      const samePayment =
+        lastPayment &&
+        lastPayment.currency?.toUpperCase() === currency.toUpperCase()
+          ? lastPayment
+          : null;
 
       const priorCredit = Number(
-        (lastPayment?.metadata as Record<string, unknown> | null)
+        (samePayment?.metadata as Record<string, unknown> | null)
           ?.upgradeCreditCents ?? 0,
       ) || 0;
-      const periodValueCents = lastPayment
-        ? Math.min(lastPayment.amountCents + priorCredit, listPriceCents)
-        : listPriceCents;
+      const paidCents = samePayment
+        ? samePayment.amountCents + priorCredit
+        : null;
+      const periodValueCents =
+        listPriceCents == null
+          ? (paidCents ?? 0)
+          : Math.min(paidCents ?? listPriceCents, listPriceCents);
 
       return proratedUnusedCents(
         periodValueCents,
@@ -292,8 +324,15 @@ export class SubscriptionsService {
       );
     }
 
-    // Mensal — se tem desconto de retenção ativo, usa o valor com desconto.
-    let actualPriceCents = current.plan.priceCents;
+    // Mensal: a mensalidade do plano atual na moeda do checkout. Com desconto
+    // de retenção ativo, o valor com desconto.
+    const monthlyPriceCents = await this.plansService.findPlanPriceCents(
+      current.planId,
+      currency,
+      'MONTHLY',
+    );
+    if (monthlyPriceCents == null) return 0;
+    let actualPriceCents = monthlyPriceCents;
 
     if (current.externalSubscriptionId) {
       const discount = await this.stripeService.getSubscriptionDiscount(
@@ -302,12 +341,12 @@ export class SubscriptionsService {
 
       if (discount?.percentOff && discount.remainingMonths && discount.remainingMonths > 0) {
         actualPriceCents = Math.round(
-          current.plan.priceCents * (1 - discount.percentOff / 100),
+          monthlyPriceCents * (1 - discount.percentOff / 100),
         );
       } else if (discount?.amountOffCents && discount.remainingMonths && discount.remainingMonths > 0) {
         actualPriceCents = Math.max(
           0,
-          current.plan.priceCents - discount.amountOffCents,
+          monthlyPriceCents - discount.amountOffCents,
         );
       }
     }
